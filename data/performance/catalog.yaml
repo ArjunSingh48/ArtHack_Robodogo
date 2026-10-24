@@ -100,7 +100,7 @@ artifacts:
     human: standing
     dog: stand
     dog_side: front
-    dog_facing: left
+    dog_facing: right  # the main white hound at the bottom: tail left, head right
   met:464212:
     fetch: true
     chapter: middle_ages
