@@ -15,6 +15,15 @@ artworks:
   dog: {posture: held, relation: in_arms, interaction: holding, gaze_at_human: false,
         reproducible: approximate, robot_behavior: sit, confidence: 0.9}
   is_fixture: true
+  review:
+    status: rejected
+    human_count: 1
+    dog_count: 1
+    dog_on_ground: false
+    reason: Synthetic scene exercising eligibility; not a real image review.
+    reviewer: test fixture
+    reviewed_on: '2026-10-24'
+    image_reference: https://example.invalid/held.jpg
 - id: mock:feet
   museum: Mock Museum (test fixture)
   museum_object_id: feet
@@ -27,6 +36,15 @@ artworks:
   dog: {posture: lying, relation: at_feet, interaction: resting_together, gaze_at_human: false,
         reproducible: "yes", robot_behavior: lie_down, confidence: 0.9}
   is_fixture: true
+  review:
+    status: accepted
+    human_count: 1
+    dog_count: 1
+    dog_on_ground: true
+    reason: Synthetic scene exercising eligibility; not a real image review.
+    reviewer: test fixture
+    reviewed_on: '2026-10-24'
+    image_reference: https://example.invalid/feet.jpg
 - id: mock:offer
   museum: Mock Museum (test fixture)
   museum_object_id: offer
@@ -39,6 +57,15 @@ artworks:
   dog: {posture: sitting, relation: in_front, interaction: offering, gaze_at_human: true,
         reproducible: "yes", robot_behavior: sit, confidence: 0.9}
   is_fixture: true
+  review:
+    status: accepted
+    human_count: 1
+    dog_count: 1
+    dog_on_ground: true
+    reason: Synthetic scene exercising eligibility; not a real image review.
+    reviewer: test fixture
+    reviewed_on: '2026-10-24'
+    image_reference: https://example.invalid/offer.jpg
 - id: mock:apart
   museum: Mock Museum (test fixture)
   museum_object_id: apart
@@ -51,6 +78,15 @@ artworks:
   dog: {posture: standing, relation: apart, interaction: accompanying, gaze_at_human: false,
         reproducible: "yes", robot_behavior: stand, confidence: 0.9}
   is_fixture: true
+  review:
+    status: accepted
+    human_count: 1
+    dog_count: 1
+    dog_on_ground: true
+    reason: Synthetic scene exercising eligibility; not a real image review.
+    reviewer: test fixture
+    reviewed_on: '2026-10-24'
+    image_reference: https://example.invalid/apart.jpg
 - id: mock:jump
   museum: Mock Museum (test fixture)
   museum_object_id: jump
@@ -63,3 +99,12 @@ artworks:
   dog: {posture: jumping_up, relation: in_front, interaction: greeting, gaze_at_human: true,
         reproducible: "no", robot_behavior: stillness, confidence: 0.8}
   is_fixture: true
+  review:
+    status: rejected
+    human_count: 1
+    dog_count: 1
+    dog_on_ground: false
+    reason: Synthetic scene exercising eligibility; not a real image review.
+    reviewer: test fixture
+    reviewed_on: '2026-10-24'
+    image_reference: https://example.invalid/jump.jpg

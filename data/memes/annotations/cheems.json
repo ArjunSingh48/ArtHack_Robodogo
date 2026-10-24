@@ -22,16 +22,16 @@
   ],
   "cultural_meaning": "A round, smiling, slightly unsure dog who mispronounces words ('cheemsburbger'); later the soft counterpart to Swole Doge — gentleness and vulnerability as comedy.",
   "human": {
-    "posture": "sitting",
+    "posture": "unknown",
     "gestures": [],
-    "confidence": 0.7
+    "confidence": 0.0
   },
   "dog": {
     "posture": "sitting",
     "relation": "facing_viewer",
     "interaction": "posing",
     "gaze_at_human": false,
-    "reproducible": "yes",
+    "reproducible": "approximate",
     "robot_behavior": "sit",
     "confidence": 0.8
   },
@@ -40,11 +40,20 @@
     "ru": "Он выглядит мягким и немного неуверенным. Мне знакомо это чувство.",
     "de": "Er wirkt weich und ein bisschen unsicher. Das Gefühl kenne ich."
   },
-  "notes": "Pose annotated from the widely used template: sitting upright, head turned slightly away.",
+  "notes": "Reviewed for the photographing_robot branch using the existing source descriptions and annotations; this is not a fresh source-image or hardware validation. Select randomly after a confirmed photography event, without comparing the visitor posture to a depicted human. Sit; the round body shape and facial expression are not reproduced.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
     "rights": "reference_only",
     "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  },
+  "photo_pose": {
+    "status": "accepted",
+    "cue": "A compact seated dog facing the camera.",
+    "approximation": "Sit; the round body shape and facial expression are not reproduced.",
+    "reason": "A calm seated pose works as a photo opportunity independently of the photographer's posture.",
+    "reviewer": "Codex (scenario and mapping review)",
+    "reviewed_on": "2026-10-24",
+    "review_basis": "existing_annotations"
   }
 }

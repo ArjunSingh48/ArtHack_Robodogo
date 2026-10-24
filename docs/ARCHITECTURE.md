@@ -16,6 +16,20 @@ FrameSource ──► PoseEstimator ──► SceneInterpreter ──► Artwork
 Since v0.3 the matcher searches a `SceneLibrary` holding two memories — paintings and memes — through
 `SceneMatcher` (`art | meme | both | surprise`). See [MEMES.md](MEMES.md).
 
+The observation now also carries an explicit `intent`. Ordinary pose observations
+follow relationship matching. An installation observation with
+`intent="photographing_robot"` takes the photo-opportunity branch: choose uniformly
+from reviewed meme poses, prefer references not recently shown, then run the same
+planner and motion guard. Human posture does not rank this pool. Solo-dog memes
+qualify through `photo_pose`, independently of the one-human/one-grounded-dog
+artwork review. Missing/rejected mappings and unknown-rights drafts are excluded.
+
+This event routing and `itu simulate --photographing` are implemented. Automatic
+phone/camera recognition and a debounced photography-attempt detector are pending;
+the geometric pose interpreter never infers photography intent from raised arms.
+Uploaded Telegram photographs do not trigger this branch. Event intent is stored
+with the coarse observation so an explicit retry stays in the same branch.
+
 `InteractionOrchestrator` (src/is_this_us/orchestrator.py) runs a small explicit state machine:
 
 ```
@@ -29,7 +43,7 @@ Illegal transitions raise. Every interaction records its trace for the debug log
 The only value that crosses from the artistic side into the robot is `MotionPlan.behavior`, a member of
 the closed `RobotBehavior` enum (`stillness, stand, sit, lie_down, stretch, greet, look_aside, peer`).
 `look_aside` and `peer` are small bounded `Euler` body poses, off until an operator approves them. It is derived from
-the **curated, human-reviewed** `DogAnnotation.robot_behavior` of a painting — never from text, never
+the curated `DogAnnotation.robot_behavior` of a painting or meme — never from text, never
 from a language model. Each behavior expands to a fixed sequence of official SportClient calls
 (`robot/base.py::steps_for`), and the Go2 adapter refuses anything outside `ALLOWED_SDK_CALLS`.
 
@@ -48,6 +62,12 @@ Weights live in `MatchWeights`. Observation confidence shrinks the posture term 
 uncertain reading leans on the relationship rather than pretending to know the posture.
 Selection uses bounded randomness among near-ties (`tie_margin`, softmax `temperature`, seedable RNG).
 
+The photography branch uses `SceneMatcher.match_photo_opportunity` instead of
+these similarity scores. Its candidate totals are zero (not a pose-match score),
+and its reason identifies random selection. An empty/exhausted pool produces no
+match and stillness, without an artwork fallback. Explicit `/meme` archive requests
+outside photography retain the ordinary relationship matcher and its art fallback.
+
 ## Data
 
 * `data/artworks/curation_notes.yaml` — hand annotations (source of truth for interpretation).
@@ -62,11 +82,11 @@ Selection uses bounded randomness among near-ties (`tie_margin`, softmax `temper
 |---|---|
 | 1 Architecture & compatibility | done — APIs verified 2026-10-24 (see COMPATIBILITY.md) |
 | 2 Telegram simulation | done — bot, storage, mock robot, end-to-end console + Telegram flows |
-| 3 Vision & matching | done — MediaPipe, geometric rules, 24 real curated artworks, weighted matcher |
+| 3 Vision & matching | MediaPipe posture rules; 5 approved artworks from 24 candidates; weighted relationship matcher |
 | 4 Personality & voice | done — EN/RU/DE templates, OpenAI Realtime voice (reads the script verbatim, fidelity-checked), cache + fallback, OGG voice notes |
 | 5 Real Unitree | adapter written against official SDK, **hardware-unverified** |
 | 6 Exhibition | QR pairing, memories, cleanup, operator controls, consented imitation diptych |
-| Meme memory (v0.3) | 5 curated memes (reference-only), MemeMatcher, /art /meme /surprise, Imgflip discovery |
+| Meme photo poses | 5 reference-only mappings; random selection on explicit photography events; automatic photography detection pending |
 
 ## Biggest risks
 

@@ -80,7 +80,8 @@ async def test_complete_installation_interaction(setup, storage):
     row = storage.get_interaction(iid, chat)
     assert row.origin == "installation" and row.artwork_id
     assert set(row.observation) <= {"posture", "posture_confidence", "gestures", "proximity",
-                                    "people_detected", "landmark_confidence"}
+                                    "people_detected", "landmark_confidence", "intent"}
+    assert row.observation["intent"] == "pose"
 
     # ♡ yes
     yes = await flows.callback(chat, f"{CB_YES}:{iid}")

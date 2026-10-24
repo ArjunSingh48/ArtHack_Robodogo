@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Union
 
 from .artworks.repository import YamlArtworkRepository
-from .domain import ArchiveSource, Artwork
+from .domain import ArchiveSource, Artwork, scene_is_eligible
 from .memes.model import Meme
 from .memes.repository import MemeRepository
 
@@ -24,8 +24,8 @@ class SceneLibrary:
         self.memes = memes
 
     def archives(self) -> list[ArchiveSource]:
-        out = [ArchiveSource.ART] if self.art.all() else []
-        if self.memes and self.memes.all():
+        out = [ArchiveSource.ART] if self.all("art") else []
+        if self.all("meme"):
             out.append(ArchiveSource.MEME)
         return out
 
@@ -34,12 +34,15 @@ class SceneLibrary:
         art = self.art.all() if source in (ArchiveSource.ART, ArchiveSource.BOTH, ArchiveSource.SURPRISE) else []
         memes = (self.memes.all() if self.memes else []) if source in (
             ArchiveSource.MEME, ArchiveSource.BOTH, ArchiveSource.SURPRISE) else []
-        return [*art, *memes]
+        return [s for s in [*art, *memes] if scene_is_eligible(s)]
 
     def get(self, scene_id: str) -> Scene | None:
         if scene_id.startswith("meme:"):
             return self.memes.get(scene_id) if self.memes else None
         return self.art.get(scene_id)
+
+    def photo_poses(self) -> list[Meme]:
+        return self.memes.photo_poses() if self.memes else []
 
     def local_image(self, scene: Scene) -> Path | None:
         if getattr(scene, "kind", "art") == "meme":

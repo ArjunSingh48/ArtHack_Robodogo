@@ -68,6 +68,8 @@ def _build_sim(s, seed, *, use_estimator: bool):
 
 def cmd_simulate(args) -> None:
     """One complete interaction with the mock robot, printed to the console."""
+    if args.photographing and (args.image or args.webcam):
+        sys.exit("--photographing injects a synthetic event; use it without --image or --webcam")
     s = get_settings()
     if args.lang:
         s.default_language = args.lang
@@ -90,6 +92,10 @@ def cmd_simulate(args) -> None:
 
             people = [synthetic_person(args.posture, args.gesture, scale=args.scale)]
             obs = orch.interpreter.interpret(people, source=f"SYNTHETIC:{args.posture}")
+            if args.photographing:
+                from .domain import InteractionIntent
+
+                obs.intent = InteractionIntent.PHOTOGRAPHING_ROBOT
             outcome = await orch.observe_given(chat_id, obs, origin="installation")
         print("\nDEBUG")
         for line in outcome.debug_lines():
@@ -189,10 +195,12 @@ def cmd_artworks(args) -> None:
     from .artworks.repository import YamlArtworkRepository
 
     if args.action == "build":
-        built, problems = curation.build(s.artwork_data_dir)
-        print(f"built {len(built)} artworks")
+        built, problems = curation.build(s.artwork_data_dir, offline=args.offline)
+        print("Build failed; previous annotations retained" if problems else f"built {len(built)} artworks")
         for p in problems:
             print("  ! " + p)
+        if problems:
+            sys.exit(1)
     elif args.action == "validate":
         problems = curation.validate(YamlArtworkRepository(s.artwork_data_dir))
         print("OK" if not problems else "\n".join(problems))
@@ -227,7 +235,7 @@ def cmd_memes(args) -> None:
         print("OK" if not problems else "\n".join(problems))
         sys.exit(1 if problems else 0)
     elif args.action == "list":
-        for m in MemeRepository(s.meme_data_dir, include_drafts=args.drafts).all():
+        for m in MemeRepository(s.meme_data_dir, include_drafts=args.drafts).all_records():
             print(curation.describe(m))
 
 
@@ -246,6 +254,8 @@ def main(argv: list[str] | None = None) -> None:
                      choices=["standing", "sitting", "crouching", "kneeling", "lying", "leaning_forward"],
                      help="SYNTHETIC skeleton when no image/webcam is given")
     sim.add_argument("--gesture", choices=["holding", "extending"], default=None)
+    sim.add_argument("--photographing", action="store_true",
+                     help="inject a SYNTHETIC photographing-robot event (no intent detector)")
     sim.add_argument("--scale", type=float, default=1.0, help="synthetic skeleton scale (proximity)")
     sim.add_argument("--camera-index", type=int, default=0)
     sim.add_argument("--lang", choices=["en", "ru", "de"])
@@ -273,6 +283,7 @@ def main(argv: list[str] | None = None) -> None:
     art.add_argument("--museum", choices=["met", "cma"], default="met")
     art.add_argument("--limit", type=int, default=20)
     art.add_argument("--force", action="store_true")
+    art.add_argument("--offline", action="store_true", help="build from saved museum metadata without network")
     art.set_defaults(fn=cmd_artworks)
 
     mm = sub.add_parser("memes", help="meme curation (Imgflip discovery, validate, list)")

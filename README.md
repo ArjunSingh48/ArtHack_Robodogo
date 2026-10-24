@@ -9,8 +9,15 @@ visitor's phone, and quietly asks: **"Is this us?"**
 
 The robot has two cultural memories, treated with equal sincerity:
 
-1. **Fine art** — 24 museum paintings of people and dogs (The Met, Cleveland Museum of Art; public domain / CC0).
-2. **Internet culture** — famous dog memes: Doge, Cheems, This Is Fine, Side Eye Dog, Long Nose Borzoi.
+1. **Fine art** — a pilot of 5 approved paintings selected from 24 candidates (The Met, Cleveland Museum of Art; public domain / CC0).
+2. **Internet culture** — Doge, Cheems, This Is Fine, Side Eye Dog, and Long Nose Borzoi supply random, approximate poses when a visitor tries to photograph the robot.
+
+The artwork dataset requires exactly one visible human and one visible dog supported by
+the ground or floor, with clearly distinguishable bodies. The review found 5 accepted artworks, 18 rejected, and 1
+needing further review. See [Dataset curation](docs/DATASET_CURATION.md) for the
+criteria, audit, and rebuild workflow. Solo-dog memes use a separate photo-pose
+review; see [Meme behavior mapping](docs/MEMES.md). Photography-event routing and
+simulation work; automatic phone/camera intent detection is still pending.
 
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
@@ -21,6 +28,7 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 | | |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | pipeline, state machine, matching, risks |
+| [`docs/DATASET_CURATION.md`](docs/DATASET_CURATION.md) | visual acceptance rules, review instructions, approved pilot |
 | [`docs/MEMES.md`](docs/MEMES.md) | meme memory: schema, rights policy, adding a meme, Imgflip discovery |
 | [`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md) | first session with a Go2, step by step |
 | [`docs/SAFETY_CHECKLIST.md`](docs/SAFETY_CHECKLIST.md) | **read before any motion near people** |
@@ -33,12 +41,13 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 - Pose recognition with MediaPipe + transparent geometric rules: standing, sitting, crouching, kneeling,
   leaning forward, reclining, lying; gestures (holding, reaching, looking down, turned toward/away); distance.
 - Relationship matching across paintings, memes, both, or a surprise, on one comparable 0–1 scale.
+- Random meme imitation from an explicit photographing-robot event (synthetic rehearsal available; automatic intent detection pending).
 - A closed, operator-controlled movement vocabulary with a safety guard; a mock robot that simulates the
   exact SDK call sequences; a Go2 adapter (hardware-unverified).
 - The robot's character in English, Russian and German; a voice from the OpenAI Realtime API with caching, a word-for-word fidelity check and text fallback.
 - A Telegram bot: QR pairing, `/observe`, photo mode without the robot, `/art` `/meme` `/surprise`,
   ♡ / ↻ / ✧ buttons, memory gallery, memory cards, consented imitation photos, `/forget`, operator controls.
-- 129 tests, GitHub Actions CI.
+- Automated tests and GitHub Actions CI.
 
 ## 1. Install
 
@@ -56,8 +65,9 @@ pytest             # everything should pass
 ## 2. First simulation (no Telegram, no robot)
 
 ```bash
-itu simulate --posture sitting --another --card card.jpg          # SYNTHETIC skeleton, paintings + memes
-itu simulate --posture sitting --gesture holding --archive meme   # → This Is Fine
+itu simulate --posture sitting --another --card card.jpg          # SYNTHETIC skeleton, reviewed relationship scenes
+itu simulate --posture sitting --gesture holding --archive meme   # ordinary archive request; falls back to eligible art
+itu simulate --photographing --seed 7 --another                   # explicit synthetic photography event → random meme poses
 itu simulate --posture kneeling --gesture extending --lang ru     # Russian
 itu simulate --image me.jpg                                       # your own photo (Mode A)
 itu simulate --webcam                                             # one webcam frame (Mode B)
@@ -117,7 +127,10 @@ software stops — **not** an emergency stop.
 ## 6. Curating
 
 Paintings: `itu artworks search|draft|build|validate|cache|list` — museum metadata is fetched from the APIs,
-never typed by hand. Memes: one JSON file per meme in `data/memes/annotations/`; `itu memes discover|validate|list`.
+never typed by hand. `itu artworks build --offline` reuses the preserved museum metadata snapshot.
+Only scenes with an accepted visual eligibility review enter relationship matching.
+The photography branch draws from separately reviewed meme photo poses.
+Memes: one JSON file per meme in `data/memes/annotations/`; `itu memes discover|validate|list`.
 See [`docs/MEMES.md`](docs/MEMES.md).
 
 ## Repository layout
@@ -141,7 +154,7 @@ src/is_this_us/
   storage.py        SQLite: pairing, sessions, memories, archive choice, /forget
   cards.py          memory cards and diptychs
   cli.py, hardware_cli.py
-tests/              129 tests
+tests/              automated tests and synthetic fixtures
 ```
 
 ## Privacy

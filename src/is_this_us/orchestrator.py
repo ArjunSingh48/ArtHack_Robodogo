@@ -28,7 +28,8 @@ import numpy as np
 from .artworks.repository import ArtworkRepository
 from .dialogue.engine import DialogueEngine, Utterance
 from .domain import (
-    ArchiveSource, Artwork, ExecutionResult, ExecutionStatus, HumanObservation, MatchResult, MotionPlan,
+    ArchiveSource, Artwork, ExecutionResult, ExecutionStatus, HumanObservation, InteractionIntent,
+    MatchResult, MotionPlan,
 )
 from .matching.matcher import MemeMatcher, SceneMatcher, WeightedRelationshipMatcher
 from .scenes import SceneLibrary
@@ -95,7 +96,7 @@ class InteractionOutcome:
 
     def debug_lines(self) -> list[str]:
         o, lines = self.observation, []
-        lines.append(f"interaction   {self.interaction_id} ({self.origin}, archive={self.archive})")
+        lines.append(f"interaction   {self.interaction_id} ({self.origin}, archive={self.archive}, intent={o.intent})")
         lines.append(f"posture       {o.posture} (conf {o.posture_confidence:.2f}); people={o.people_detected}; "
                      f"landmarks {o.landmark_confidence:.2f}; proximity {o.proximity}")
         if o.gestures:
@@ -228,8 +229,13 @@ class InteractionOrchestrator:
         if not already_matching:
             sm.go(State.MATCHING)
         first_meme = not self.storage.has_seen_meme(chat_id)
-        match = self.matcher.match(obs, archive, exclude=exclude,
-                                   recent=self.storage.recent_artworks(chat_id), rng=self.rng)
+        if origin == "installation" and obs.intent is InteractionIntent.PHOTOGRAPHING_ROBOT:
+            archive = ArchiveSource.MEME
+            match = self.matcher.match_photo_opportunity(
+                obs, exclude=exclude, recent=self.storage.recent_artworks(chat_id), rng=self.rng)
+        else:
+            match = self.matcher.match(obs, archive, exclude=exclude,
+                                       recent=self.storage.recent_artworks(chat_id), rng=self.rng)
         artwork = match.chosen.artwork if match.chosen else None
 
         if artwork is not None:
@@ -259,7 +265,8 @@ class InteractionOrchestrator:
             posture_confidence=obs.posture_confidence, artwork_id=artwork.id if artwork else None,
             shown_ids=shown, behavior=plan.behavior.value, status=result.status.value,
             observation=obs.model_dump(mode="json", include={"posture", "posture_confidence", "gestures",
-                                                              "proximity", "people_detected", "landmark_confidence"}),
+                                                              "proximity", "people_detected", "landmark_confidence",
+                                                              "intent"}),
             archive=archive.value,
         )
         outcome = InteractionOutcome(

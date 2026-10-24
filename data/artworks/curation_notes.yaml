@@ -1,10 +1,9 @@
-# Hand annotations for the curated collection (source of truth for interpretation).
-# Museum metadata is NOT stored here; `itu artworks build` fetches it live from the
-# museum APIs, verifies rights, and writes annotations.yaml.
-#
-# Vocabulary: see src/is_this_us/domain.py (HumanPosture, DogPosture, SpatialRelation,
-# Interaction, Reproducibility, RobotBehavior). Each entry was annotated by looking at
-# the museum image. Poems are original text written for this installation.
+# Source of truth for visual interpretation and dataset eligibility.
+# All 24 source candidates are retained; only review.status=accepted enters builds.
+# AI visual review of full cached museum images, independently crosschecked, 2026-10-24.
+# Museum metadata is kept separately; never replace IDs or attribution with visual guesses.
+# Review criteria and workflow: docs/DATASET_CURATION.md.
+# Rejected and unresolved scene annotations remain historical and must not be matched.
 notes:
   met:435864:
     human:
@@ -22,6 +21,15 @@ notes:
       robot_behavior: sit
       confidence: 0.9
     poem: She holds the small dog close and opens her other hand, as if asking for something.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One woman holds the dog against her torso; the dog is not supported by the ground.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_435864_20693da4cc.jpg
   met:828497:
     human:
       posture: unknown
@@ -37,6 +45,15 @@ notes:
       robot_behavior: sit
       confidence: 0.9
     poem: Two faces side by side, both looking out at whoever is looking at them.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One man holds the dog beside his face; no grounded dog is depicted.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_828497_d805d3e44f.jpg
   met:436323:
     human:
       posture: unknown
@@ -52,6 +69,15 @@ notes:
       robot_behavior: sit
       confidence: 0.85
     poem: Lifted up and tied with ribbon. I am not sure I would fit.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One woman holds the small dog upright in her arms above the floor.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436323_9b4e44ef2a.jpg
   met:437173:
     human:
       posture: standing
@@ -59,14 +85,24 @@ notes:
       - extending_arm
       confidence: 0.9
     dog:
-      posture: standing
+      posture: sitting
       relation: beside
       interaction: touching_head
       gaze_at_human: false
       reproducible: 'yes'
-      robot_behavior: stand
+      robot_behavior: sit
       confidence: 0.95
     poem: A hand rests on a head. Neither of them seems in a hurry.
+    review:
+      status: accepted
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: true
+      reason: One standing man and one seated dog; the dog has front paws and seated hindquarters on the
+        floor. The hand rests on the dog's head.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437173_e6ad0255c3.jpg
   met:437841:
     human:
       posture: sitting
@@ -81,6 +117,16 @@ notes:
       robot_behavior: lie_down
       confidence: 0.8
     poem: Everyone above is busy with something important. The dog stays low and near.
+    review:
+      status: rejected
+      human_count: null
+      dog_count: 1
+      dog_on_ground: true
+      reason: Several foreground human figures and another human figure in the background; exact count
+        is uncertain in the dark detail. The single dog lies on the floor, but the one-human rule fails.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437841_0f7c6a076e.jpg
   met:438815:
     human:
       posture: sitting
@@ -95,6 +141,16 @@ notes:
       robot_behavior: lie_down
       confidence: 0.9
     poem: A child sits on a large, patient dog. The dog lets the afternoon happen.
+    review:
+      status: rejected
+      human_count: 3
+      dog_count: 1
+      dog_on_ground: true
+      reason: One adult and two children are visible; the large dog lies on the floor with one child sitting
+        on it.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_438815_091759222e.jpg
   met:437939:
     human:
       posture: sitting
@@ -109,20 +165,41 @@ notes:
       robot_behavior: lie_down
       confidence: 0.5
     poem: By the fire, a little apart, watching the family as if learning it.
+    review:
+      status: rejected
+      human_count: 4
+      dog_count: 2
+      dog_on_ground: true
+      reason: Two adults, an infant, and a child at left are visible. Two dogs are beside the fire, including
+        the dark foreground dog and the white-collared dog behind it.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437939_d2c549551e.jpg
   met:436252:
     human:
       posture: standing
-      gestures: []
+      gestures:
+      - extending_arm
       confidence: 0.9
     dog:
-      posture: leaning_against
+      posture: sitting
       relation: beside
-      interaction: gazing_up
+      interaction: touching_head
       gaze_at_human: true
-      reproducible: approximate
-      robot_behavior: stand
+      reproducible: 'yes'
+      robot_behavior: sit
       confidence: 0.9
-    poem: The greyhound leans in and looks up. He is looking somewhere else.
+    poem: The greyhound sits close and lifts its face to a resting hand.
+    review:
+      status: accepted
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: true
+      reason: One standing man and one seated greyhound. The dog's paws and folded hindquarters contact
+        the floor; it raises its head toward the man's hand.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436252_2a88721f29.jpg
   met:437890:
     human:
       posture: standing
@@ -132,12 +209,22 @@ notes:
     dog:
       posture: standing
       relation: beside
-      interaction: touching_head
+      interaction: accompanying
       gaze_at_human: false
       reproducible: 'yes'
       robot_behavior: stand
       confidence: 0.85
-    poem: Standing shoulder to hip, the same height of quiet.
+    poem: A hand rests against the dog's neck. They stand quietly side by side.
+    review:
+      status: accepted
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: true
+      reason: One standing man and one standing dog with paws on the floor. The hand contacts the dog's
+        neck/shoulder, not its head; accompanying is the nearest available interaction label.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437890_15bb4a2f65.jpg
   met:436217:
     human:
       posture: unknown
@@ -153,10 +240,20 @@ notes:
       robot_behavior: sit
       confidence: 0.9
     poem: A small black dog, carried like a secret.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One child carries the small black dog against the torso; the dog is not grounded.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436217_baa0d72af7.jpg
   met:437966:
     human:
       posture: sitting
-      gestures: []
+      gestures:
+      - extending_arm
       confidence: 0.85
     dog:
       posture: sitting
@@ -165,8 +262,18 @@ notes:
       gaze_at_human: false
       reproducible: 'yes'
       robot_behavior: sit
-      confidence: 0.85
-    poem: She sits. The collie sits. Somehow that is the whole story.
+      confidence: 0.75
+    poem: She rests a hand beside the collie. Its paws meet the floor beside her shoe.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: true
+      reason: User excluded this image because the human and dog overlap; their bodies should be clearly
+        distinguishable for pose matching. Ground contact alone is not sufficient for inclusion.
+      reviewer: User curation decision recorded by Codex; supersedes initial AI acceptance
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437966_b7e8110676.jpg
   met:436853:
     human:
       posture: reclining
@@ -181,6 +288,16 @@ notes:
       robot_behavior: lie_down
       confidence: 0.85
     poem: Lying close and looking up, the way you look at weather you trust.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One woman and one dog are visible, but the dog is supported by the red upholstered furnishing
+        beside her, not the floor.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436853_e58fd0de46.jpg
   met:437648:
     human:
       posture: standing
@@ -195,6 +312,17 @@ notes:
       robot_behavior: lie_down
       confidence: 0.75
     poem: He poses for the painter. The dog simply waits for him to be done.
+    review:
+      status: needs_review
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: null
+      reason: One man and one dog are visible, but the dark dog's extended forelegs and obscured hind
+        feet make ground contact uncertain. Its raised body may be moving rather than lying; inspect a
+        clearer source before acceptance.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437648_d248e69880.jpg
   met:435738:
     human:
       posture: reclining
@@ -209,6 +337,16 @@ notes:
       robot_behavior: sit
       confidence: 0.7
     poem: Someone is asleep. The dog keeps watch, a little worried, a little curious.
+    review:
+      status: rejected
+      human_count: 2
+      dog_count: 1
+      dog_on_ground: true
+      reason: A reclining woman and a man leaning toward her are both visible. The single dog sits on
+        the ground beside sheep; the one-human rule fails.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_435738_68f2249c8b.jpg
   met:437449:
     human:
       posture: sitting
@@ -223,20 +361,40 @@ notes:
       robot_behavior: greet
       confidence: 0.7
     poem: The men talk. The dog rises up to be part of the conversation.
+    review:
+      status: rejected
+      human_count: 3
+      dog_count: 1
+      dog_on_ground: true
+      reason: Three men are visible. The dog has its hindquarters on the floor while reaching up beside
+        the seated man; the one-human rule fails.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437449_61eb8a008e.jpg
   met:436077:
     human:
       posture: sitting
       gestures: []
       confidence: 0.85
     dog:
-      posture: standing
+      posture: sitting
       relation: beside
-      interaction: gazing_up
-      gaze_at_human: true
+      interaction: waiting
+      gaze_at_human: false
       reproducible: 'yes'
-      robot_behavior: stand
-      confidence: 0.8
-    poem: A slender dog at her side, turning its face toward her.
+      robot_behavior: sit
+      confidence: 0.9
+    poem: A slender dog sits beside her dress and looks out to the left.
+    review:
+      status: accepted
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: true
+      reason: One seated woman and one seated greyhound. The dog's forepaws and folded hindquarters rest
+        on the floor; its head faces left rather than upward toward the woman.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436077_1a20338f9b.jpg
   met:438617:
     human:
       posture: sitting
@@ -252,6 +410,16 @@ notes:
       robot_behavior: sit
       confidence: 0.75
     poem: The youngest brother keeps an arm around the dog while the others read the map.
+    review:
+      status: rejected
+      human_count: 3
+      dog_count: 1
+      dog_on_ground: null
+      reason: Three boys are visible. The dog leans across the seated boy's lap, with its support partly
+        obscured; the one-human rule already fails.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_438617_d03bc5b943.jpg
   met:436322:
     human:
       posture: sitting
@@ -266,6 +434,16 @@ notes:
       robot_behavior: lie_down
       confidence: 0.85
     poem: She reads a letter. The dog naps beside her and asks no questions.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One woman and one dog are visible, but the dog lies on the upholstered chair seat beside
+        her, above the floor.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436322_5d05394fa1.jpg
   met:437177:
     human:
       posture: sitting
@@ -281,6 +459,16 @@ notes:
       robot_behavior: sit
       confidence: 0.8
     poem: One small dog on a lap, another in the grass. Two ways of belonging.
+    review:
+      status: rejected
+      human_count: 2
+      dog_count: 2
+      dog_on_ground: false
+      reason: 'Two adults and two dogs are visible: one dog on the man''s lap and another on the ground
+        at right. Both count rules fail, and one dog is not grounded.'
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_437177_a54c16ae45.jpg
   met:436808:
     human:
       posture: sitting
@@ -296,6 +484,16 @@ notes:
       robot_behavior: lie_down
       confidence: 0.75
     poem: A family reaches toward the baby. The dog stays at their feet, included anyway.
+    review:
+      status: rejected
+      human_count: 3
+      dog_count: 2
+      dog_on_ground: true
+      reason: 'Two adults and an infant are visible, with two dogs on the floor at lower right: one sitting
+        and one lying behind it.'
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436808_3a3d98d268.jpg
   met:436586:
     human:
       posture: unknown
@@ -311,6 +509,16 @@ notes:
       robot_behavior: sit
       confidence: 0.7
     poem: She lifts a garland over the dog's head. The dog holds still to receive it.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: false
+      reason: One woman and one dog are visible, but the dog stands on an elevated pedestal/tabletop decorated
+        with flowers, not on the ground.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436586_006b6422cc.jpg
   met:436951:
     human:
       posture: standing
@@ -325,6 +533,16 @@ notes:
       robot_behavior: stand
       confidence: 0.6
     poem: The couple stands by the water. The dog stands a little away, still with them.
+    review:
+      status: rejected
+      human_count: 6
+      dog_count: 1
+      dog_on_ground: true
+      reason: The foreground couple and four people in or beside the water/boat are visible. The single
+        dog stands on the bank; the one-human rule fails.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/met_436951_8403fcd976.jpg
   cma:169662:
     human:
       posture: sitting
@@ -337,8 +555,18 @@ notes:
       gaze_at_human: false
       reproducible: 'yes'
       robot_behavior: lie_down
-      confidence: 0.8
+      confidence: 0.9
     poem: A very small dog curled at the hem of a very dark dress.
+    review:
+      status: accepted
+      human_count: 1
+      dog_count: 1
+      dog_on_ground: true
+      reason: One woman and one small dog lying on the floor at the hem of her dress. The user confirmed
+        that the woman is sitting on a chair, resolving the initial posture uncertainty.
+      reviewer: AI visual eligibility review; human posture confirmed by user and recorded by Codex
+      reviewed_on: '2026-10-24'
+      image_reference: images/cma_169662_805274672f.jpg
   cma:156311:
     human:
       posture: standing
@@ -354,3 +582,13 @@ notes:
       robot_behavior: stand
       confidence: 0.85
     poem: Going somewhere together. I am not allowed to walk toward you, so I will stand ready.
+    review:
+      status: rejected
+      human_count: 1
+      dog_count: 4
+      dog_on_ground: true
+      reason: One handler and four dogs are visible, two on each side; all are on the ground, but the
+        one-dog rule fails.
+      reviewer: visual_curation (AI visual review; independently crosschecked)
+      reviewed_on: '2026-10-24'
+      image_reference: images/cma_156311_8bdbef4697.jpg

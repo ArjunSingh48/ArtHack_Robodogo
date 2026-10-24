@@ -17,11 +17,9 @@
   ],
   "cultural_meaning": "Narrowed, sideways suspicion — the look of someone who knows what you are not saying.",
   "human": {
-    "posture": "standing",
-    "gestures": [
-      "turned_away"
-    ],
-    "confidence": 0.6
+    "posture": "unknown",
+    "gestures": [],
+    "confidence": 0.0
   },
   "dog": {
     "posture": "sitting",
@@ -37,11 +35,20 @@
     "ru": "Он смотрит так, будто уже знает, куда едет машина.",
     "de": "Er schaut, als wüsste er schon, wohin das Auto fährt."
   },
-  "notes": "Annotated from the KYM description (narrowed eyes, one ear inside out); the body is barely visible. look_aside needs operator approval; otherwise the robot stands.",
+  "notes": "Reviewed for the photographing_robot branch using the existing source descriptions and annotations; this is not a fresh source-image or hardware validation. Select randomly after a confirmed photography event, without comparing the visitor posture to a depicted human. Use the bounded look_aside body pose; no independent eye/ear movement. Falls back to stand until operator-approved.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
     "rights": "reference_only",
     "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  },
+  "photo_pose": {
+    "status": "accepted",
+    "cue": "A dog giving the camera a sideways glance.",
+    "approximation": "Use the bounded look_aside body pose; no independent eye/ear movement. Falls back to stand until operator-approved.",
+    "reason": "A sideways body orientation can suggest the look even though the reference does not establish a full-body ground pose.",
+    "reviewer": "Codex (scenario and mapping review)",
+    "reviewed_on": "2026-10-24",
+    "review_basis": "existing_annotations"
   }
 }

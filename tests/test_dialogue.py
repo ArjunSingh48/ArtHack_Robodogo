@@ -42,7 +42,7 @@ def test_outcome_mapping(status, fid, behavior, expected):
 
 
 def test_compose_is_deterministic_short_and_asks(repo):
-    art = repo.get("met:437966")
+    art = repo.get("met:436077")
     eng = DialogueEngine("en")
     kw = dict(observation=_obs(), artwork=art, plan=_plan(RobotBehavior.SIT, Reproducibility.YES),
               result=ExecutionResult(behavior=RobotBehavior.SIT, status=ExecutionStatus.SIMULATED))
@@ -54,7 +54,7 @@ def test_compose_is_deterministic_short_and_asks(repo):
 
 
 def test_uncertainty_is_voiced(repo):
-    u = DialogueEngine("en").compose(seed="x", observation=_obs(conf=0.2), artwork=repo.get("met:437966"))
+    u = DialogueEngine("en").compose(seed="x", observation=_obs(conf=0.2), artwork=repo.get("met:436077"))
     assert u.lines[1].startswith(("I'm not sure", "Maybe"))
 
 
