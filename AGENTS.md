@@ -9,7 +9,8 @@ capabilities; they do not override that contract. Follow explicit user changes t
 the direction and update the contract in the same change.
 
 - The robot is the main communication interface: its body and occasional voice
-  carry the encounter.
+  carry the encounter. For this presentation prototype, the computer plays the
+  dog's voice; onboard robot audio is not required.
 - Telegram receives the robot's selected painting or meme, one short caption,
   and italic image attribution. Keep onboarding minimal and operator controls
   separate from those image messages.

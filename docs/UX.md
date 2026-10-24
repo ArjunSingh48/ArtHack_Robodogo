@@ -5,6 +5,12 @@ experience. It takes precedence over older descriptions of product scope in the
 README, demo scripts, performance documentation, and implementation plans. It
 does not claim that all requirements below are already implemented.
 
+The ordered implementation work is recorded in the
+[UX alignment plan](UX_ALIGNMENT_PLAN.md). The [demo script](DEMO_SCRIPT.md)
+describes this same encounter for rehearsal; it must not introduce extra visitor
+steps. Step 1 defines the experience only. Changes to dialogue, delivery, motion,
+and launchers belong to later steps of the plan.
+
 ## Character and communication
 
 The robot is the main interface. The visitor relates to a shy, timid robot dog
@@ -51,32 +57,68 @@ selected painting or meme. The primary flow does not upload the visitor frame to
 an AI service or Telegram, or save it to disk. Existing separately consented
 photo/performance experiments are outside this primary flow.
 
-The local computer may also provide audio playback; the visitor should experience
-the voice as belonging to the dog. Exact speaker placement is an installation
-decision, not a reason to move the dialogue into Telegram.
+For this presentation prototype, the dog's voice plays from the computer.
+Onboard robot audio is unavailable in this setup. Computer playback is the
+accepted presentation arrangement; the voice still expresses the dog's character.
+No onboard speaker integration or concealed sound source is required.
 
 ## Primary encounter
 
 1. The visitor meets the robot. The operator has prepared the installation and
-   established the intended Telegram recipient.
-2. The robot camera captures the human. The local application finds a relevant
-   painting or meme and prepares a supported, guarded dog behavior.
+   established the intended Telegram recipient and armed the robot when physical
+   movement is enabled.
+2. The robot automatically notices a stable human pose through its camera.
+   The local application processes the observation, finds a relevant painting
+   or meme, and prepares a supported, guarded dog behavior. The visitor does not
+   need to send `/observe` or trigger the encounter from a screen.
 3. The dog may say a brief, timid line. It sends the selected archive image to
    the visitor's Telegram chat as a message from the good boy.
-4. The physical finale is the robot taking its good-boy pose and holding it for
-   **10 seconds**. The hold begins after reaching/settling into the target pose,
-   not when the command is sent. It remains interruptible by stop/safety controls.
+4. The physical finale is the robot taking a supported good-boy pose based on
+   the selected image and holding it for **10 seconds**. The hold begins after
+   reaching/settling into the target pose, not when the command is sent. It
+   remains interruptible by stop/safety controls.
+5. After the hold and a qualified safe completion, the encounter ends. The
+   visitor need not reply, rate the dog, or press a button. Another encounter
+   requires a new eligible stable-pose event; the same pending interaction must
+   not repeat itself.
 
 Delivery and movement must not depend on the visitor replying to the caption.
-A delivery failure must not replay the physical action. Missing camera input or
-an unsupported pose must not produce invented successful motion; surface the
-problem to the operator. Missing voice should leave room for a silent encounter,
-not add long fallback messages to Telegram.
+Keep one encounter active through the final hold and completion. Do not begin a
+second movement while that encounter is still active. The physical completion
+sequence must be qualified for the chosen pose; this contract does not prescribe
+an unverified return-to-standing movement.
+
+One sustained human pose produces one encounter. After the encounter completes
+and the motion cooldown ends, reacquire a stable pose only following a meaningful
+pose change or participant departure and reacquisition. Continuing to hold the
+same pose must not generate repeated messages or movements. Stability, pose-change,
+and reacquisition thresholds are implementation details to tune and verify; the
+automatic observation behavior is a requirement, not currently verified readiness.
+When a different participant takes over, establish the intended recipient before
+starting their encounter. Camera detection does not identify a Telegram account;
+never silently reuse the previous participant's recipient for a new person.
+
+## When an encounter cannot finish
+
+| Condition | Required behavior |
+| --- | --- |
+| Camera unavailable, no usable human observation, or no suitable match | Do not invent a match or execute a pose from stale input. End this attempt and show the reason to the operator; a new attempt requires a new trigger. |
+| Voice unavailable | Continue silently. Do not replace speech with explanatory Telegram messages. |
+| Image delivery fails | Report the delivery outcome to the operator. Network waiting must be bounded; any later delivery retry must not recapture the visitor or replay the physical action. Do not report a successful image delivery when only text was sent. |
+| Requested pose unsupported during planning | Choose an existing approved, holdable approximation, or remain still. Record the actual outcome; do not claim the original pose was reproduced. |
+| Movement fails or its outcome is unknown | End the motion attempt through existing stop/failure handling and require operator recovery. Do not automatically attempt a different pose or claim a completed hold. |
+| Stop requested during the encounter | Cancel remaining interaction actions and interrupt the hold through the existing stop controls. Do not start another motion or automatically re-arm; operator recovery remains required for real hardware. |
+
+An interrupted hold may be shorter than 10 seconds and must be reported as
+interrupted. Command acceptance alone is not evidence that the robot reached or
+held a pose. Failures and recovery controls belong to the operator/debug view,
+not to additional visitor menus.
 
 ## Telegram message contract
 
-Each successful encounter sends the selected image with one short, informal
-caption, followed by image attribution at the bottom in italics.
+Each successful encounter sends one selected image with one short, informal
+caption, followed by image attribution at the bottom in italics. The message
+should read as a small message from the dog, not a gallery explanation.
 
 Painting captions:
 
@@ -110,25 +152,61 @@ memory galleries, and consented compositions exist as experiments or other modes
 Their existence does not make them requirements of this encounter. Preserve them
 unless their removal is explicitly requested; do not add them to the default UX.
 
-Resolve these details when implementing the primary flow:
+**Confirmed:** the final good-boy pose is based on the selected image. Use its
+curated dog annotation to choose a supported, qualified pose that can be held for
+10 seconds. An approved approximation or stillness is acceptable when necessary,
+with the actual outcome recorded honestly. Existing gestures are not automatically
+holdable poses.
 
-- Which qualified physical pose expresses “good boy”: a fixed pose, or a safe
-  pose chosen from the matched image. Do not assume every existing action can
-  be held for 10 seconds.
-- How the encounter starts and resets: operator trigger or automatic observation.
-- How frequently the dog speaks and where the physical voice plays.
+**Confirmed:** encounters start automatically when the robot detects a stable
+human pose, after operator preparation, recipient setup, and arming for real
+movement. The primary journey does not require a visitor `/observe` command.
+The one-pose/one-encounter and reset rules above apply to automatic observation.
+
+The following choices remain open; the documentation does not select a default
+on the team's behalf. Record the decisions here before implementing the affected
+behavior.
+
+| Decision | Options / boundary |
+| --- | --- |
+| Occasional speech | Decide how often a short line is used. A silent encounter is valid; continuous narration is outside this flow. |
 
 ## Implementation gaps at the time of this decision
 
 | Area | Evidence / work remaining |
 | --- | --- |
 | Local perception and matching | Existing pipeline supports local pose analysis and coarse relationship matching; live camera behavior still needs verification. |
+| Automatic observation | Stable-pose triggering, one-event-per-held-pose behavior, and reacquisition/reset rules still need implementation and verification. |
 | Telegram | Existing messages include longer dialogue and interaction buttons. A dedicated short caption plus italic-credit format is required. Live delivery remains to be verified. |
+| Meme images | Current meme annotations are reference-only. Image delivery needs eligible licensed or team-made assets and matching metadata; a source link or preview is not proof of the required image message. |
 | Character voice | Existing dialogue/talk modes need alignment with these short, occasional lines. Voice dependencies and live playback require setup/verification. |
 | Physical finale | Existing adapter settle times are not a dedicated 10-second final hold. Implement and verify an interruptible hold and its safe exit on the actual robot. |
 | Web | Existing show/projector capabilities are development tools for this scope, not a visitor requirement. |
 
-Acceptance is one complete encounter: the visitor attends to the dog, receives
-one appropriate archive image with the agreed message format, and sees the final
-qualified pose held for 10 seconds unless interrupted. Verify the software path
-in simulation and the physical timing separately on hardware.
+## Acceptance criteria
+
+- The visitor can experience the encounter by attending to the dog. The web
+  page and Telegram commands are not required steps after recipient setup.
+- A stable human pose triggers the encounter automatically. A sustained pose
+  triggers once; another encounter requires the previous encounter and cooldown
+  to finish, plus a pose change or departure and stable reacquisition.
+- Camera input is processed locally and transiently. The delivered image is the
+  selected archive image, not the visitor frame.
+- The dog is either silent or speaks a short, timid line. Spoken text and image
+  captions are independent outputs.
+- Telegram shows one eligible archive image, one short caption appropriate to
+  paintings or memes, and real italic attribution at the bottom. The image
+  message has no feedback buttons, explanatory paragraphs, or voice note.
+- The final pose is based on the selected image and is qualified for a
+  10-second hold after settling, unless interrupted. The encounter remains
+  exclusive through its safe completion; approximations and stillness are
+  recorded as such.
+- Stop, perception failure, voice failure, and delivery failure follow the
+  behavior above. Retrying delivery never repeats movement.
+- The encounter ends without waiting for the visitor to answer. Its completion
+  does not silently trigger another encounter.
+
+Verify the software sequence and message format in simulation, actual delivery
+and playback through their live integrations, and physical pose timing and
+interruption separately on the robot. Passing one level does not establish the
+others. These criteria describe the target, not completed verification.
