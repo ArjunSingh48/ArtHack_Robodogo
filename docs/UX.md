@@ -13,6 +13,48 @@ and launchers belong to later steps of the plan. Step 2 now provides independent
 caption and optional speech outputs in the dialogue engine; existing flows have
 not yet been connected to that API.
 
+## Presentation programme (user decision, 2026-10-24 afternoon)
+
+The presentation (robot dog + laptop + beamer) runs as a fixed programme. This
+section was added on the user's explicit direction and takes precedence over the
+parts of this document that assume a single encounter, occasional speech only, or
+no visitor photo. The single good boy encounter below remains available as the
+narrated show's finale (`--programme show`).
+
+1. **Intro.** The shy dog introduces itself briefly (it is a dog, there are no
+   dogs left, only pictures; it wants to learn to be a good dog) and shows a first
+   picture. It asks once whether it may take pictures of the two of them. The
+   operator records the visitor's answer, and then separately confirms whether
+   those photos may also be sent to the configured private Telegram chat.
+2. **Four rounds:** prehistory/antiquity, the Middle Ages, the Renaissance and
+   portraits, internet memes. In each round, a short narration is followed by an
+   invitation to take any pose. When the pose is steady, the dog picks the closest
+   picture of that era from the curated, open-access set (by the person's coarse
+   posture and the curators' annotations; no similarity score is shown). While
+   the robot walks over and takes the painted dog's pose next to the person, the
+   era's other pictures flash by ("remembering"), so the robot's slowness reads
+   as thinking. Then it reveals the picture and holds its pose. The laptop camera
+   takes the photo during the hold (only with consent). The beamer shows
+   THEN/NOW. Telegram receives the archive picture (short caption + italic
+   attribution), and, only with consent plus the operator's send confirmation,
+   the photo. The memes round uses no third-party meme image: the robot draws its
+   own doge-style meme on the consented photo.
+3. **Finale: rescue.** The dog wants to be a rescue dog. A participant lies down
+   as if they fainted. The robot comes (stopping farther away from someone on the
+   floor), offers a paw, says "Please wake up", and is happy when they get up. It
+   sits beside them; a last consented photo goes to the beamer (and Telegram if
+   confirmed). It ends with "Am I a good boy already?" / "A really good boy now?"
+   / "Is this us?".
+
+Rules that still hold: no photo without consent; no sending without the separate
+operator confirmation; only the one configured private chat, never public; photos
+in the git-ignored temporary store with retention, purged on cancel; robot motion
+only through MotionGuard with operator arming and the physical stop, walking only
+with `--walk`; spoken lines and written captions stay separate; operator controls
+stay off the audience view. The camera that reads poses and takes the photo is the
+laptop camera (`SHOW_CAMERA_SOURCE`); the robot's own camera guides its walking
+(`SHOW_WALK_CAMERA`).
+
 ## Character and communication
 
 The robot is the main interface. The visitor relates to a shy, timid robot dog
@@ -24,7 +66,9 @@ Approved examples of spoken lines:
 - “Am I a good boy already?”
 - “A really good boy now?”
 
-Speech is occasional, not continuous narration or a mandatory conversation.
+Speech is occasional in the encounter itself, not continuous narration or a
+mandatory conversation. (The presentation programme above adds a short narration
+before each round, on the user's direction.)
 Leave space for silence and the physical encounter. The questions do not require
 a rating, a chat reply, or a feedback button. Technical status and explanations
 belong in operator/debug tools.
@@ -68,10 +112,12 @@ Robot camera → local application → human pose analysis → archive match
                                                         └→ guarded robot behavior
 ```
 
-The camera image is input for local analysis. The image sent to Telegram is the
-selected painting or meme. The primary flow does not upload the visitor frame to
-an AI service or Telegram, or save it to disk. Existing separately consented
-photo/performance experiments are outside this primary flow.
+The camera image is input for local analysis. In the single encounter, the image
+sent to Telegram is the selected painting or meme, and the visitor frame is not
+uploaded or saved. In the presentation programme, a photo is taken only with the
+visitor's consent; it is shown on the beamer, kept in the temporary store, and
+sent to the private chat only after the operator's separate confirmation. It is
+never sent to an AI service.
 
 For this presentation prototype, the dog's voice plays from the computer.
 Onboard robot audio is unavailable in this setup. Computer playback is the

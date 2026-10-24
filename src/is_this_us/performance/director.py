@@ -52,6 +52,10 @@ class ShowState(StrEnum):
     AWAITING_PHOTO = "awaiting_photo"  # camera failed; a consented photo may come via Telegram
     COMPOSITION = "composition"
     DELIVERY = "delivery"
+    SENDING = "sending"  # encounter: the archive image goes to Telegram (automatic, no visitor reply)
+    FINAL_POSE = "final_pose"  # encounter: the robot holds its good-boy pose (10 s after settling)
+    REMEMBERING = "remembering"  # presentation round: pictures flash by while the robot walks / takes its pose
+    RESCUE = "rescue"  # presentation finale: waiting for someone to lie down / to get up again
     CONCLUSION = "conclusion"
     PAUSED = "paused"
     FINISHED = "finished"
@@ -77,7 +81,8 @@ class Cmd(StrEnum):
 
 
 RUNNING = {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
-           ShowState.PARTICIPATION, ShowState.APPROACH,
+           ShowState.PARTICIPATION, ShowState.APPROACH, ShowState.SENDING, ShowState.FINAL_POSE,
+           ShowState.REMEMBERING, ShowState.RESCUE,
            ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT, ShowState.CAPTURE,
            ShowState.AWAITING_PHOTO, ShowState.COMPOSITION, ShowState.DELIVERY, ShowState.CONCLUSION}
 SPEAKING = {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.INVITATION, ShowState.CONCLUSION}
@@ -90,9 +95,9 @@ VALID: dict[Cmd, set[ShowState]] = {
     Cmd.CANCEL: RUNNING | {ShowState.PAUSED},
     Cmd.POSE: {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
                ShowState.INVITATION, ShowState.PARTICIPATION},
-    Cmd.READY: {ShowState.READINESS, ShowState.PARTICIPATION},
+    Cmd.READY: {ShowState.READINESS, ShowState.PARTICIPATION, ShowState.RESCUE},
     # (APPROACH accepts only PAUSE / SKIP / CANCEL — all of which stop the walk at once)  # in a moment: "yes, they did it"
-    Cmd.DECLINE: {ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT},
+    Cmd.DECLINE: {ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT, ShowState.RESCUE},
     Cmd.CONSENT_YES: {ShowState.CONSENT},
     Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO},
     Cmd.SEND_YES: {ShowState.DELIVERY},
@@ -127,6 +132,9 @@ class StoryDirector:
                  tick_s: float = 0.8, theme: str = "ivory", font_path: str = "", rng: random.Random | None = None,
                  photo_upload_allowed: bool = False, try_seconds: float = 12.0, approacher=None,
                  moment_hold_s: float = 1.5, live_linger_s: float = 2.0,
+                 finale: str = "encounter", matcher=None, stable_s: float = 3.0, final_hold_s: float = 10.0,
+                 photo_in_encounter: bool = True, round_hold_s: float = 6.0, rescue_wait_s: float = 60.0,
+                 rescue_wake_s: float = 20.0, flash_s: float = 1.4, live_always: bool = True,
                  clock=time.monotonic):
         self.script, self.catalog, self.lines, self.voice, self.stage = script, catalog, lines, voice, stage
         self.store, self.pose_reader, self.frame_source_factory = store, pose_reader, frame_source_factory
@@ -141,6 +149,23 @@ class StoryDirector:
         self.photo_upload_allowed = photo_upload_allowed
         self.try_seconds = try_seconds
         self.approacher = approacher  # camera-guided walking to the participant (None = never walks)
+        # finale: "encounter" = the good boy encounter (docs/UX.md): the person takes any pose, the robot
+        # finds a matching picture, sends it to Telegram, takes the dog's pose and holds it 10 s.
+        # "imitate" = the earlier finale: the robot shows a chosen picture and the person copies it.
+        self.finale = finale
+        self.matcher = matcher
+        self.stable_s = stable_s
+        self.final_hold_s = final_hold_s
+        self.photo_in_encounter = photo_in_encounter
+        self.encounter_log: list[str] = []  # what happened, for the operator (no visitor data)
+        # presentation
+        self.round_hold_s, self.rescue_wait_s, self.rescue_wake_s = round_hold_s, rescue_wait_s, rescue_wake_s
+        self.flash_s = flash_s
+        self.live_always = live_always  # keep the camera view on screen the whole show (beside the picture)
+        self._live_at = -1e9  # when a moment last published its own camera view
+        self.photo_consent = False  # asked once in the intro (@consent)
+        self.send_ok = False  # separate operator confirmation: may photos go to the Telegram chat?
+        self.rounds: list[dict] = []  # what each round did (operator log; no visitor data)
         self.walk_log: list[str] = []
         self.clock = clock
         self.tries: list[tuple[str, bool]] = []  # (cue id, seen) — what the participant joined
@@ -368,7 +393,7 @@ class StoryDirector:
             return ShowState.INTRODUCTION
         if ch.interactive:
             return ShowState.INVITATION
-        if ch.id == "present":
+        if ch.id in ("present", "rescue"):
             return ShowState.CONCLUSION
         return ShowState.NARRATION
 
@@ -390,15 +415,30 @@ class StoryDirector:
         self.chapters_played.append(ch.id)
         self.stage.chapter(ch.id, ch.title)
         state = self._chapter_state(ch)
+        if self.script.is_presentation and getattr(self, "rounds_only", False):
+            self._jump_to_pose = True
         i = 0
         while i < len(cues):
-            if self._jump_to_pose and not ch.interactive:
+            if self._jump_to_pose and self.script.is_presentation:
+                # "go to interactive": skip the rest of this chapter's narration, straight to its round
+                nxt = next((j for j in range(i, len(cues)) if cues[j].kind in ("round", "rescue", "consent")), None)
+                self._jump_to_pose = False
+                if nxt is not None:
+                    i = nxt
+            elif self._jump_to_pose and not ch.interactive:
                 return "pose"
             cue = cues[i]
             self._set_state(state)
             self.cue_id = cue.id
             self._show(cue.show)
             self._move(cue.motion)
+            if cue.kind in ("consent", "round", "rescue"):
+                handler = {"consent": self._consent_cue, "round": self._round, "rescue": self._rescue}[cue.kind]
+                result = await handler(ch, cue)
+                if result == "skip":
+                    return "skip"
+                i += 1
+                continue
             if cue.kind == "try":
                 result = await self._try_moment(ch, cue)
                 if result in ("skip", "pose"):
@@ -412,7 +452,7 @@ class StoryDirector:
                 i += 1
                 continue
             text = cue.render(
-                pose_request=self.artifact.interactive.request if self.artifact else "",
+                pose_request=self.lines.text("encounter", "invite") if self.finale == "encounter" else "",
                 practised=self.lines.text("invite", "practised") if any(seen for _, seen in self.tries) else "",
             ) if "{" in cue.text else cue.text
             if not text.strip():  # e.g. {practised} when nobody joined a moment
@@ -618,11 +658,13 @@ class StoryDirector:
     def _live(self):
         return getattr(self.stage, "live", None)
 
-    async def _publish_live(self, frame, reading: PoseReading | None, checks) -> None:
+    async def _publish_live(self, frame, reading: PoseReading | None, checks, ambient: bool = False) -> None:
         """Show the participant what the camera sees (mirrored, skeleton, checklist). In memory only."""
         live = self._live
         if live is None or frame is None:
             return
+        if not ambient:
+            self._live_at = self.clock()
         from .live_view import render
 
         try:
@@ -636,7 +678,30 @@ class StoryDirector:
         posing — and the painting. Not if the camera already mirrors, nor for the drawn stand-in."""
         return not getattr(self.pose_reader, "mirrored", False) and getattr(frame, "source", "") != "synthetic"
 
+    async def _ambient_live(self) -> None:
+        """The camera view stays up for the whole show; moments with their own checklist take over while they
+        run (no flicker), and this resumes a moment after they stop."""
+        from .live_view import checks_for as _checks
+
+        try:
+            camera = self._open_camera()
+            if camera is None or self.pose_reader is None:
+                return
+            while True:
+                if self.clock() - self._live_at > 0.6 and self.state is not ShowState.PAUSED:
+                    reading, frame = await self._read_pose(camera)
+                    if self.clock() - self._live_at > 0.6:
+                        await self._publish_live(frame, reading, _checks(reading, any_person=True), ambient=True)
+                await asyncio.sleep(max(self._tick(), 0.12))
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            log.warning("camera view stopped: %s", exc)
+
     def _clear_live(self) -> None:
+        if self.live_always:
+            self._live_at = -1e9  # hand the view back to the always-on camera instead of hiding it
+            return
         live = self._live
         if live is not None:
             try:
@@ -741,13 +806,22 @@ class StoryDirector:
         return outcome
 
     async def _interactive_inner(self) -> str:
-        """Invitation → readiness → [walk + dog pose] → consent → capture → composition → delivery."""
+        if self.finale == "encounter":
+            return await self._encounter_finale()
+        return await self._imitation_finale()
+
+    async def _imitation_finale(self) -> str:
+        """(Earlier finale, kept as an option.) The robot shows a chosen picture; the person copies it →
+        [walk + dog pose] → consent → capture → composition → confirmed delivery."""
         art = self.artifact
         if art is None:
             log.warning("no interactive artwork available; the story continues without a photo")
             return "alone"
         camera = self._open_camera()
         try:
+            self._show("chosen")
+            await self.say_line("invite", "found_like")
+            await self.say(art.interactive.request, kind="narration")
             await self._robot_takes_its_place(art)
             ready = await self._guide_pose(art, camera)
             if ready != "ready":
@@ -789,6 +863,291 @@ class StoryDirector:
         except Exception as exc:  # a failed photo never prevents the ending
             log.exception("interactive part failed: %s", exc)
             return "together" if self.composition else "alone"
+
+    # ------------------------------------------------------------------ the good boy encounter (finale)
+    def _note(self, text: str) -> None:
+        """Something the operator should know (terminal / operator page); never spoken, never sent."""
+        self.encounter_log.append(text)
+        log.info("encounter: %s", text)
+        self.stage.status(self.state.value, text)
+
+    async def _wait_for_steady_pose(self, camera) -> PoseReading | None:
+        """The encounter starts by itself when the person holds a pose steadily (or the operator presses
+        Ready). → the reading to match, or None (declined / nobody / no camera)."""
+        from .encounter import StabilityTracker
+        from .live_view import Check
+
+        self._set_state(ShowState.READINESS, f"waiting for a steady pose ({self.stable_s:.0f} s) — starts by "
+                                             f"itself; Ready starts now")
+        if camera is None or self.pose_reader is None:
+            self._note("no camera / pose reading: the encounter cannot match a picture — skipped")
+            return None
+        tracker = StabilityTracker(self.stable_s)
+        deadline = self.clock() + self.readiness_timeout_s
+        last_hint = -1e9
+        latest: PoseReading | None = None
+        while self.clock() < deadline:
+            reading, frame = await self._read_pose(camera)
+            now = self.clock()
+            steady = tracker.update(reading, now)
+            if reading is not None:
+                latest = reading
+                self.last_reading = reading
+            checks = checks_for(reading) + [Check("holding still", steady or tracker.progress(now) >= 1.0)]
+            await self._publish_live(frame, reading, checks)
+            if steady:
+                return reading
+            hint = None
+            if reading is None or not reading.person_visible:
+                hint = "not_visible"
+            elif reading.framing in ("partial", "too_close"):
+                hint = "partly_visible" if reading.framing == "partial" else "too_close"
+            elif reading.side != "center":
+                hint = reading.side
+            if hint and now - last_hint >= max(self.hint_gap_s, 0.0) * 1.5:
+                last_hint = now
+                await self._with_live(camera, lambda r: checks_for(r), self.say_line("pose", hint))
+            try:
+                cmd = await asyncio.wait_for(self._get_cmd(), self._tick())
+            except asyncio.TimeoutError:
+                continue
+            if cmd is Cmd.CANCEL:
+                raise ShowCancelled()
+            if cmd is Cmd.PAUSE:
+                await self._paused()
+                deadline = self.clock() + self.readiness_timeout_s
+                continue
+            if cmd is Cmd.READY:
+                if latest is not None and latest.person_visible and latest.observation is not None:
+                    return latest
+                self._note("Ready pressed, but nobody is readable in the camera yet")
+            if cmd in (Cmd.DECLINE, Cmd.SKIP):
+                return None
+        self._note("nobody held a steady pose — encounter skipped")
+        return None
+
+    def _match(self, reading: PoseReading):
+        """Existing matcher, local only. Only images we may send are candidates. → (scene, artifact) | None"""
+        from ..matching.matcher import SceneMatcher
+        from ..scenes import SceneLibrary
+        from .encounter import deliverable
+
+        if reading.observation is None:
+            return None
+        if self.matcher is None:
+            self.matcher = SceneMatcher(SceneLibrary(self.catalog.art_repo, self.catalog.meme_repo))
+        exclude = set()
+        if self.catalog.meme_repo is not None:
+            exclude |= {m.id for m in self.catalog.meme_repo.all() if not self.catalog.meme_repo.local_image(m)}
+        if self.catalog.art_repo is not None:
+            exclude |= {a.id for a in self.catalog.art_repo.all() if not self.catalog.art_repo.local_image(a)}
+        res = self.matcher.match(reading.observation, "both", exclude=exclude, recent=self._recent, rng=self.rng)
+        if not res.found:
+            self._note(f"no suitable picture: {res.reason}")
+            return None
+        scene = res.chosen.scene
+        art = self.catalog.artifact_for_scene(scene.id)
+        if not deliverable(art):
+            self._note(f"{scene.id} matched but its image may not be sent — skipped")
+            return None
+        self._recent.add(scene.id)
+        self._note(f"matched {scene.id} (score {res.chosen.scores.total:.2f}) — {res.reason}")
+        return scene, art
+
+    async def _send_archive_image(self, art: ShowArtifact) -> None:
+        """One Telegram message: the archive image, one short caption, italic attribution. Never the
+        visitor's photo. Sent automatically; a failure is reported to the operator only."""
+        from .encounter import telegram_message
+
+        if self.delivery is None:
+            self.delivery_detail = "no Telegram delivery configured"
+            self._note(self.delivery_detail)
+            return
+        self._set_state(ShowState.SENDING)
+        text = telegram_message(art, self.lines.captions(), self.rng)
+        res = await self._deliver_one(art.image_path, text, "archive image")
+        self.delivered, self.delivery_detail = res.ok, res.detail
+
+    async def _deliver_one(self, image: Path, caption: str, what: str):
+        """One Telegram image message, bounded in time; the outcome goes to the operator only."""
+        from .delivery import DeliveryResult
+
+        try:
+            res = await asyncio.wait_for(self.delivery.send(image, caption, self.session_id), 45)
+        except asyncio.TimeoutError:
+            res = DeliveryResult(False, "timed out")
+        except Exception as exc:
+            res = DeliveryResult(False, f"error: {type(exc).__name__}")
+        self._note(f"Telegram ({what}): {res.detail}")
+        return res
+
+    def _behavior_for(self, scene, art: ShowArtifact | None) -> str | None:
+        """A supported pose based on the selected image (planner fallbacks apply)."""
+        planner = getattr(self.motion, "planner", None) if self.motion is not None else None
+        if planner is not None and getattr(scene, "dog", None) is not None:
+            return planner.plan(scene).behavior.value
+        dog = getattr(scene, "dog", None)
+        if dog is not None:
+            return getattr(dog.robot_behavior, "value", dog.robot_behavior)
+        if art is not None and art.interactive and art.interactive.robot_behavior:
+            return art.interactive.robot_behavior
+        return None
+
+    async def _take_final_pose(self, scene, art: ShowArtifact, reading: PoseReading) -> bool:
+        """Walk to the person (with --walk) and take the image's dog pose. → True only if the robot
+        reports reaching it (command acceptance is not enough)."""
+        from ..domain import ExecutionStatus
+        from .encounter import side_for
+
+        behavior = self._behavior_for(scene, art)
+        if self.approacher is not None:
+            arrived = await self._walk_to_person_at(side_for(scene, art), reading.posture or "sitting")
+            if not arrived:
+                self._note("could not reach the person — final pose skipped")
+                return False
+        if not behavior or behavior == "stillness":
+            self._note("no supported pose for this picture — the robot stays still")
+            return False
+        if self.motion is None or not getattr(self.motion, "enabled", False):
+            self._note(f"final pose '{behavior}' not performed (show motion off)")
+            return False
+        res = await asyncio.to_thread(self.motion.perform, behavior)
+        ok = res is not None and res.status in (ExecutionStatus.SUCCESS, ExecutionStatus.SIMULATED)
+        self._note(f"final pose '{behavior}': {res.status.value if res else 'none'} {res.detail if res else ''}")
+        return ok
+
+    async def _snap(self, camera) -> tuple[bytes | None, PoseReading | None]:
+        """One consented frame, mirrored like the live view. Kept local."""
+        reading, frame = await self._read_pose(camera)
+        if frame is None:
+            return None, None
+        from io import BytesIO
+
+        from PIL import Image
+
+        buf = BytesIO()
+        img = Image.fromarray(frame.image)
+        if self._mirror(frame):
+            img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+        img.save(buf, format="JPEG", quality=92)
+        self._capture_source = frame.source
+        return buf.getvalue(), reading
+
+    async def _hold_final_pose(self, settled: bool, camera, consent: bool):
+        """The good boy moment: hold for final_hold_s AFTER settling; interruptible (Skip ends it, Stop
+        cancels). A consented photo is taken during the hold. → (photo, reading)"""
+        return await self._hold_pose(settled, camera, consent, self.final_hold_s,
+                                     ("encounter", "goodboy"), ("encounter", "goodboy_after"))
+
+    async def _hold_pose(self, settled: bool, camera, consent: bool, hold_s: float, before, after,
+                         unsettled_s: float = 0.0):
+        from .live_view import checks_for as _checks
+
+        self._set_state(ShowState.FINAL_POSE, f"holding the pose for {hold_s:.0f} s" if settled
+                        else "pose not performed — no hold")
+        photo, photo_reading = None, None
+        if before:
+            await self.say_line(*before)
+        start = self.clock()
+        duration = hold_s if settled else unsettled_s
+        snap_at = start + min(duration * 0.4, 4.0)
+        while True:
+            now = self.clock()
+            if consent and photo is None and now >= snap_at:
+                photo, photo_reading = await self._snap(camera)
+                if photo is None:
+                    self._note("photo failed (no camera frame)")
+                    consent = False
+            if now - start >= duration and (photo is not None or not consent):
+                break
+            if camera is not None:
+                reading, frame = await self._read_pose(camera)
+                await self._publish_live(frame, reading, _checks(reading, any_person=True))
+            try:
+                cmd = await asyncio.wait_for(self._get_cmd(), self._tick())
+            except asyncio.TimeoutError:
+                continue
+            if cmd is Cmd.CANCEL:
+                raise ShowCancelled()
+            if cmd is Cmd.PAUSE:
+                paused_at = self.clock()
+                await self._paused()
+                start += self.clock() - paused_at  # the hold resumes where it was
+                snap_at += self.clock() - paused_at
+                self._set_state(ShowState.FINAL_POSE)
+                continue
+            if cmd is Cmd.SKIP:
+                self._note("hold ended early by the operator")
+                break
+        self._clear_live()
+        if settled:
+            self._note(f"held the pose for {min(self.clock() - start, hold_s):.1f} s")
+        if after:
+            await self.say_line(*after)
+        return photo, photo_reading
+
+    async def _encounter_finale(self) -> str:
+        """The good boy encounter (docs/UX.md) as the show's finale:
+        steady pose (automatic) → local match → short line → Telegram image → [consent?] →
+        [walk] + the image's dog pose → hold 10 s → [local THEN/NOW]."""
+        camera = self._open_camera()
+        try:
+            reading = await self._wait_for_steady_pose(camera)
+            if reading is None:
+                self._clear_live()
+                await self.say_line("decline", "ok")
+                return "alone"
+            matched = await asyncio.to_thread(self._match, reading)
+            if matched is None:
+                self._clear_live()
+                return "alone"  # no invented match: the operator sees why
+            scene, art = matched
+            self.artifact = art
+            self._clear_live()
+            self.stage.show(View("artifact", artifact=art))
+            await self.say_line("encounter", "found")
+            await self._send_archive_image(art)
+            consent = False
+            if self.photo_in_encounter and camera is not None:
+                self._set_state(ShowState.CONSENT, "photo stays on the local screen only")
+                await self.say_line("consent", "ask")
+                await self.say_line("consent", "explain_local")
+                cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.CONSENT_NO, Cmd.DECLINE, Cmd.SKIP},
+                                            timeout=self.consent_timeout_s)
+                consent = cmd is Cmd.CONSENT_YES
+                await self.say_line("consent", "thanks" if consent else "declined")
+            settled = await self._take_final_pose(scene, art, reading)
+            photo, photo_reading = await self._hold_final_pose(settled, camera, consent)
+            if photo:
+                self._set_state(ShowState.COMPOSITION)
+                path = await self._compose(art, photo, photo_reading)
+                self.composition = path
+                self.stage.show(View("composition", image=path))
+                return "together"
+            return "alone"
+        except ShowCancelled:
+            raise
+        except Exception as exc:  # never prevents the ending
+            log.exception("encounter failed: %s", exc)
+            self._note(f"encounter error: {exc}")
+            return "together" if self.composition else "alone"
+
+    async def _walk_to_person_at(self, side: str, posture: str, speak: bool = True) -> bool:
+        self._set_state(ShowState.APPROACH, f"walking to the person's {side}")
+        if speak:
+            await self.say_line("approach", "ask")
+        if self.motion is not None:
+            await asyncio.to_thread(self.motion.perform, "stand")  # walking starts from standing
+        res, cmd = await self._walk(self.approacher.approach, side=side, posture=posture)
+        self.walk_log.append(f"approach: {getattr(res, 'status', 'interrupted')} {getattr(res, 'detail', '')}".strip())
+        if cmd is Cmd.CANCEL:
+            raise ShowCancelled()
+        if cmd is Cmd.PAUSE:
+            await self._paused()
+        arrived = res is not None and res.arrived
+        if speak:
+            await self.say_line("approach", "arrived" if arrived else "not_found")
+        return arrived
 
     async def _robot_takes_its_place(self, art: ShowArtifact) -> None:
         """The robot goes into the painted dog's pose BEFORE the person settles next to it.
@@ -844,11 +1203,12 @@ class StoryDirector:
         await self.say_line("approach", "not_found")
         return False
 
-    async def _walk_home(self) -> None:
+    async def _walk_home(self, speak: bool = True) -> None:
         if self.approacher is None or self.approacher.memory is None or not self.approacher.memory.path:
             return
         self._set_state(ShowState.APPROACH, "walking back")
-        await self.say_line("approach", "home")
+        if speak:
+            await self.say_line("approach", "home")
         if self.motion is not None:
             await asyncio.to_thread(self.motion.perform, "stand")  # stand up before walking
         res, cmd = await self._walk(self.approacher.go_home)
@@ -858,7 +1218,8 @@ class StoryDirector:
         if cmd is Cmd.PAUSE:
             await self._paused()
 
-    async def _compose(self, art: ShowArtifact, photo: bytes, reading: PoseReading | None) -> Path:
+    async def _compose(self, art: ShowArtifact, photo: bytes, reading: PoseReading | None,
+                       name: str = "is-this-us.jpg") -> Path:
         from io import BytesIO
 
         from PIL import Image
@@ -878,6 +1239,15 @@ class StoryDirector:
         if self.pose_reader is not None:
             painted = await asyncio.to_thread(read_painted_figure, art, self.pose_reader.estimator,
                                               self.pose_reader.interpreter)
+        if art.interactive is None:  # a matched picture: compare with how the curators describe its person
+            from dataclasses import replace
+
+            from .catalog import InteractiveSpec
+
+            scene = self.catalog.art_repo.get(art.id) if self.catalog.art_repo is not None else None
+            hp = str(getattr(getattr(getattr(scene, "human", None), "posture", None), "value", "") or "")
+            art = replace(art, interactive=InteractiveSpec(pose_subject="human", safe_to_imitate=True, request="",
+                                                           posture=hp if hp in ("sitting", "standing") else ""))
         self.comparison = compare(art, reading, painted)
         then_img = Image.open(art.image_path).convert("RGB")
         commentary = self.lines.text("compare", self.comparison.line_keys[-1])
@@ -885,8 +1255,8 @@ class StoryDirector:
                                        theme=self.theme, font_path=self.font_path, session_id=self.session_id,
                                        now_note=("Rehearsal stand-in — not a photograph" if self._capture_source == "synthetic"
                                                  else "Photograph taken with consent"))
-        self.store.save(self.session_id, "now.jpg", photo)
-        return self.store.save(self.session_id, "is-this-us.jpg", data)
+        self.store.save(self.session_id, "now.jpg" if name == "is-this-us.jpg" else f"now-{name}", photo)
+        return self.store.save(self.session_id, name, data)
 
     async def _deliver(self, path: Path) -> None:
         if self.delivery is None:
@@ -909,6 +1279,325 @@ class StoryDirector:
         self.delivered, self.delivery_detail = res.ok, res.detail
         await self.say_line("delivery", "sent" if res.ok else "failed")
 
+    # ------------------------------------------------------------------ the presentation
+    # intro (@consent) → one @round per era → @rescue finale. See data/performance/presentation.en.md.
+    async def _speak_plain(self, text: str, direction: str = "") -> None:
+        """Speak while ANOTHER task listens for commands (the walk). Never touches the command inbox."""
+        if not text:
+            return
+        self.stage.subtitle(text)
+        try:
+            await self.voice.speak(text, kind="lines", direction=direction)
+        finally:
+            self.stage.subtitle(None)
+
+    async def _consent_cue(self, ch: Chapter, cue: Cue) -> str:
+        """Asked once, in the intro. Consent to photos (for the visitor), then — separately — whether the
+        operator allows sending them to the Telegram chat. Without consent no photo is ever taken."""
+        self._set_state(ShowState.CONSENT, "photos during the presentation: did the visitor agree?")
+        await self._play_cue(ch, cue, cue.text)
+        cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.CONSENT_NO, Cmd.DECLINE, Cmd.SKIP},
+                                    timeout=self.consent_timeout_s)
+        self.photo_consent = cmd is Cmd.CONSENT_YES
+        self.send_ok = False
+        if self.photo_consent and self.delivery is not None:
+            self._set_state(ShowState.DELIVERY, "send this presentation's photos to the Telegram chat too? "
+                                                "(otherwise: big screen only)")
+            sent = await self._await_cmd({Cmd.SEND_YES, Cmd.SEND_NO, Cmd.SKIP}, timeout=self.send_timeout_s)
+            self.send_ok = sent is Cmd.SEND_YES
+        self._note(f"photos: {'yes' if self.photo_consent else 'no'}; sending to Telegram: "
+                   f"{'confirmed' if self.send_ok else 'no'}")
+        await self.say_line("presentation_consent", "thanks" if self.photo_consent else "declined")
+        return "done"
+
+    async def _round(self, ch: Chapter, cue: Cue) -> str:
+        """One era: any pose → the closest picture of this era → the robot remembers while it walks over and
+        takes the painted dog's pose → the picture → hold + photo → beamer + Telegram → back to its place."""
+        from .live_view import checks_for as _checks
+        from .rounds import MEME_BEHAVIOR, behavior_for, pick_for_round, pose_group, side_for
+
+        era = cue.target
+        camera = self._open_camera()
+        looking = camera is not None and self.pose_reader is not None
+        self._set_state(ShowState.READINESS, f"{era}: waiting for a steady pose — starts by itself; Ready = now, "
+                                             f"Skip = skip this round")
+        said = "done"
+
+        async def invite():
+            nonlocal said
+            said = await self._play_cue(ch, cue, cue.text)
+
+        if looking:
+            await self._with_live(camera, lambda r: _checks(r, any_person=True), invite())
+        else:
+            await invite()
+        if said == "skip":
+            self._clear_live()
+            return "done"
+        reading = await self._wait_for_steady_pose(camera) if looking else None
+        if reading is None:
+            self._clear_live()
+            await self.say_line("round", "nobody")
+        posture = reading.posture if reading else None
+        gestures = ({str(getattr(g, "value", g)) for g, v in reading.observation.gestures.items() if v >= 0.5}
+                    if reading is not None and reading.observation is not None else set())
+        art = None
+        if era != "internet":
+            pick = pick_for_round(self.catalog, era, posture, head_tilt=bool(reading and reading.head_tilt),
+                                  gestures=gestures, exclude=self._recent, rng=self.rng)
+            if pick is not None:
+                art = pick.artifact
+                self._recent.add(art.id)
+                self._note(f"{era}: picked {art.id} ({pick.why})")
+            else:
+                self._note(f"{era}: no picture with a local image in this era")
+        self.artifact = art or self.artifact
+        repo = self.catalog.art_repo
+        behavior = behavior_for(art, repo) if art is not None else MEME_BEHAVIOR.get(pose_group(posture), "sit")
+        side = side_for(art, repo)
+        record = {"era": era, "artifact": art.id if art else None, "posture": pose_group(posture) or None,
+                  "behavior": behavior, "side": side, "settled": False, "photo": False, "sent": []}
+        self.rounds.append(record)
+        self._clear_live()
+        work = self._round_robot(behavior, side, posture) if reading is not None else None
+        settled = await self._remember_while(era, art, work)
+        record["settled"] = settled
+        if art is not None:
+            self.stage.show(View("artifact", artifact=art))
+            await self.say_line("round", "found")
+        elif self.photo_consent and reading is not None:
+            await self.say_line("round", "meme_found")
+        consent = self.photo_consent and reading is not None and looking
+        photo, photo_reading = None, None
+        if reading is not None:
+            photo, photo_reading = await self._hold_pose(settled, camera, consent, self.round_hold_s,
+                                                         ("round", "hold"), None,
+                                                         unsettled_s=min(2.0, self.round_hold_s))
+        path, kind = None, None
+        if photo:
+            record["photo"] = True
+            self._set_state(ShowState.COMPOSITION)
+            try:
+                if art is not None:
+                    path, kind = await self._compose(art, photo, photo_reading, name=f"{era}.jpg"), "together"
+                else:
+                    path, kind = await self._make_meme(photo, posture), "meme"
+                self.composition = path
+                self.stage.show(View("composition", image=path))
+            except Exception as exc:  # a failed picture never stops the presentation
+                log.exception("round picture failed: %s", exc)
+                self._note(f"{era}: picture failed ({type(exc).__name__})")
+                path = None
+        home = asyncio.ensure_future(self._walk_home(speak=False)) if reading is not None else None
+        try:
+            if path is not None:
+                await self._speak_plain(self.lines.pick("round", "shown"))
+            elif era == "internet" and reading is not None:
+                self.stage.show(View("memes", memes=self.catalog.for_chapter("internet")))
+                await self._speak_plain(self.lines.pick("round", "meme_no_photo"))
+            sent = await self._send_round(art, path, kind)
+            record["sent"] = sent
+            if path is not None and kind in sent:
+                await self._speak_plain(self.lines.pick("round", "sent"))
+        finally:
+            if home is not None:
+                await home
+        return "done"
+
+    async def _round_robot(self, behavior: str, side: str, posture: str | None) -> bool:
+        """Walk to the person (only with --walk) and take the pose. → True only if the robot reports it."""
+        from ..domain import ExecutionStatus
+
+        if self.approacher is not None:
+            arrived = await self._walk_to_person_at(side, posture or "sitting", speak=False)
+            if not arrived:
+                self._note("could not reach the person — pose skipped")
+                return False
+        if self.motion is None or not getattr(self.motion, "enabled", False):
+            self._note(f"pose '{behavior}' not performed (show motion off)")
+            return False
+        res = await asyncio.to_thread(self.motion.perform, behavior)
+        ok = res is not None and res.status in (ExecutionStatus.SUCCESS, ExecutionStatus.SIMULATED)
+        self._note(f"pose '{behavior}': {res.status.value if res else 'none'} {res.detail if res else ''}".strip())
+        return ok
+
+    async def _remember_while(self, era: str, chosen: ShowArtifact | None, work) -> bool:
+        """While the robot is busy (`work`), the era's other pictures flash by — at least a few, then as long
+        as the robot needs. One short spoken line at the start; the found picture is the reveal (after)."""
+        from .rounds import montage_order
+
+        self._set_state(ShowState.REMEMBERING, "remembering — the robot walks / takes its pose")
+        flashes = montage_order(self.catalog, era, chosen)
+        done = asyncio.Event()
+        minimum = min(3, len(flashes)) if flashes else 1
+
+        async def montage():
+            line = asyncio.ensure_future(self._speak_plain(self.lines.pick("round", "thinking")))
+            shown = 0
+            try:
+                if not flashes and era == "internet":
+                    self.stage.show(View("memes", memes=self.catalog.for_chapter("internet")))
+                while True:
+                    if self.state is not ShowState.PAUSED and flashes:
+                        self.stage.show(View("flash", artifact=flashes[shown % len(flashes)]))
+                    if self.state is not ShowState.PAUSED:
+                        shown += 1
+                    await asyncio.sleep(self.flash_s)
+                    if done.is_set() and shown >= minimum:
+                        break
+                await line
+            finally:
+                if not line.done():
+                    line.cancel()
+                    await asyncio.gather(line, return_exceptions=True)
+
+        show = asyncio.ensure_future(montage())
+        settled = False
+        try:
+            if work is not None:
+                settled = await work
+        except BaseException:
+            show.cancel()
+            await asyncio.gather(show, return_exceptions=True)
+            raise
+        done.set()
+        await show
+        return bool(settled)
+
+    async def _make_meme(self, photo: bytes, posture: str | None) -> Path:
+        from .rounds import make_meme, meme_phrases, pose_group
+
+        phrases = meme_phrases(self.lines, pose_group(posture) or "any", self.rng)
+        data = await asyncio.to_thread(make_meme, photo, phrases, font_path="", seed=self.rng.randrange(1 << 30))
+        return self.store.save(self.session_id, "internet.jpg", data)
+
+    async def _send_round(self, art: ShowArtifact | None, path: Path | None, kind: str | None) -> list[str]:
+        """Telegram: the archive picture (caption + italic credit), then — only with consent AND the operator's
+        separate OK — the photo the robot made with the participant. → what was sent."""
+        from .encounter import deliverable, telegram_message
+        from .rounds import photo_caption
+
+        sent: list[str] = []
+        if self.delivery is None:
+            if art is not None or path is not None:
+                self._note("no Telegram delivery configured — shown on the big screen only")
+            return sent
+        if art is not None or (path is not None and self.send_ok):
+            self._set_state(ShowState.SENDING)
+        if art is not None and deliverable(art):
+            res = await self._deliver_one(art.image_path, telegram_message(art, self.lines.captions(), self.rng),
+                                          "archive picture")
+            if res.ok:
+                sent.append("painting")
+        if path is not None and kind is not None:
+            if self.send_ok:
+                caption = photo_caption(self.lines.caption(kind), {"together": "photo"}.get(kind, kind))
+                res = await self._deliver_one(path, caption, f"{kind} photo")
+                if res.ok:
+                    sent.append(kind)
+                self.delivered = self.delivered or res.ok
+            else:
+                self._note(f"{kind} photo: big screen only (sending to Telegram not confirmed)")
+        return sent
+
+    async def _wait_for_posture(self, camera, targets: set[str], timeout: float, label: str) -> bool:
+        """Until the camera sees one of `targets` held for a moment, or the operator presses Ready.
+        → False on Skip/Decline/timeout."""
+        from .live_view import Check
+
+        deadline = self.clock() + timeout
+        held_since = None
+        looking = camera is not None and self.pose_reader is not None
+        while self.clock() < deadline:
+            if looking:
+                reading, frame = await self._read_pose(camera)
+                ok = bool(reading and reading.person_visible and reading.posture in targets)
+                await self._publish_live(frame, reading, [Check(label, ok)])
+                if ok:
+                    held_since = held_since if held_since is not None else self.clock()
+                    if self.clock() - held_since >= self.moment_hold_s:
+                        return True
+                else:
+                    held_since = None
+            try:
+                cmd = await asyncio.wait_for(self._get_cmd(), self._tick())
+            except asyncio.TimeoutError:
+                continue
+            if cmd is Cmd.CANCEL:
+                raise ShowCancelled()
+            if cmd is Cmd.PAUSE:
+                await self._paused()
+                self._set_state(ShowState.RESCUE)
+                deadline = self.clock() + timeout
+                continue
+            if cmd is Cmd.READY:
+                return True
+            if cmd in (Cmd.SKIP, Cmd.DECLINE):
+                return False
+        return False
+
+    async def _rescue(self, ch: Chapter, cue: Cue) -> str:
+        """The finale: someone lies down (as if they fainted) → the robot comes, tries to wake them → they get
+        up → the robot is happy, sits beside them → a last photo (consent) → beamer + Telegram."""
+        from ..domain import ExecutionStatus
+        from .rounds import credit_line, make_rescue_card, photo_caption
+
+        camera = self._open_camera()
+        await self._play_cue(ch, cue, cue.text)
+        self._set_state(ShowState.RESCUE, "waiting for someone to lie down (fainted) — Ready = they are down, "
+                                          "Skip = no rescue")
+        down = await self._wait_for_posture(camera, {"lying", "reclining"}, self.rescue_wait_s, "someone lying down")
+        self._clear_live()
+        if not down:
+            await self.say_line("rescue", "nobody")
+            return "done"
+        self._set_state(ShowState.CONCLUSION, "rescue: the robot comes to help")
+        await self.say_line("rescue", "alarm")
+        arrived = True
+        if self.approacher is not None:
+            coming = asyncio.ensure_future(self._speak_plain(self.lines.pick("rescue", "coming")))
+            try:
+                arrived = await self._walk_to_person_at("front", "lying", speak=False)
+            finally:
+                await asyncio.gather(coming, return_exceptions=True)
+            await self.say_line("rescue", "arrived" if arrived else "stay")
+        motion_on = self.motion is not None and getattr(self.motion, "enabled", False)
+        if arrived and motion_on:
+            await asyncio.to_thread(self.motion.perform, "greet")  # a paw: "wake up"
+        await self.say_line("rescue", "wake")
+        self._set_state(ShowState.RESCUE, "waiting for them to sit or stand up — Ready = they are up")
+        ups = {"sitting", "standing", "kneeling", "crouching", "leaning_forward"}
+        up = await self._wait_for_posture(camera, ups, self.rescue_wake_s, "awake again")
+        if not up:
+            await self.say_line("rescue", "stay")
+            up = await self._wait_for_posture(camera, ups, self.rescue_wait_s, "awake again")
+        self._clear_live()
+        await self.say_line("rescue", "saved")
+        settled = False
+        if motion_on:
+            res = await asyncio.to_thread(self.motion.perform, "sit")
+            settled = res is not None and res.status in (ExecutionStatus.SUCCESS, ExecutionStatus.SIMULATED)
+        consent = self.photo_consent and camera is not None and self.pose_reader is not None
+        photo, _ = await self._hold_pose(settled, camera, consent, self.round_hold_s, None, None,
+                                         unsettled_s=min(2.0, self.round_hold_s))
+        self.rounds.append({"era": "rescue", "artifact": None, "posture": None, "behavior": "greet → sit",
+                            "settled": settled, "photo": bool(photo), "sent": []})
+        if photo:
+            data = await asyncio.to_thread(make_rescue_card, photo, heading="good boy?",
+                                           note=credit_line("rescue"), font_path=self.font_path)
+            path = self.store.save(self.session_id, "rescue.jpg", data)
+            self.composition = path
+            self.stage.show(View("composition", image=path))
+            if self.delivery is not None and self.send_ok:
+                self._set_state(ShowState.SENDING)
+                res = await self._deliver_one(path, photo_caption(self.lines.caption("rescue"), "rescue"),
+                                              "rescue photo")
+                if res.ok:
+                    self.rounds[-1]["sent"] = ["rescue"]
+                    self.delivered = True
+        self._set_state(ShowState.CONCLUSION)
+        return "done"
+
     # ------------------------------------------------------------------ main
     async def run(self, start_at: str | None = None) -> ShowResult:
         """start_at: a chapter id to begin with (e.g. "invitation" = straight to the interactive part)."""
@@ -922,6 +1611,10 @@ class StoryDirector:
         self.transitions, self.chapters_played = [], []
         self.tries = []
         self._jump_to_pose = False
+        self.photo_consent, self.send_ok, self.rounds = False, False, []
+        self.rounds_only = False
+        if self.script.is_presentation and start_at in ("invitation", "interactive"):
+            self.rounds_only, start_at = True, None  # every chapter: straight to its round (consent first)
         self.state = ShowState.IDLE
         self.store.cleanup()
         log.info("performance %s starting (%s mode)", self.session_id, self.mode)
@@ -933,10 +1626,12 @@ class StoryDirector:
                 raise ValueError(f"unknown chapter {start_at!r}; one of {', '.join(ids)}")
             idx = ids.index(start_at)
         jumped_to_pose = False
+        ambient = (asyncio.ensure_future(self._ambient_live())
+                   if self.live_always and self._live is not None and self.frame_source_factory is not None else None)
         try:
             while idx < len(chapters):
                 ch = chapters[idx]
-                if ch.interactive and self.artifact is None:
+                if ch.interactive and self.artifact is None and self.finale == "imitate":
                     self.artifact = self._choose_artifact()
                 if ch.interactive and jumped_to_pose:
                     cues = [c for c in ch.cues if c.needs_pose_request or c.show == "chosen"]
@@ -955,6 +1650,8 @@ class StoryDirector:
                     else:
                         self.outcome = await self._interactive()
                 idx += 1
+            if self.script.is_presentation:
+                self.outcome = "together" if any(r["photo"] for r in self.rounds) else "alone"
             self._set_state(ShowState.FINISHED)
         except ShowCancelled:
             self.stage.subtitle(None)
@@ -971,7 +1668,12 @@ class StoryDirector:
                 self.motion.stop("performance error")
             self._set_state(ShowState.ERROR, str(exc))
         finally:
+            if ambient is not None:
+                ambient.cancel()
+                await asyncio.gather(ambient, return_exceptions=True)
+            self.live_always, keep = False, self.live_always
             self._clear_live()
+            self.live_always = keep
             self._close_camera()
         return ShowResult(self.session_id, self.state, self.outcome, self.artifact.id if self.artifact else None,
                           self.composition, self.delivered, self.delivery_detail, list(self.transitions),

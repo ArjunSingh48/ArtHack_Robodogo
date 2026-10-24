@@ -23,6 +23,7 @@ pose:
 consent:
   ask: ["May I take a photograph of us? Only if you want to."]
   explain: ["It would go to the exhibition's private chat. Not anywhere public."]
+  explain_local: ["It stays here, on this screen, just for now. It is not sent anywhere."]
   thanks: ["Thank you."]
   declined: ["That's all right. We can keep it as a memory instead."]
   capture: ["Hold still… just for a moment."]
@@ -52,8 +53,27 @@ decline:
 invite:
   # said before "I found a picture I like." when the participant already joined a small moment
   practised: ["We have practised a little already."]
+  # finale "imitate" only: before the robot shows its chosen painting
+  found_like: ["I found a picture I like."]
   # said when the robot takes the painted dog's pose before the person joins (show motion on only)
   robot_pose: ["I will try to be the dog in the picture. You can be the person."]
+
+encounter:
+  # The good boy encounter — the show's finale (docs/UX.md). Short, timid, occasional.
+  invite: ["Sit or stand with me, any way you like. The way you would with a dog. Then stay still for a moment."]
+  found: ["Oh… I found a picture of us."]
+  goodboy: ["Am I a good boy already?"]
+  goodboy_after: ["A really good boy now?"]
+
+telegram_caption:
+  # WRITTEN, never spoken: the one short line under the archive image sent to Telegram.
+  # The attribution in italics is added automatically from the archive metadata.
+  painting: ["me and who?🥺", "us?👉👈"]
+  meme: ["hehe or not hehe?"]
+  # presentation: the photo of the participant with the robot (sent only with consent + operator OK)
+  together: ["us?👉👈", "me and who?🥺"]
+  # presentation finale: the photo after the rescue
+  rescue: ["am I a good boy now?🥺"]
 
 approach:
   # the robot walks to the participant by itself (`itu show --walk`)
@@ -65,3 +85,42 @@ approach:
 conversation:
   opening: ["You can ask me something, if you like."]
   closing: ["Let's look at the next pictures."]
+
+# ---------------------------------------------------------------- the presentation (presentation.en.md)
+presentation_consent:
+  # after the @consent question in the intro; the operator presses yes/no for the visitor
+  thanks: ["Thank you. I will try to make good ones."]
+  declined: ["That's all right. Then I will just remember us. In my head."]
+
+round:
+  # each era: the person poses, the robot remembers, sits beside them, a photo is taken
+  waiting: ["I'm looking…", "Stay like that, if you can."]
+  nobody: ["Hmm. Nobody is posing. That's all right — I'll imagine it."]
+  thinking: ["Hmm… wait. I think I remember something.", "Oh. This reminds me of… wait.", "Let me think. I have seen this before."]
+  found: ["Oh… this one. This is us.", "There. I found us.", "This one! I think this is us."]
+  hold: ["Like this?", "Is this how they did it?", "Am I doing it right?"]
+  photo: ["Click."]
+  sent: ["I sent it to you. And to the big screen."]
+  shown: ["Look. There we are."]
+  no_photo: ["No picture this time. I will remember it anyway."]
+  meme_found: ["Wait. We don't need an old picture. We can be the meme."]
+  meme_no_photo: ["No photo? Then this one stays in my memory. Much private. Wow."]
+
+rescue:
+  # the finale: someone lies down as if they fainted; the robot comes to help
+  nobody: ["Nobody needs rescuing today. That is good news, actually."]
+  alarm: ["Oh no. Someone fell down!"]
+  coming: ["I'm coming! Hold on!"]
+  arrived: ["I'm here. I'm here."]
+  wake: ["Hello? Are you okay? Please wake up."]
+  stay: ["I will stay with you. Help is coming."]
+  saved: ["You're okay! You're okay."]
+
+meme_phrases:
+  # WRITTEN on the internet-round picture, never spoken (doge-style; the robot's own meme)
+  wow: wow
+  standing: ["such stand", "very tall", "much upright"]
+  sitting: ["such sit", "very chair", "much patience"]
+  kneeling: ["much low", "such kneel", "very floor"]
+  lying: ["such rest", "very horizontal", "much floor"]
+  any: ["much pose", "very us", "such friend", "so archive", "many history", "very good boy"]

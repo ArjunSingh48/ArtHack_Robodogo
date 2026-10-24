@@ -47,6 +47,7 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 
 | | |
 |---|---|
+| [`docs/PRESENTATION.md`](docs/PRESENTATION.md) | **the presentation** (beamer + robot): intro → a pose round per era → rescue finale; run sheet, buttons, safety |
 | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | **the performance**: rehearsal, live show, Telegram controls, consent, **operator run sheet** |
 | [`docs/VOICE.md`](docs/VOICE.md) | OpenAI voice: one voice, narration cache, audition, GPT-Live conversation windows |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | pipeline, state machine, matching, risks |
@@ -166,7 +167,13 @@ Microphone audio is streamed to OpenAI during a conversation; put up the sign su
 
 ## 6. The performance (`itu show`)
 
+`itu show` plays **the presentation** by default: a short intro, then four rounds (prehistory, Middle Ages,
+Renaissance, memes) in which the dog finds the picture closest to your pose, sits beside you and, with consent,
+sends the picture and the photo to the beamer and Telegram, then the rescue finale. See
+[`docs/PRESENTATION.md`](docs/PRESENTATION.md). The long narrated show is `itu show --programme show`.
+
 ```bash
+itu show --dry-run --auto --fast 0.05 --no-voice     # the whole presentation, simulated, no hardware/keys
 itu show validate                                    # script, lines, catalog
 itu show --dry-run --auto --fast 0.05                # whole show, unattended, no hardware/keys/Telegram
 itu show --dry-run --display web                     # rehearse with the projector page; you press Enter

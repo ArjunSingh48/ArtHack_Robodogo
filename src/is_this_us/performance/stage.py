@@ -34,7 +34,7 @@ AI_VOICE_NOTICE = "The robot's voice is AI-generated (OpenAI). Its words are wri
 
 @dataclass
 class View:
-    kind: str  # title | blank | artifact | memes | composition
+    kind: str  # title | blank | artifact | flash (a remembered picture, briefly) | memes | composition
     artifact: ShowArtifact | None = None
     image: Path | None = None
     memes: list[ShowArtifact] = field(default_factory=list)
@@ -65,7 +65,9 @@ class TerminalStage:
         self._p(f"\n{self.bold}── {title.upper()} ──{self.reset}")
 
     def show(self, view: View) -> None:
-        if view.kind == "artifact" and view.artifact:
+        if view.kind == "flash" and view.artifact:
+            self._p(f"{self.dim}[screen] … {view.artifact.title}, {view.artifact.date}{self.reset}")
+        elif view.kind == "artifact" and view.artifact:
             a = view.artifact
             pic = "" if a.displayable else "  (reference only — no image shown)"
             self._p(f"{self.dim}[screen] {a.title} — {a.artist}{', ' + a.date if a.date else ''} · {a.museum}{pic}{self.reset}")
@@ -159,6 +161,10 @@ body.live #view .figure{max-width:42vw}
 .card i{font-size:clamp(22px,3vw,44px);display:block}.card span{color:var(--muted);font:14px system-ui,sans-serif}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(16vw,1fr));gap:2vw;width:100%}
 .title{font-size:clamp(36px,7vw,110px);font-style:italic;letter-spacing:.02em}
+.flash{animation:flash .9s ease-out both}.flash img{filter:sepia(.25) saturate(.85)}
+.flash .label{color:var(--muted)}.flash .label b{display:block;color:var(--accent);letter-spacing:.35em;
+font:600 11px system-ui,sans-serif;margin-bottom:.6vh}
+@keyframes flash{from{opacity:0;transform:scale(1.035);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
 #subtitle{position:fixed;left:6vw;right:6vw;bottom:9vh;text-align:center;font-size:clamp(20px,2.8vw,40px);
 line-height:1.35;min-height:2.7em;white-space:pre-line}
 #notice{position:fixed;bottom:2.4vh;left:0;right:0;text-align:center;color:var(--muted);font:12px system-ui,sans-serif}
@@ -177,9 +183,11 @@ font:13px system-ui,sans-serif;z-index:5}
 <script>
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
-const ASK={participant_readiness:[['ready','✓ Ready'],['decline','✗ Declines']],
+const ASK={participant_readiness:[['ready','✓ Ready / start now'],['decline','✗ Declines']],
+ final_pose:[['skip','End the pose now']],
  consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
- delivery:[['send_yes','Send the picture'],['send_no',"Don't send"]],
+ delivery:[['send_yes','✓ Send to Telegram'],['send_no',"✗ Don't send"]],
+ rescue:[['ready','✓ Yes, now'],['skip','Skip']],
  participation:[['ready','✓ They did it'],['next','Move on']],
  awaiting_photo:[['consent_no','✗ No photo']]};
 const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['cancel','End']];
@@ -226,14 +234,14 @@ def _ref_card(a: ShowArtifact) -> str:
 
 
 class WebStage:
-    def __init__(self, host: str = "127.0.0.1", port: int = 8765):
+    def __init__(self, host: str = "127.0.0.1", port: int = 8765, key: str | None = None):
         self._lock = threading.Lock()
         self._state = {"chapter": "", "subtitle": "", "view_html": "", "notice": AI_VOICE_NOTICE, "state": "",
                        "updated": 0.0}
         self._files: dict[str, Path] = {}
         self._control = None  # (callback, loop) once enabled
         self._live_jpeg: bytes | None = None  # newest camera frame, in memory only
-        self.key = secrets.token_urlsafe(9)  # only the operator URL can press buttons
+        self.key = key or secrets.token_urlsafe(9)  # only the operator URL can press buttons
         stage = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -245,8 +253,11 @@ class WebStage:
                 q = parse_qs(url.query)
                 if url.path != "/control":
                     return self._send(404, "text/plain", b"not found")
-                if not stage._control or not hmac.compare_digest(q.get("key", [""])[0], stage.key):
-                    return self._send(403, "application/json", b'{"msg": "not allowed"}')
+                if not stage._control:
+                    return self._send(403, "application/json", b'{"msg": "buttons are not active yet: start a performance"}')
+                if not hmac.compare_digest(q.get("key", [""])[0], stage.key):
+                    return self._send(403, "application/json",
+                                      b'{"msg": "old operator link: open the Operator page link printed in the terminal"}')
                 cmd = q.get("cmd", [""])[0]
                 if cmd not in CONTROL_COMMANDS:
                     return self._send(400, "application/json", b'{"msg": "unknown command"}')
@@ -307,7 +318,11 @@ class WebStage:
         self._set(chapter=title)
 
     def show(self, view: View) -> None:
-        if view.kind == "artifact" and view.artifact:
+        if view.kind == "flash" and view.artifact and view.artifact.displayable:
+            a = view.artifact
+            body = (f"<div class='figure flash'><img src='{self._img(a.image_path)}' alt=''><div class='label'>"
+                    f"<b>REMEMBERING…</b>{html.escape(a.title)}, {html.escape(a.date)}</div></div>")
+        elif view.kind == "artifact" and view.artifact:
             a = view.artifact
             body = (f"<div class='figure'><img src='{self._img(a.image_path)}' alt=''>{_label(a)}</div>"
                     if a.displayable else _ref_card(a))
@@ -349,5 +364,6 @@ class WebStage:
         return f"{self.url}?key={self.key}"
 
     def close(self) -> None:
+        self.closed = True
         self.server.shutdown()
         self.server.server_close()

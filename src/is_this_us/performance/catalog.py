@@ -20,13 +20,16 @@ from pathlib import Path
 import httpx
 import yaml
 
-from .script import CHAPTER_ORDER, SPECIAL_SHOWS, Script
+from .script import ALL_CHAPTERS, SPECIAL_SHOWS, Script
 
 log = logging.getLogger(__name__)
 
 SUBJECTS = ("human_and_dog", "dog_only", "human_only")
 CANINE = ("certain", "possible")
 POSTURES = ("sitting", "standing")
+# presentation rounds: what the person in the picture does, and what the robot can do to echo the dog
+HUMAN_POSES = ("sitting", "standing", "kneeling", "lying")
+DOG_SIDES = ("left", "right", "front")
 OPEN_RIGHTS = ("Public Domain", "CC0")
 RECORDS_FILE = "records.yaml"
 CATALOG_FILE = "catalog.yaml"
@@ -80,6 +83,9 @@ class ShowArtifact:
     pose_tags: tuple[str, ...] = ()
     interactive: InteractiveSpec | None = None
     extra: dict = field(default_factory=dict)
+    human: str = ""  # the main person's posture (sitting | standing | kneeling | lying) — for the rounds
+    dog: str = ""  # a RobotBehavior that echoes the painted dog (sit, lie_down, stand, greet, stretch)
+    dog_side: str = ""  # where the dog is next to the person, as the viewer sees it (left | right | front)
 
     @property
     def displayable(self) -> bool:
@@ -142,7 +148,9 @@ class PerformanceCatalog:
     def _build(self, key: str, e: dict) -> ShowArtifact:
         common = dict(chapter=str(e.get("chapter", "")), subject=str(e.get("subject", "")),
                       canine=str(e.get("canine", "certain")), description=str(e.get("description", "")).strip(),
-                      pose_tags=tuple(e.get("pose_tags") or ()), interactive=_spec(e.get("interactive")))
+                      pose_tags=tuple(e.get("pose_tags") or ()), interactive=_spec(e.get("interactive")),
+                      human=str(e.get("human", "") or ""), dog=str(e.get("dog", "") or ""),
+                      dog_side=str(e.get("dog_side", "") or ""))
         if key.startswith("meme:"):
             meme = self.meme_repo.get(key) if self.meme_repo else None
             if meme is None:
@@ -173,6 +181,16 @@ class PerformanceCatalog:
     def get(self, key: str) -> ShowArtifact | None:
         return self.items.get(key)
 
+    def artifact_for_scene(self, scene_id: str) -> ShowArtifact | None:
+        """Any matchable painting or meme as a ShowArtifact (catalogued ones keep their show metadata)."""
+        if scene_id in self.items:
+            return self.items[scene_id]
+        entry = {"chapter": "invitation", "subject": "human_and_dog", "canine": "certain", "description": ""}
+        try:
+            return self._build(scene_id, entry)
+        except CatalogError:
+            return None
+
     def for_chapter(self, chapter: str) -> list[ShowArtifact]:
         return [a for a in self.items.values() if a.chapter == chapter]
 
@@ -201,7 +219,7 @@ class PerformanceCatalog:
         problems = [f"{k}: {why}" for k, why in self.missing.items()]
         for a in self.items.values():
             p = f"{a.id}:"
-            if a.chapter not in CHAPTER_ORDER:
+            if a.chapter not in ALL_CHAPTERS:
                 problems.append(f"{p} unknown chapter {a.chapter!r}")
             if a.subject not in SUBJECTS:
                 problems.append(f"{p} subject must be one of {SUBJECTS}")
@@ -209,6 +227,15 @@ class PerformanceCatalog:
                 problems.append(f"{p} canine must be one of {CANINE}")
             if not a.description:
                 problems.append(f"{p} needs a description")
+            if a.human and a.human not in HUMAN_POSES:
+                problems.append(f"{p} human must be one of {HUMAN_POSES}")
+            if a.dog_side and a.dog_side not in DOG_SIDES:
+                problems.append(f"{p} dog_side must be one of {DOG_SIDES}")
+            if a.dog:
+                from ..domain import RobotBehavior
+
+                if a.dog not in {b.value for b in RobotBehavior}:
+                    problems.append(f"{p} dog {a.dog!r} is not a RobotBehavior")
             if a.kind == "art":
                 if a.rights_status not in OPEN_RIGHTS:
                     problems.append(f"{p} rights {a.rights_status!r} are not open access")
@@ -251,7 +278,7 @@ class PerformanceCatalog:
             for ch in script.chapters:
                 for c in ch.cues:
                     if c.show and c.show not in SPECIAL_SHOWS and c.show in self.items:
-                        if self.items[c.show].chapter != ch.id and ch.id not in ("invitation", "present"):
+                        if self.items[c.show].chapter != ch.id and ch.id not in ("invitation", "present", "last_dog", "rescue"):
                             problems.append(f"{c.id} shows {c.show}, catalogued for chapter "
                                             f"{self.items[c.show].chapter!r}")
         if not self.interactive():

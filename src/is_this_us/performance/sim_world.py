@@ -25,6 +25,12 @@ def _base_height(posture: str) -> float:
     return (y1 - y0) / p.image_size[1]
 
 
+def _base_width(posture: str) -> float:
+    p = synthetic_person(posture)
+    x0, y0, x1, y1 = p.bbox()
+    return (x1 - x0) / p.image_size[0]
+
+
 class SimWorld:
     def __init__(self, person=(2.2, 0.4), posture: str = "sitting", clock=time.monotonic):
         self.person = person
@@ -87,6 +93,9 @@ class SimWorld:
         b = self.bearing()
         if abs(b) > HFOV / 2:
             return []
-        frac = min(1.4, (1.1 if self.posture == "standing" else 0.8) / max(self.distance(), 0.2))
         x_img = 0.5 - b / HFOV
+        if self.posture == "lying":  # seen lying across the view: its width tells the distance
+            frac = min(1.4, 0.85 / max(self.distance(), 0.2))
+            return [synthetic_person("lying", scale=frac / _base_width("lying"), shift_x=(x_img - 0.5) * 640)]
+        frac = min(1.4, (1.1 if self.posture == "standing" else 0.8) / max(self.distance(), 0.2))
         return [synthetic_person(self.posture, scale=frac / _base_height(self.posture), shift_x=(x_img - 0.5) * 640)]

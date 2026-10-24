@@ -82,12 +82,18 @@ class PreviewDelivery:
 
     name = "preview"
 
-    def __init__(self):
+    def __init__(self, out_dir: Path | None = None):
+        self.out_dir = Path(out_dir) if out_dir else None
         self.previews: list[Path] = []
+        self.sent: list[tuple[Path, str]] = []
 
     async def send(self, image: Path, caption: str, session_id: str) -> DeliveryResult:
-        p = image.with_name("telegram_preview.txt")
-        p.write_text(f"WOULD SEND (rehearsal — not sent)\nphoto: {image.name}\ncaption:\n{caption}\n", encoding="utf-8")
+        folder = (self.out_dir / session_id) if self.out_dir else image.parent
+        folder.mkdir(parents=True, exist_ok=True)
+        p = folder / "telegram_preview.txt"
+        with p.open("a", encoding="utf-8") as f:  # one entry per message (a presentation sends several)
+            f.write(f"WOULD SEND (rehearsal — not sent)\nphoto: {image}\ncaption (Telegram HTML):\n{caption}\n\n")
+        self.sent.append((image, caption))
         self.previews.append(p)
         return DeliveryResult(True, f"previewed, not sent → {p}")
 
@@ -106,7 +112,7 @@ class TelegramDelivery:
         from aiogram.types import FSInputFile
 
         try:
-            await self.bot.send_photo(self.chat_id, FSInputFile(image), caption=caption)
+            await self.bot.send_photo(self.chat_id, FSInputFile(image), caption=caption, parse_mode="HTML")
             return DeliveryResult(True, "sent")
         except (TelegramAPIError, TelegramNetworkError, OSError) as exc:
             log.warning("show delivery failed: %s", exc)

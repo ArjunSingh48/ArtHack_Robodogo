@@ -1,5 +1,8 @@
 # The performance — `itu show`
 
+> **For the presentation (beamer + robot), see [PRESENTATION.md](PRESENTATION.md).** It is the default
+> programme of `itu show`. This page covers the long narrated show: `itu show --programme show`.
+
 This document covers the existing historical show. The intended presentation
 setup is the dog and a computer connected to a beamer, using the main dog
 encounter in [UX.md](UX.md) and [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Its presentation

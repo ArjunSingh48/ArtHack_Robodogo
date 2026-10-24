@@ -5,6 +5,10 @@ for implementation and rehearsal, not a claim that the current application
 already performs it. Follow [the alignment plan](UX_ALIGNMENT_PLAN.md) for the
 remaining changes and verification.
 
+> **Presentation (beamer + robot):** the user chose a fixed programme: intro → a pose round per era →
+> rescue finale. Its run sheet is [PRESENTATION.md](PRESENTATION.md). The encounter below stays the narrated
+> show's finale.
+
 ## Before the visitor begins
 
 The operator prepares the robot, local camera-processing application, archive,

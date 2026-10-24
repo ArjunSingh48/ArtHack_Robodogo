@@ -162,6 +162,14 @@ separately. Preserve unrelated existing work.
   beamer setup and a presentation flow based on the main encounter. Runtime
   integration remains planned in step 6; no visitor choice was added.
 
+- Presentation programme (user decision, 2026-10-24 afternoon; see UX.md): implemented in the show runtime
+  (`presentation.en.md`, `performance/rounds.py`, director `@consent` / `@round` / `@rescue`). Intro, four era
+  rounds (pick by posture, "remembering" montage while the robot walks/poses, consented photo, THEN/NOW on the
+  beamer, Telegram archive picture + photo only after the separate send confirmation, the robot's own meme for the
+  internet round), and the rescue finale (a careful approach to a person lying down). Verified in simulation by
+  `tests/test_presentation.py`; not verified with live Telegram, a real Azure voice, or on the robot. The
+  free-play bot (`itu bot`) and steps 3–5 for that flow are unchanged.
+
 Work stops after step 2 for review. No live services or robot hardware were used
 to verify this step.
 
