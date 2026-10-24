@@ -1594,7 +1594,7 @@ class StoryDirector:
             self.stage.show(View("consider", memes=collage, heading=ch.title))
         eyes = self._pose_camera()  # the dog's own camera reads the pose (laptop camera if it has none)
         looking = eyes is not None and self.pose_reader is not None
-        start = ("press ✓ Ready once the photo is in place" if getattr(camera, "is_still", False)
+        start = ("the sample photo is the pose — the dog goes to it" if getattr(camera, "is_still", False)
                  else "waiting for a steady pose — starts by itself; Ready = now")
         self._set_state(ShowState.READINESS, f"{era}: {start}, Skip = skip this round")
         said = "done"
@@ -1603,11 +1603,17 @@ class StoryDirector:
             nonlocal said
             said = await self._play_cue(ch, cue, cue.text)
 
-        still = looking and getattr(eyes, "is_still", False)
-        if still:  # a sample / uploaded photo IS the pose: no invitation, no waiting
-            reading, frame = await self._read_pose(eyes)
-            await self._publish_live(frame, reading, _checks(reading, any_person=True))
-            reading = reading if reading is not None and reading.person_visible else None
+        still = self.pose_reader is not None and getattr(camera, "is_still", False)
+        if still:  # a sample / uploaded photo IS the pose (read from the photo itself, also with --sim-robot)
+            reading = None
+            for i in range(max(1, getattr(camera, "pictures", 1))):  # never "nobody": another sample if unreadable
+                if i:
+                    camera.select(i)
+                r, frame = await self._read_pose(camera)
+                await self._publish_live(frame, r, _checks(r, any_person=True))
+                if r is not None and r.person_visible:
+                    reading = r
+                    break
         else:
             if looking:
                 await self._with_live(eyes, lambda r: _checks(r, any_person=True), invite())
