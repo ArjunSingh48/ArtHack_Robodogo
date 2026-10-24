@@ -79,7 +79,7 @@ class Cmd(StrEnum):
     SEND_YES = "send_yes"  # /send
     SEND_NO = "send_no"
     LISTEN = "listen"  # push-to-talk toggle in a conversation window
-    SAMPLE = "sample"  # start with a photo instead of the camera (a sample, or one just uploaded)
+    SAMPLE = "sample"  # start with the sample photos instead of the camera
     CAMERA = "camera"  # back from a photo to the real camera (= they agreed to photos); any time
     SAMPLES = "samples"  # from the camera to the sample stand-in photos; any time
 
@@ -181,7 +181,7 @@ class StoryDirector:
         # wait_for_start: begin in LOBBY; the camera opens only after the operator confirms photo consent there.
         # photo_factory(bytes | None) → a camera + estimator for one picture (None = the sample stand-in)
         self.wait_for_start, self.photo_factory = wait_for_start, photo_factory
-        self._consent_decided, self._picture, self._shown_pictures = False, None, set()
+        self._consent_decided, self._shown_pictures = False, set()
         self._goto: str | None = None  # a step to replay / jump to (operator page hash): chapter or cue id
         self._start_cue: str | None = None  # …and, for a cue id, where in its chapter to start
         self._last_said: tuple[str, str, str] | None = None  # (text, kind, direction): what Repeat says again
@@ -262,14 +262,14 @@ class StoryDirector:
         return True, f"ok: going to {chapter_id}"
 
     def _switch_to_camera(self) -> tuple[bool, str]:
-        """Operator: the visitor is here now and agreed — the real camera instead of the sample/uploaded picture."""
+        """Operator: the visitor is here now and agreed — the real camera instead of the sample photos."""
         factory, reader = self._real_camera
         if factory is None or reader is None:
             return False, "no camera configured for this show (--source)"
         if self.frame_source_factory is factory:
             return False, "already using the camera"
         self.frame_source_factory, self.pose_reader = factory, reader
-        self._camera, self._camera_failed, self._picture = None, False, None
+        self._camera, self._camera_failed = None, False
         self.photo_consent = self._consent_decided = True
         self._note("switched to the camera (they agreed to photos)")
         self._show_source("camera")
@@ -280,31 +280,17 @@ class StoryDirector:
 
     def _switch_to_samples(self) -> tuple[bool, str]:
         """Operator: the sample stand-in photos instead of the camera (next readings, next rounds)."""
-        if getattr(self._open_camera(), "is_still", False) and self._picture is None:
+        if getattr(self._open_camera(), "is_still", False):
             return False, "already using the sample photos"
         pic = self.photo_factory(None) if self.photo_factory is not None else None
         if pic is None:
             return False, "no sample photos available (pose model missing? `itu setup`)"
         self.frame_source_factory, self.pose_reader = (lambda: pic), PoseReader(pic)
-        self._camera, self._camera_failed, self._picture = None, False, None
+        self._camera, self._camera_failed = None, False
         self.photo_consent = self._consent_decided = True
         self._note("switched to the sample photos")
         self._show_source("photos")
         return True, "ok: sample photos"
-
-    def use_picture(self, data: bytes) -> tuple[bool, str]:
-        """Start (from the lobby) with an uploaded picture instead of the camera."""
-        if self.state is not ShowState.LOBBY or self.photo_factory is None:
-            return False, "a picture can only be chosen before the start"
-        try:
-            pic = self.photo_factory(data)
-        except Exception as exc:
-            log.warning("uploaded picture unusable: %s", exc)
-            pic = None
-        if pic is None:
-            return False, "could not read that picture (JPEG or PNG)"
-        self._picture = pic
-        return self.command(Cmd.SAMPLE)
 
     def supply_photo(self, data: bytes, session_id: str | None = None) -> tuple[bool, str]:
         """A consented photo from another input (e.g. Telegram) when the camera failed."""
@@ -1506,14 +1492,14 @@ class StoryDirector:
         """Nothing plays and no camera opens until the operator starts — choosing how photos are taken."""
         self._close_camera()  # a new start: back to the real camera (the photos are chosen again here)
         self.frame_source_factory, self.pose_reader = self._real_camera
-        self._camera, self._camera_failed, self._picture = None, False, None
+        self._camera, self._camera_failed = None, False
         self._set_state(ShowState.LOBBY, "waiting for Start — nothing plays, no camera until then")
         self.stage.show(View("title"))
         while True:
             cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.SAMPLE})
             if cmd is not Cmd.SAMPLE:
                 break
-            pic = self._picture or (self.photo_factory(None) if self.photo_factory else None)
+            pic = self.photo_factory(None) if self.photo_factory else None
             if pic is not None:
                 self._camera = None
                 if getattr(pic, "pictures", 0) > 1:  # sample photos: a different one opens each show
@@ -1529,7 +1515,7 @@ class StoryDirector:
                                                 "(otherwise: big screen only)")
             self.send_ok = await self._await_cmd({Cmd.SEND_YES, Cmd.SEND_NO, Cmd.SKIP},
                                                  timeout=self.send_timeout_s) is Cmd.SEND_YES
-        source = "an uploaded picture" if self._picture else "the sample photos" if cmd is Cmd.SAMPLE else "the camera"
+        source = "the sample photos" if cmd is Cmd.SAMPLE else "the camera"
         self._show_source("photos" if cmd is Cmd.SAMPLE else "camera")
         self._note(f"start: {'photos from ' + source if self.photo_consent else 'no photos, no camera'}")
 
@@ -1610,7 +1596,7 @@ class StoryDirector:
             said = await self._play_cue(ch, cue, cue.text)
 
         still = self.pose_reader is not None and getattr(camera, "is_still", False)
-        if still:  # a sample / uploaded photo IS the pose (read from the photo itself, also with --sim-robot)
+        if still:  # a sample photo IS the pose (read from the photo itself, also with --sim-robot)
             reading = None
             for i in range(max(1, getattr(camera, "pictures", 1))):  # never "nobody": another sample if unreadable
                 if i:

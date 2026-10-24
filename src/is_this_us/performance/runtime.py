@@ -74,7 +74,7 @@ SAMPLE_ORDER = ["sitting", "standing", "squatting", "standing_4", "standing_2", 
 
 
 class PhotoParticipant:
-    """Still pictures as camera + pose source: an uploaded photo, or sample stand-ins (data/standins, from
+    """Still pictures as camera + pose source: the sample stand-ins (data/standins, from
     Unsplash) — one per round. Unlike the drawn figure, the real pose estimator reads them (also in 3-D, for
     the avatar)."""
 
@@ -92,12 +92,6 @@ class PhotoParticipant:
                 ImageDraw.Draw(image).text((12, image.height - 22), label, fill=(240, 236, 228))
             self._pics.append([rgb, np.asarray(image), None])  # what is read, what is shown, the cached pose
         self.estimator, self._i = estimator, 0
-
-    @classmethod
-    def from_bytes(cls, data: bytes, estimator, label: str = "uploaded picture") -> "PhotoParticipant":
-        import io
-
-        return cls([(Image.open(io.BytesIO(data)), label)], estimator)
 
     @property
     def pictures(self) -> int:
@@ -457,13 +451,11 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
 
     approacher = sim.approacher if sim is not None else build_approacher(settings, opts, guard, estimator)
 
-    def photo_factory(data: bytes | None):
-        """Lobby: an uploaded picture, or (None) the sample stand-ins, one per round."""
+    def photo_factory(data: bytes | None = None):
+        """The sample stand-ins, one per round."""
         est = estimator if estimator is not None else build_estimator(settings)
         if est is None:
             return None
-        if data is not None:
-            return PhotoParticipant.from_bytes(data, est)
         return sample_set(settings.show_pose_preference, est)
 
     director = StoryDirector(
@@ -488,7 +480,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     if web is not None:  # the operator page's buttons work however the show was started (CLI or Telegram)
         try:
             loop = asyncio.get_running_loop()
-            web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop, upload=director.use_picture)
+            web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop)
             print(f"Operator page (buttons): {web.control_url}")
         except RuntimeError:
             pass
