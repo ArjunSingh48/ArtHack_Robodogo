@@ -52,6 +52,15 @@ decline:
 invite:
   # said before "I found a picture I like." when the participant already joined a small moment
   practised: ["We have practised a little already."]
+  # said when the robot takes the painted dog's pose before the person joins (show motion on only)
+  robot_pose: ["I will try to be the dog in the picture. You can be the person."]
+
+approach:
+  # the robot walks to the participant by itself (`itu show --walk`)
+  ask: ["May I come a little closer?"]
+  arrived: ["Here I am."]
+  not_found: ["I can't find you from here… I will stay where I am."]
+  home: ["I will go back to my place now."]
 
 conversation:
   opening: ["You can ask me something, if you like."]

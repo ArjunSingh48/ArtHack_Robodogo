@@ -174,6 +174,7 @@ class ShowOptions:
     motion: bool = False
     out_dir: Path | None = None
     seed: int | None = None
+    walk: bool = False  # camera-guided walking to the participant
 
 
 def build_stage(settings: Settings, display: str) -> tuple[Stage, WebStage | None]:
@@ -250,13 +251,81 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
             voice=settings.primary_voice, language=LANGUAGE_NAMES.get(script.lang, "English"),
             story_path=settings.story_path)
 
+    approacher = build_approacher(settings, opts, guard, estimator)
+
     return StoryDirector(
+        approacher=approacher,
         script=script, catalog=catalog, lines=lines, voice=voice, stage=stage, store=store, pose_reader=reader,
         frame_source_factory=frame_factory, delivery=delivery, motion=motion, conversation=conversation,
         mode=opts.mode or settings.show_mode, pose_preference=settings.show_pose_preference,
         tick_s=0.8 * min(1.0, opts.fast) if opts.fast < 1 else 0.8,
         hint_gap_s=8.0 * opts.fast, try_seconds=12.0 * opts.fast, font_path=settings.card_font_path, rng=rng,
         photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery))
+
+
+def approach_settings(settings: Settings):
+    import math
+
+    from .approach import ApproachSettings
+
+    return ApproachSettings(speed=settings.show_walk_speed, max_distance_m=settings.show_walk_max_distance_m,
+                            hfov=math.radians(settings.show_walk_hfov_deg), k_sitting=settings.show_walk_k_sitting,
+                            k_standing=settings.show_walk_k_standing, beside_m=settings.show_walk_beside_m,
+                            face=settings.show_walk_face)
+
+
+def simulated_approacher(settings: Settings, fast: float = 1.0, person=(2.3, 0.5)):
+    """Rehearsal: a simulated room, a simulated robot that walks in it, nothing real moves."""
+    import time as _time
+
+    from ..motion.guard import MotionGuard
+    from ..robot.mock import MockRobotAdapter
+    from .approach import Approacher
+    from .sim_world import SimWorld
+
+    t = [0.0]
+
+    def clock():
+        return t[0]
+
+    def sleep(d):
+        t[0] += d
+        _time.sleep(d * fast)
+
+    world = SimWorld(person, "sitting", clock=clock)
+    robot = MockRobotAdapter(time_scale=0.0)
+    robot.connect()
+    robot.world = world
+    guard = MotionGuard(robot, hardware_gates_open=False, cooldown_s=0)
+    a = Approacher(robot, guard, world.camera, world, approach_settings(settings), clock=clock, sleep=sleep)
+    a.world = world
+    return a
+
+
+def build_approacher(settings: Settings, opts: "ShowOptions", guard, estimator=None):
+    if not opts.walk:
+        return None
+    if opts.dry_run:
+        return simulated_approacher(settings, opts.fast)
+    if not settings.show_walk_enabled:
+        log.warning("--walk ignored: SHOW_WALK_ENABLED is false")
+        return None
+    robot = getattr(guard, "robot", None)
+    if robot is None or not getattr(robot, "can_walk", False):
+        log.warning("--walk ignored: this robot connection cannot walk (use ROBOT_MODEL=zhaw_bridge)")
+        return None
+    from ..bot.app import build_estimator
+    from ..vision.frame_sources import make_frame_source
+    from .approach import Approacher
+
+    est = estimator if estimator is not None else build_estimator(settings)
+    if est is None:
+        log.warning("--walk ignored: pose estimation unavailable")
+        return None
+    return Approacher(robot, guard,
+                      lambda: make_frame_source(settings.show_walk_camera,
+                                                network_interface=settings.robot_network_interface),
+                      est, approach_settings(settings))
 
 
 class _Silent:

@@ -64,6 +64,27 @@ class MotionCues:
 
         threading.Thread(target=run, daemon=True).start()
 
+    def perform(self, name: str):
+        """Like request(), but waits for the result (used around walking, where order matters)."""
+        try:
+            behavior = RobotBehavior(name)
+        except ValueError:
+            return None
+        if not self.enabled:
+            self.log.append(f"{behavior.value}: not performed (show motion off)")
+            return None
+        import time
+
+        with self._busy:
+            deadline = time.monotonic() + getattr(self.guard, "cooldown_s", 0) + 1
+            while True:  # around walking, wait out the guard's cooldown instead of skipping the pose
+                res = self.guard.execute(self._plan(behavior))
+                if not (res.detail.startswith("cooldown") and time.monotonic() < deadline):
+                    break
+                time.sleep(0.5)
+        self.log.append(f"{behavior.value}: {res.status.value} {res.detail}".strip())
+        return res
+
     def stop(self, reason: str) -> None:
         if self.guard is not None:
             try:

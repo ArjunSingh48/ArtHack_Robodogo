@@ -29,6 +29,9 @@ class MockRobotAdapter:
         self.connected = False
         self.calls: list[str] = []
         self._stop = threading.Event()
+        self.can_walk = True
+        self.velocities: list[tuple[float, float, float]] = []
+        self.world = None  # optional SimWorld (tests): walking moves the simulated robot
 
     def connect(self) -> None:
         self.connected = True
@@ -67,9 +70,23 @@ class MockRobotAdapter:
         return ExecutionResult(behavior=behavior, status=ExecutionStatus.SIMULATED,
                                detail=" → ".join(st.call for st in steps), duration_s=time.monotonic() - start)
 
+    def walk(self, vx: float, vy: float, vyaw: float) -> None:
+        from .zhaw_bridge import clamp_velocity
+
+        v = clamp_velocity(vx, vy, vyaw)
+        self.velocities.append(v)
+        if self.world is not None:
+            self.world.command(*v)
+
+    def halt(self) -> None:
+        self.velocities.append((0.0, 0.0, 0.0))
+        if self.world is not None:
+            self.world.command(0.0, 0.0, 0.0)
+
     def stop(self) -> None:
         self._stop.set()
         self.calls.append("StopMove")
+        self.halt()
 
     def close(self) -> None:
         self.connected = False

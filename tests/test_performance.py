@@ -886,3 +886,205 @@ def test_web_live_frame_is_memory_only_and_hidden_when_off():
             urllib.request.urlopen(web.url + "live.jpg")
     finally:
         web.close()
+
+
+# ---------------------------------------------------------------- robot placement + mirrored photo
+def test_interactive_pictures_say_where_the_robot_goes(catalog):
+    for a in catalog.interactive("any"):
+        if a.interactive.pose_subject == "human":
+            assert a.interactive.robot_side in ("left", "right", "front"), a.id
+            assert a.interactive.robot_behavior in ("sit", "stand", "lie_down"), a.id
+    zorn = catalog.get("met:437966").interactive
+    assert "LEFT" in zorn.placement() and zorn.robot_behavior == "sit"
+    assert catalog.get("met:437841").interactive.robot_behavior == "lie_down"
+
+
+class SpyMotion:
+    enabled = True
+
+    def __init__(self):
+        self.requested, self.stopped = [], []
+
+    def request(self, name):
+        self.requested.append(name)
+
+    def stop(self, reason):
+        self.stopped.append(reason)
+
+
+async def test_robot_takes_the_dog_pose_before_the_person_poses(tmp_path, script, catalog, lines):
+    motion = SpyMotion()
+    d = make_director(tmp_path, script, catalog, lines, motion=motion)
+    answer(d, HAPPY)
+    res = await d.run(start_at="invitation")
+    assert res.artifact == "met:437966" and "sit" in motion.requested
+    subs = d.stage.of("subtitle")
+    assert subs.index("I will try to be the dog in the picture. You can be the person.") < subs.index(
+        "Hold still… just for a moment.")
+    readiness = [b for _, b in res.transitions]
+    assert "participant_readiness" in readiness
+
+
+async def test_no_motion_no_robot_pose_line(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines)
+    answer(d, HAPPY)
+    await d.run(start_at="invitation")
+    assert "I will try to be the dog in the picture. You can be the person." not in d.stage.of("subtitle")
+
+
+async def test_photo_is_mirrored_like_the_live_view(tmp_path, script, catalog, lines):
+    import numpy as np
+
+    from is_this_us.vision.frame_sources import Frame
+
+    stand_in = SyntheticParticipant("sitting")
+    left_red = np.zeros((60, 80, 3), dtype=np.uint8)
+    left_red[:, :40] = (255, 0, 0)
+
+    class Cam:
+        def read(self):
+            return Frame(image=left_red, source="webcam")
+
+        def close(self):
+            pass
+
+    d = make_director(tmp_path, script, catalog, lines, camera=None)
+    d.pose_reader = PoseReader(stand_in)
+    d.frame_source_factory = Cam
+    answer(d, HAPPY)
+    await d.run(start_at="invitation")
+    photo = Image.open(next((tmp_path / "out").glob("*/now.jpg"))).convert("RGB")
+    assert photo.getpixel((70, 30))[0] > 200 and photo.getpixel((10, 30))[0] < 60  # red moved to the right
+    d.pose_reader = PoseReader(stand_in, mirrored=True)  # a camera that already mirrors is left alone
+    assert d._mirror(Frame(image=left_red, source="webcam")) is False
+
+
+def test_telegram_readiness_prompt_names_the_robot_spot(tmp_path, script, catalog, lines):
+    from is_this_us.bot.show_controls import prompt_for
+
+    d = make_director(tmp_path, script, catalog, lines)
+    d.session_id, d.artifact = "ab12cd", catalog.get("met:437966")
+    text, _ = prompt_for(ShowState.READINESS, d, "the chat")
+    assert "Place the robot on the LEFT of the person" in text
+
+
+# ---------------------------------------------------------------- camera-guided walking
+def _sim(side, person, posture):
+    from is_this_us.motion.guard import MotionGuard
+    from is_this_us.performance.approach import Approacher
+    from is_this_us.performance.sim_world import SimWorld
+    from is_this_us.robot.mock import MockRobotAdapter
+
+    t = [0.0]
+
+    def clock():
+        return t[0]
+
+    def sleep(d):
+        t[0] += d
+
+    world = SimWorld(person, posture, clock=clock)
+    robot = MockRobotAdapter(time_scale=0)
+    robot.connect()
+    robot.world = world
+    guard = MotionGuard(robot, hardware_gates_open=False, cooldown_s=0)
+    return Approacher(robot, guard, world.camera, world, clock=clock, sleep=sleep), world, robot, guard
+
+
+@pytest.mark.parametrize("side,person,posture", [
+    ("left", (2.2, 0.4), "sitting"), ("right", (2.0, -0.6), "standing"), ("left", (2.5, -0.8), "sitting"),
+    ("right", (3.0, 0.0), "standing"), ("left", (0.5, 3.0), "sitting"), ("front", (1.5, 1.2), "sitting")])
+def test_robot_walks_to_the_painted_side_and_keeps_its_distance(side, person, posture):
+    a, world, robot, _ = _sim(side, person, posture)
+    res = a.approach(side=side, posture=posture)
+    assert res.arrived, res.detail
+    assert world.side_of_person() == side
+    assert world.min_distance >= 0.55  # never closer than the safety gap
+    assert all(abs(vx) <= 0.3 and abs(vyaw) <= 0.6 for vx, vy, vyaw in robot.velocities)
+    assert robot.velocities[-1] == (0.0, 0.0, 0.0)  # halted
+    assert a.go_home() == "done"
+    assert abs(world.pose[0]) < 0.05 and abs(world.pose[1]) < 0.05  # back where it started
+
+
+def test_walk_gives_up_safely():
+    a, world, robot, _ = _sim("left", (-2.0, 0.0), "sitting")  # behind the robot: never seen
+    res = a.approach(side="left")
+    assert res.status == "not_found" and robot.velocities[-1] == (0.0, 0.0, 0.0)
+    a, world, robot, _ = _sim("left", (2.2, 0.4), "sitting")
+    n = {"i": 0}
+
+    def stop_after_a_few():
+        n["i"] += 1
+        return n["i"] > 5
+    res = a.approach(side="left", should_stop=stop_after_a_few)
+    assert res.status == "stopped" and robot.velocities[-1] == (0.0, 0.0, 0.0)
+
+
+def test_walk_refused_without_permission_and_not_standing():
+    from is_this_us.motion.guard import MotionGuard
+    from is_this_us.performance.approach import Approacher
+    from is_this_us.robot.base import BodyState
+
+    a, world, robot, guard = _sim("left", (2.2, 0.4), "sitting")
+    robot.body = BodyState.SITTING
+    assert a.approach().status == "refused"
+
+    class RealNoArm:
+        is_real, can_walk, body = True, True, BodyState.STANDING
+
+        def status(self):
+            from is_this_us.robot.base import RobotStatus
+            return RobotStatus(connected=True, is_real=True, model="x", body=self.body, battery_percent=None,
+                               error_code=0, hardware_verified=False, detail="")
+    g = MotionGuard(RealNoArm(), hardware_gates_open=True)
+    res = Approacher(RealNoArm(), g, world.camera, world).approach()
+    assert res.status == "refused" and "armed" in res.detail
+
+    class NoWalk(RealNoArm):
+        can_walk = False
+    assert "cannot walk" in MotionGuard(NoWalk(), hardware_gates_open=True).walk_allowed()[1]
+
+
+def test_bridge_walk_is_clamped_and_move_is_not_free():
+    from is_this_us.robot.zhaw_bridge import ZhawBridgeAdapter, clamp_velocity
+
+    assert clamp_velocity(2.0, -1.0, 5.0) == (0.3, -0.15, 0.6)
+    bridge = ZhawBridgeAdapter()
+    bridge._sock = object()
+    with pytest.raises(PermissionError):
+        bridge.request("move", {"vx": 1.0})  # only through walk()
+
+
+async def test_show_walks_to_the_person_then_home(tmp_path, script, catalog, lines):
+    from is_this_us.performance.runtime import simulated_approacher
+    from is_this_us.config import Settings
+
+    approacher = simulated_approacher(Settings(_env_file=None), fast=0.0)
+    d = make_director(tmp_path, script, catalog, lines, approacher=approacher)
+    answer(d, HAPPY)
+    res = await d.run(start_at="invitation")
+    assert res.outcome == "together"
+    assert [w.split(":")[0] for w in d.walk_log] == ["approach", "home"]
+    subs = d.stage.of("subtitle")
+    assert subs.index("May I come a little closer?") < subs.index("Here I am.") < subs.index(
+        "Hold still… just for a moment.")
+    assert "I will go back to my place now." in subs
+    assert "left of the person" in d.walk_log[0]  # Zorn: the collie is on the left
+    assert abs(approacher.world.pose[0]) < 0.05  # and it walked back to where it started
+
+
+async def test_cancel_during_walk_stops_the_robot(tmp_path, script, catalog, lines):
+    from is_this_us.config import Settings
+    from is_this_us.performance.runtime import simulated_approacher
+
+    approacher = simulated_approacher(Settings(_env_file=None), fast=0.02)
+    d = make_director(tmp_path, script, catalog, lines, approacher=approacher)
+    answer(d, {ShowState.READINESS: Cmd.READY})
+
+    def on_state(director, st):
+        if st is ShowState.APPROACH:
+            asyncio.get_running_loop().call_later(0.3, lambda: director.command(Cmd.CANCEL))
+    d.listeners.append(on_state)
+    res = await d.run(start_at="invitation")
+    assert res.final_state is ShowState.CANCELLED
+    assert approacher.robot.velocities[-1] == (0.0, 0.0, 0.0)
