@@ -28,7 +28,7 @@ SUBJECTS = ("human_and_dog", "dog_only", "human_only")
 CANINE = ("certain", "possible")
 POSTURES = ("sitting", "standing")
 # presentation rounds: what the person in the picture does, and what the robot can do to echo the dog
-HUMAN_POSES = ("sitting", "standing", "kneeling", "lying")
+HUMAN_POSES = ("sitting", "standing", "kneeling", "lying", "riding")  # riding: a person on a horse — no visitor pose matches it
 DOG_SIDES = ("left", "right", "front")
 OPEN_RIGHTS = ("Public Domain", "CC0")
 RECORDS_FILE = "records.yaml"
