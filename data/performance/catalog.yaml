@@ -223,7 +223,7 @@ artifacts:
     human: sitting
     dog: lie_down
     dog_side: front
-    dog_facing: left
+    dog_facing: right  # lies with its head to the right, raised towards the girl
   met:437173:
     chapter: paintings
     subject: human_and_dog
