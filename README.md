@@ -98,7 +98,8 @@ Never commit `.env` (already in `.gitignore`).
 ## 4. Voice (optional)
 
 ```
-OPENAI_API_KEY=sk-…
+AZURE_OPENAI_API_KEY=…
+AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com/
 OPENAI_VOICE=marin                 # ONE voice for everything — choose with `itu voice audition`
 OPENAI_NARRATION_MODEL=gpt-realtime-2.1-mini   # performance narration (pre-generated, cached)
 OPENAI_REALTIME_MODEL=gpt-realtime-2.1         # free-play lines + talk mode
