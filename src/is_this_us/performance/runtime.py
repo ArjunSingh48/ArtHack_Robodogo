@@ -80,6 +80,7 @@ class PhotoParticipant:
 
     name = "photo"
     reads_paintings = False
+    is_still = True  # never moves: the show waits for the operator's Ready instead of a "steady pose"
 
     def __init__(self, pictures: list[tuple[Image.Image, str]], estimator):
         self._pics = []

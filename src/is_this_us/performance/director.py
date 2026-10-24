@@ -1055,7 +1055,7 @@ class StoryDirector:
                 self.last_reading = reading
             checks = checks_for(reading) + [Check("holding still", steady or tracker.progress(now) >= 1.0)]
             await self._publish_live(frame, reading, checks)
-            if steady:
+            if steady and not getattr(camera, "is_still", False):  # a photo is always "steady": Ready decides
                 return reading
             hint = None
             if reading is None or not reading.person_visible:
@@ -1756,7 +1756,7 @@ class StoryDirector:
                 reading, frame = await self._read_pose(camera)
                 ok = bool(reading and reading.person_visible and reading.posture in targets)
                 await self._publish_live(frame, reading, [Check(label, ok)])
-                if ok:
+                if ok and not getattr(camera, "is_still", False):  # a photo never moves: Ready decides
                     held_since = held_since if held_since is not None else self.clock()
                     if self.clock() - held_since >= self.moment_hold_s:
                         return True

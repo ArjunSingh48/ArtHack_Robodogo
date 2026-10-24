@@ -122,10 +122,10 @@ artifacts:
     canine: certain
     description: A Spanish wall painting, transferred to canvas. A rider and hounds running through trees.
     pose_tags: [running, hunting]
-    human: sitting
     dog: stretch
     dog_side: right
     dog_facing: right
+    human: riding  # on a horse: no visitor pose matches it
 
   # ---------------------------------------------------------------- 4 · paintings and portraits
   met:436252:
