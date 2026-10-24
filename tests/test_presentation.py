@@ -70,6 +70,7 @@ class FakeMotion:
         class R:
             status = ExecutionStatus.SIMULATED
             detail = ""
+            diagnostic = ""
         return R()
 
     def request(self, name):
@@ -261,3 +262,150 @@ def test_meme_is_drawn_on_the_photo(lines):
     img = Image.open(BytesIO(make_meme(buf.getvalue(), phrases, seed=3)))
     assert img.width == 1600 and img.height == 1200
     assert len(img.convert("RGB").getcolors(maxcolors=1 << 20)) > 10  # text was drawn
+
+
+async def test_go_to_interactive_in_the_renaissance_chapter(tmp_path, pres, catalog, lines):
+    """Regression: pressing "Go to interactive" (pose) during the paintings narration raised StopIteration
+    (the presentation has no @interactive chapter). It must skip to the paintings round and finish."""
+    d = director(tmp_path, pres, catalog, lines)
+    answer(d, YES)
+    pressed = []
+
+    def on_state(director_, st):
+        if director_.chapter_id == "paintings" and st is ShowState.NARRATION and not pressed:
+            pressed.append(True)
+            sid = director_.session_id
+            asyncio.get_running_loop().call_soon(lambda: director_.command(Cmd.POSE, sid))
+    d.listeners.append(on_state)
+    res = await d.run()
+    assert pressed and res.final_state is ShowState.FINISHED
+    assert [r["era"] for r in d.rounds] == ["prehistory", "middle_ages", "paintings", "internet", "rescue"]
+    subs = d.stage.of("subtitle")
+    assert "Not famous dogs. Just dogs who were there." not in subs  # the rest of that narration was skipped
+    assert "Humans and dogs, running together.\nHunting." in subs  # other chapters keep theirs
+
+
+# ---------------------------------------------------------------- no Telegram, camera failures, live view
+async def test_without_telegram_photos_stay_local_and_nobody_is_told_otherwise(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines)
+    d.delivery = None  # nothing configured
+    states = []
+    d.listeners.append(lambda _d, st: states.append(st))
+    answer(d, {ShowState.CONSENT: Cmd.CONSENT_YES, ShowState.RESCUE: Cmd.READY})
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert ShowState.DELIVERY not in states and ShowState.SENDING not in states  # no "send to Telegram?" step
+    subs = " ".join(d.stage.of("subtitle"))
+    assert "here, on the big screen." in subs and "Telegram" not in subs
+    assert all(r["photo"] for r in d.rounds)  # consented local photos and THEN/NOW still happen
+    assert any("local display only" in n for n in d.encounter_log)
+    assert not any("error" in n.lower() or "fail" in n.lower() for n in d.encounter_log)
+
+
+def _stand_in():
+    return SyntheticParticipant("sitting", head_tilt_deg=14)
+
+
+async def test_denied_laptop_camera_falls_back_to_the_robot_camera_without_joint_photos(tmp_path, pres, catalog,
+                                                                                       lines):
+    from is_this_us.performance.runtime import CameraOpener
+
+    calls = []
+
+    def make(spec):
+        calls.append(spec)
+        if spec.startswith("webcam"):
+            raise OSError("OpenCV: not authorized to capture video. Cannot open webcam 0")
+        return _stand_in()
+
+    d = director(tmp_path, pres, catalog, lines)
+    d.frame_source_factory = CameraOpener("webcam:0", "zhaw_bridge", make)
+    states = []
+    d.listeners.append(lambda _d, st: states.append(st))
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert calls == ["webcam:0", "zhaw_bridge"]  # tried once each, never retried
+    alerts = [a for a in d.stage.of("alert") if a]
+    assert alerts and "ROBOT camera" in alerts[0] and "Privacy & Security" in alerts[0]
+    assert ShowState.CONSENT not in states  # no photo can be taken, so none is asked for
+    assert not any(r["photo"] for r in d.rounds)  # never claims a joint photo
+    assert [r["posture"] for r in d.rounds[:3]] == ["sitting"] * 3  # poses are still read (robot camera)
+
+
+async def test_denied_camera_without_fallback_is_reported_once(tmp_path, pres, catalog, lines):
+    from is_this_us.performance.runtime import CameraOpener
+
+    calls = []
+
+    def make(spec):
+        calls.append(spec)
+        raise OSError("OpenCV: not authorized to capture video")
+
+    d = director(tmp_path, pres, catalog, lines)
+    d.frame_source_factory = CameraOpener("webcam:0", "", make)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED and calls == ["webcam:0"]
+    assert any(a and "CAMERA FAILED" in a for a in d.stage.of("alert"))
+    assert not any(r["photo"] for r in d.rounds)
+
+
+async def test_live_view_stays_up_through_the_whole_presentation(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines, live_always=True)
+    d.voice = ShowVoice(NullSynthesizer(), NullSynthesizer(), Speaker(enabled=False), time_scale=0.003)
+    answer(d, YES)
+    await d.run()
+    ev = d.stage.events
+    marks = [i for i, (k, _) in enumerate(ev) if k == "chapter"] + [len(ev)]
+    for a, b in zip(marks, marks[1:]):
+        seg = ev[a:b]
+        assert any(k == "live" and v for k, v in seg), seg[0]
+        # never hidden in the middle of the show: only at the very end
+        assert not any(k == "live" and v is False for k, v in seg) or b == len(ev)
+    remembering = [i for i, (k, v) in enumerate(ev) if k == "status" and v == "remembering"]
+    assert remembering and any(k == "live" and v for k, v in ev[remembering[0]:remembering[0] + 200])
+
+
+# ---------------------------------------------------------------- two cameras: the dog's own + the laptop's
+async def test_dog_camera_reads_the_pose_and_laptop_camera_takes_the_photo(tmp_path, pres, catalog, lines):
+    from is_this_us.vision.frame_sources import Frame
+
+    robot_reads, laptop_reads = [], []
+
+    class Labelled:
+        def __init__(self, label, log):
+            self.inner, self.label, self.log = _stand_in(), label, log
+
+        def read(self):
+            self.log.append(1)
+            f = self.inner.read()
+            return Frame(f.image, self.label)
+
+        def close(self):
+            pass
+
+    d = director(tmp_path, pres, catalog, lines, live_always=True, pose_from="robot",
+                 robot_frame_source_factory=lambda: Labelled("zhaw_bridge:test", robot_reads))
+    d.frame_source_factory = lambda: Labelled("webcam:0", laptop_reads)
+    d.voice = ShowVoice(NullSynthesizer(), NullSynthesizer(), Speaker(enabled=False), time_scale=0.002)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    kinds = {k for k, v in d.stage.events if v is True}
+    assert {"live", "live_robot"} <= kinds  # both feeds on the projector
+    assert robot_reads and laptop_reads
+    assert [r["posture"] for r in d.rounds[:3]] == ["sitting"] * 3 and all(r["photo"] for r in d.rounds)
+    assert any(p.name.startswith("now-") for p in (tmp_path / "out" / res.session_id).iterdir())
+
+
+async def test_missing_dog_camera_falls_back_to_laptop_for_poses(tmp_path, pres, catalog, lines):
+    def broken():
+        raise OSError("no camera frames from the bridge")
+
+    d = director(tmp_path, pres, catalog, lines, pose_from="robot", robot_frame_source_factory=broken)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert any(a and "ROBOT CAMERA" in a for a in d.stage.of("alert"))
+    assert [r["posture"] for r in d.rounds[:3]] == ["sitting"] * 3 and all(r["photo"] for r in d.rounds)

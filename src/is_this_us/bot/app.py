@@ -217,7 +217,8 @@ def build_robot(settings: Settings) -> RobotAdapter:
     if settings.robot_model is RobotModel.ZHAW_BRIDGE:
         from ..robot.zhaw_bridge import ZhawBridgeAdapter
 
-        robot = ZhawBridgeAdapter(settings.zhaw_bridge_host, settings.zhaw_bridge_cmd_port)
+        robot = ZhawBridgeAdapter(settings.zhaw_bridge_host, settings.zhaw_bridge_cmd_port,
+                                  sdk_timeout_s=settings.zhaw_bridge_sdk_timeout_s)
     elif settings.robot_model is RobotModel.GO2:
         from ..robot.unitree_go2 import UnitreeGo2Adapter
 
@@ -298,7 +299,8 @@ async def run_bot(settings: Settings, show_options=None) -> None:
     from .show_controls import SHOW_COMMANDS, ShowController, build_show_router
 
     show_opts = show_options or ShowOptions(lang=settings.default_language)
-    show_delivery = TelegramDelivery(bot, settings.show_telegram_chat_id)
+    # no chat configured → no delivery at all (local display only), not a failing Telegram attempt
+    show_delivery = TelegramDelivery(bot, settings.show_telegram_chat_id) if settings.show_telegram_chat_id else None
     ctrl = ShowController(
         lambda: build_director(settings, show_opts, delivery=show_delivery, guard=guard, planner=orch.planner,
                                art_repo=repo.art, meme_repo=repo.memes, estimator=orch.estimator),

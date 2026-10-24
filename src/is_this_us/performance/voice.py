@@ -227,7 +227,12 @@ def all_utterances(script: Script, catalog: PerformanceCatalog, lines: Lines) ->
                 out.append(CueAudio(f"{c.id}.no", "narration", c.no, ch.voice, None))
                 continue
             if c.kind in ("round", "consent", "rescue"):  # presentation: the line said before the action
-                out.append(CueAudio(c.id, "narration", c.text, ch.voice, None))
+                if "{where}" in c.text:
+                    for key in ("screen", "telegram"):
+                        out.append(CueAudio(f"{c.id}~{key}", "narration",
+                                            c.render(where=lines.text("consent_where", key)), ch.voice, None))
+                else:
+                    out.append(CueAudio(c.id, "narration", c.text, ch.voice, None))
                 continue
             if c.kind != "speech":
                 continue

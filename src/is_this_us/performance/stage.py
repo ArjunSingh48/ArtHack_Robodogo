@@ -47,6 +47,7 @@ class Stage(Protocol):
     def subtitle(self, text: str | None) -> None: ...
     def status(self, state: str, detail: str = "") -> None: ...
     def close(self) -> None: ...
+    # optional: def alert(self, text: str | None) -> None — a persistent operator-only problem banner
 
 
 class TerminalStage:
@@ -86,6 +87,10 @@ class TerminalStage:
     def status(self, state: str, detail: str = "") -> None:
         self._p(f"{self.dim}   · {state}{': ' + detail if detail else ''}{self.reset}")
 
+    def alert(self, text: str | None) -> None:
+        if text:
+            self._p(f"\n{self.bold}⚠ OPERATOR: {text}{self.reset}\n")
+
     def close(self) -> None:
         pass
 
@@ -107,11 +112,14 @@ class RecordingStage:
     def status(self, state: str, detail: str = "") -> None:
         self.events.append(("status", state))
 
+    def alert(self, text: str | None) -> None:
+        self.events.append(("alert", text))
+
     def close(self) -> None:
         pass
 
-    def live(self, jpeg: bytes | None, checks: list) -> None:
-        self.events.append(("live", bool(jpeg)))
+    def live(self, jpeg: bytes | None, checks: list, feed: str = "laptop") -> None:
+        self.events.append(("live" if feed == "laptop" else f"live_{feed}", bool(jpeg)))
 
     def of(self, kind: str) -> list:
         return [v for k, v in self.events if k == kind]
@@ -147,9 +155,12 @@ font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 #chapter{position:fixed;top:3vh;left:4vw;letter-spacing:.35em;font:12px/1 system-ui,sans-serif;color:var(--accent);text-transform:uppercase}
 #stage{position:fixed;inset:9vh 4vw 26vh 4vw;display:flex;align-items:center;justify-content:center;gap:3vw}
 #view{height:100%;display:flex;align-items:center;justify-content:center;gap:4vw;min-width:0}
-#live{display:none;height:100%;flex-direction:column;align-items:center;justify-content:center;max-width:46vw}
-#live img{max-width:100%;max-height:calc(100% - 5.5em);object-fit:contain;border-radius:6px;box-shadow:0 0 0 2px var(--accent)}
-#live .cap{margin-top:1.2vh;font:clamp(11px,1vw,15px) system-ui,sans-serif;color:var(--muted);letter-spacing:.2em}
+#live{display:none;height:100%;flex-direction:column;align-items:center;justify-content:center;max-width:46vw;gap:1.2vh}
+#live .cam{display:none;flex-direction:column;align-items:center;justify-content:center;height:calc(47% - 1vh);width:100%}
+#live .cam img{height:calc(100% - 2.4em);max-height:calc(100% - 2.4em);width:auto;max-width:100%}
+#live img{max-width:100%;max-height:calc(100% - 2.2em);min-height:0;object-fit:contain;border-radius:6px;box-shadow:0 0 0 2px var(--accent)}
+#live #cam-robot img{box-shadow:0 0 0 2px #8fc7d9}
+#live .cap{margin-top:.6vh;font:clamp(11px,1vw,15px) system-ui,sans-serif;color:var(--muted);letter-spacing:.2em}
 #checks{margin-top:.8vh;display:flex;gap:1.2vw;flex-wrap:wrap;justify-content:center;font:clamp(13px,1.3vw,19px) system-ui,sans-serif}
 #checks span{color:var(--muted)}#checks span.ok{color:#a0d6aa}
 body.live #view .figure{max-width:42vw}
@@ -175,11 +186,15 @@ font:13px system-ui,sans-serif;z-index:5}
 #controls button.main{background:var(--accent);color:#1f1d21;border-color:var(--accent);font-weight:600}
 #controls button.ask{border-color:var(--accent);color:var(--accent)}
 #state{color:var(--muted);align-self:center;margin-right:6px}
+#alert{position:fixed;top:11vh;right:2vw;max-width:46vw;display:none;background:#5a1f24;color:#ffd9d9;
+border:1px solid #c0525c;border-radius:8px;padding:10px 14px;font:14px/1.35 system-ui,sans-serif;z-index:6}
 #msg{position:fixed;top:6.5vh;right:2vw;max-width:46vw;text-align:right;color:var(--accent);font:13px system-ui,sans-serif}
 </style></head><body>
-<div id="chapter"></div><div id="controls"></div><div id="msg"></div>
-<div id="stage"><div id="view"></div><div id="live"><img id="liveimg" alt="what the robot sees">
-<div class="cap">WHAT I SEE</div><div id="checks"></div></div></div><div id="subtitle"></div><div id="notice"></div>
+<div id="chapter"></div><div id="controls"></div><div id="msg"></div><div id="alert"></div>
+<div id="stage"><div id="view"></div><div id="live">
+<div class="cam" id="cam-robot"><img id="liveimg-robot" alt="what the robot dog sees"><div class="cap">WHAT THE DOG SEES</div></div>
+<div class="cam" id="cam-laptop"><img id="liveimg" alt="the photo camera"><div class="cap">THE PHOTO CAMERA</div></div>
+<div id="checks"></div></div></div><div id="subtitle"></div><div id="notice"></div>
 <script>
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
@@ -204,11 +219,15 @@ async function tick(){
   document.getElementById('chapter').textContent=s.chapter||'';
   document.getElementById('subtitle').textContent=s.subtitle||'';
   document.getElementById('notice').textContent=s.notice||'';
+  const al=document.getElementById('alert');if(key&&s.alert){al.style.display='block';al.textContent='⚠ '+s.alert}else{al.style.display='none'}
   if(s.view_html!==last){document.getElementById('view').innerHTML=s.view_html;last=s.view_html}
-  const lv=document.getElementById('live');
-  if(s.live&&s.live.on){document.body.classList.add('live');lv.style.display='flex';
-   document.getElementById('liveimg').src='/live.jpg?v='+s.live.v;
-   document.getElementById('checks').innerHTML=s.live.checks.map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
+  const lv=document.getElementById('live');const feeds=s.live||{};let any=false,checks=null;
+  for(const f of ['robot','laptop']){const st=feeds[f]||{};const box=document.getElementById('cam-'+f);
+   if(st.on){any=true;box.style.display='flex';const im=document.getElementById(f==='robot'?'liveimg-robot':'liveimg');
+    const src='/live.jpg?feed='+f+'&v='+st.v;if(im.dataset.v!==String(st.v)){im.src=src;im.dataset.v=st.v}
+    if(st.checks&&st.checks.length&&(!checks||f===feeds.pose))checks=st.checks}else{box.style.display='none'}}
+  if(any){document.body.classList.add('live');lv.style.display='flex';
+   document.getElementById('checks').innerHTML=(checks||[]).map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
   else{document.body.classList.remove('live');lv.style.display='none';}
   if(s.state!==lastState){controls(s.state);lastState=s.state;
    if(key&&s.note){document.getElementById('msg').textContent='🐕 '+s.note}}
@@ -240,7 +259,7 @@ class WebStage:
                        "updated": 0.0}
         self._files: dict[str, Path] = {}
         self._control = None  # (callback, loop) once enabled
-        self._live_jpeg: bytes | None = None  # newest camera frame, in memory only
+        self._live_jpeg: dict[str, bytes | None] = {}  # newest frame per camera feed, in memory only
         self.key = key or secrets.token_urlsafe(9)  # only the operator URL can press buttons
         stage = self
 
@@ -275,8 +294,9 @@ class WebStage:
                 if urlparse(self.path).path in ("/", "/index.html"):
                     return self._send(200, "text/html; charset=utf-8", PAGE.encode())
                 if urlparse(self.path).path == "/live.jpg":
+                    feed = parse_qs(urlparse(self.path).query).get("feed", ["laptop"])[0]
                     with stage._lock:
-                        frame = stage._live_jpeg
+                        frame = stage._live_jpeg.get(feed)
                     if frame:
                         return self._send(200, "image/jpeg", frame)
                     return self._send(404, "text/plain", b"no live view")
@@ -347,12 +367,21 @@ class WebStage:
         if state != "listening":
             self._set(state=state, note=detail)
 
-    def live(self, jpeg: bytes | None, checks: list) -> None:
-        """Newest camera view (or None to hide it). Kept in memory, replaced by the next frame."""
+    def alert(self, text: str | None) -> None:
+        """Operator-only banner (shown on the ?key= page, never on the projector)."""
+        self._set(alert=text or "")
+
+    def live(self, jpeg: bytes | None, checks: list, feed: str = "laptop") -> None:
+        """Newest frame of one camera feed ("robot" = what the dog sees, "laptop" = the photo camera), or None to
+        hide it. Kept in memory, replaced by the next frame."""
         with self._lock:
-            self._live_jpeg = jpeg
-            v = (self._state.get("live") or {}).get("v", 0) + 1
-            self._state["live"] = {"on": jpeg is not None, "checks": checks if jpeg else [], "v": v}
+            self._live_jpeg[feed] = jpeg
+            feeds = dict(self._state.get("live") or {})
+            v = (feeds.get(feed) or {}).get("v", 0) + 1
+            feeds[feed] = {"on": jpeg is not None, "checks": checks if jpeg else [], "v": v}
+            if jpeg is not None and checks:
+                feeds["pose"] = feed  # whose checklist to show
+            self._state["live"] = feeds
             self._state["updated"] = time.time()
 
     def enable_controls(self, callback, loop) -> None:

@@ -61,6 +61,12 @@ class MotionGuard:
     def disarm(self, reason: str = "operator") -> None:
         self._armed = False
         log.warning("Motion disarmed (%s)", reason)
+        halt = getattr(self.robot, "halt", None)  # a walk in progress stops at once, not at its next step
+        if halt is not None:
+            try:
+                halt()
+            except Exception as exc:
+                log.warning("halt on disarm failed: %s", exc)
 
     def software_stop(self, reason: str = "stop requested") -> None:
         """Cancel any motion and latch: no motion until an operator re-arms."""
@@ -114,6 +120,14 @@ class MotionGuard:
             return False, f"robot reports error code {st.error_code}"
         return True, "ok"
 
+    def limit_for(self, behavior: RobotBehavior) -> float:
+        """Never time out before the adapter's own (per-step SDK + transport + settle) budget."""
+        budget = getattr(self.robot, "time_budget", None)
+        try:
+            return max(self.timeout_s, float(budget(behavior)) if budget else 0.0)
+        except Exception:
+            return self.timeout_s
+
     def execute(self, plan: MotionPlan) -> ExecutionResult:
         behavior = plan.behavior
         if behavior is RobotBehavior.STILLNESS:
@@ -125,15 +139,17 @@ class MotionGuard:
             if not ok:
                 status = ExecutionStatus.SKIPPED if why.startswith(("not armed", "hardware")) else ExecutionStatus.REJECTED
                 return ExecutionResult(behavior=behavior, status=status, detail=why)
+            limit = self.limit_for(behavior)
             future = self._pool.submit(self.robot.execute, behavior, lambda: self._stop_latched)
             try:
-                result = future.result(timeout=self.timeout_s)
+                result = future.result(timeout=limit)
             except concurrent.futures.TimeoutError:
-                self.software_stop(f"{behavior} exceeded {self.timeout_s}s timeout")
-                return ExecutionResult(behavior=behavior, status=ExecutionStatus.STOPPED,
-                                       detail=f"timeout after {self.timeout_s}s")
+                self.software_stop(f"{behavior} exceeded {limit:.0f}s timeout")
+                return ExecutionResult(behavior=behavior, status=ExecutionStatus.STOPPED, diagnostic="guard_timeout",
+                                       detail=f"timeout after {limit:.0f}s — outcome unknown; stop latched")
             if result.status is ExecutionStatus.FAILED and self.robot.is_real:
-                self.disarm("motion failure")
+                # a genuine failure OR an unknown outcome (SDK/transport timeout): disarm, the operator decides
+                self.disarm(f"motion failure: {result.diagnostic or 'failed'} — {result.detail}")
             return result
         finally:
             self._last_motion_end = time.monotonic()

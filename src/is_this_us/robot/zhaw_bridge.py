@@ -44,6 +44,15 @@ UNSUPPORTED_BEHAVIORS = frozenset({RobotBehavior.LOOK_ASIDE, RobotBehavior.PEER}
 # Hard limits for walk(): slow, short steps near people. m/s and rad/s.
 MAX_VX, MAX_VY, MAX_VYAW = 0.3, 0.15, 0.6
 
+RPC_ERR_CLIENT_API_TIMEOUT = 3104  # Unitree SDK: the robot did not answer in time — outcome UNKNOWN
+TRANSPORT_MARGIN_S = 3.0  # our socket waits this much longer than the bridge's SDK timeout
+
+# Walking keep-alive: the approach decides a velocity ~8 Hz (camera + pose estimate can be slower), the bridge
+# zeroes velocity if nothing new arrives within 250 ms. So the adapter re-sends the CURRENT velocity every
+# STREAM_PERIOD_S — but only while it is fresher than STREAM_STALE_S; after that it sends zero and stops.
+STREAM_PERIOD_S = 0.1
+STREAM_STALE_S = 0.6
+
 
 def clamp_velocity(vx: float, vy: float, vyaw: float) -> tuple[float, float, float]:
     def c(v, m):
@@ -55,14 +64,38 @@ class BridgeError(RuntimeError):
     pass
 
 
+def classify_response(action: str, resp: dict) -> tuple[str, str]:
+    """Bridge answer → (confirmed | sdk_error | rpc_timeout_unknown | rejected, operator detail).
+
+    Code 3104 (RPC_ERR_CLIENT_API_TIMEOUT) is NOT treated as success: the robot may or may not have done it."""
+    data = resp.get("data") or {}
+    code, outcome = data.get("code"), data.get("outcome")
+    if resp.get("ok") and code in (0, None) and outcome in (None, "success"):
+        return "confirmed", f"{action} confirmed"
+    if outcome == "rejected":
+        return "rejected", f"{action}: bridge refused — {resp.get('msg')}"
+    if code == RPC_ERR_CLIENT_API_TIMEOUT or outcome == "rpc_timeout":
+        return "rpc_timeout_unknown", (f"{action}: the robot did not answer within the bridge's SDK timeout (code "
+                                       f"3104) — outcome UNKNOWN. Raise GO2_SPORT_TIMEOUT_S on the bridge (10 s).")
+    return "sdk_error", f"{action}: {resp.get('msg')} (code {code})"
+
+
 class ZhawBridgeAdapter:
     is_real = True
     reports_battery = False
     unsupported_behaviors = UNSUPPORTED_BEHAVIORS
 
-    def __init__(self, host: str = "localhost", cmd_port: int = 5555, timeout_ms: int = 8000):
+    def __init__(self, host: str = "localhost", cmd_port: int = 5555, timeout_ms: int | None = None,
+                 sdk_timeout_s: float = 10.0):
         self.endpoint = f"tcp://{host}:{cmd_port}"
-        self.timeout_ms = timeout_ms
+        self.sdk_timeout_s = sdk_timeout_s
+        # never time out before the bridge's own SDK call can return
+        self.timeout_ms = timeout_ms or int((sdk_timeout_s + TRANSPORT_MARGIN_S) * 1000)
+        self._stream_v = (0.0, 0.0, 0.0)
+        self._stream_t = 0.0
+        self._stream_thread: threading.Thread | None = None
+        self._stream_lock = threading.Lock()
+        self.stream_log: list[tuple[float, float, float, float]] = []  # (time, vx, vy, vyaw) actually sent
         self.body = BodyState.UNKNOWN
         self._ctx = None
         self._sock = None
@@ -73,6 +106,8 @@ class ZhawBridgeAdapter:
         self.sent: list[dict] = []
         self._walking = False
         self.can_walk = True
+        # longest a velocity can keep running without a new walk(): keep-alive staleness + the bridge's deadman
+        self.coast_s = STREAM_STALE_S + 0.25
 
     # ------------------------------------------------------------------ transport
     def _new_socket(self):
@@ -118,7 +153,20 @@ class ZhawBridgeAdapter:
             raise BridgeError(f"bridge status not ok: {resp}")
         self._last_status = resp.get("data") or {}
         self._connected = True
+        bridge_t = self._last_status.get("sport_timeout_s")
+        if bridge_t is None:
+            log.warning("the bridge does not report its SDK timeout (old go2_main?): slow actions such as hello may "
+                        "come back as code 3104 'outcome unknown'. Update go2_main / set GO2_SPORT_TIMEOUT_S=10.")
+        elif float(bridge_t) + TRANSPORT_MARGIN_S > self.timeout_ms / 1000:
+            self.timeout_ms = int((float(bridge_t) + TRANSPORT_MARGIN_S) * 1000)
+            self._new_socket()
+            log.info("bridge SDK timeout %.1f s → waiting up to %.1f s per action", bridge_t, self.timeout_ms / 1000)
         log.info("connected to ZHAW Go2 bridge at %s (%s)", self.endpoint, self._last_status)
+
+    def time_budget(self, behavior: RobotBehavior) -> float:
+        """Longest an execute() may legitimately take (every step answering at the last moment + settling).
+        The MotionGuard never times out before this."""
+        return sum(self.timeout_ms / 1000 + st.settle for st in steps_for(behavior, self.body)) + 1.0
 
     def list_actions(self) -> list[str]:
         return list((self.request("list_actions").get("data") or {}).get("actions", []))
@@ -153,13 +201,14 @@ class ZhawBridgeAdapter:
                 resp = self.request("action", {"name": action})
             except BridgeError as exc:
                 self.body = BodyState.UNKNOWN
-                return ExecutionResult(behavior=behavior, status=ExecutionStatus.FAILED, detail=str(exc),
-                                       duration_s=time.monotonic() - start)
-            code = (resp.get("data") or {}).get("code")
-            if not resp.get("ok") or code not in (0, None):
+                return ExecutionResult(behavior=behavior, status=ExecutionStatus.FAILED, diagnostic="transport_timeout",
+                                       detail=f"{action}: bridge did not answer within {self.timeout_ms / 1000:.0f} s "
+                                              f"— outcome unknown ({exc})", duration_s=time.monotonic() - start)
+            verdict, detail = classify_response(action, resp)
+            if verdict != "confirmed":
                 self.body = BodyState.UNKNOWN
-                return ExecutionResult(behavior=behavior, status=ExecutionStatus.FAILED,
-                                       detail=f"{action}: {resp.get('msg')} (code {code})",
+                status = ExecutionStatus.REJECTED if verdict == "rejected" else ExecutionStatus.FAILED
+                return ExecutionResult(behavior=behavior, status=status, diagnostic=verdict, detail=detail,
                                        duration_s=time.monotonic() - start)
             done.append(action)
             end = time.monotonic() + st.settle
@@ -169,22 +218,63 @@ class ZhawBridgeAdapter:
                                            detail=f"stopped during {action}", duration_s=time.monotonic() - start)
                 time.sleep(0.02)
             self.body = st.body
-        return ExecutionResult(behavior=behavior, status=ExecutionStatus.SUCCESS,
+        return ExecutionResult(behavior=behavior, status=ExecutionStatus.SUCCESS, diagnostic="confirmed",
                                detail=" → ".join(done) or "nothing to do", duration_s=time.monotonic() - start)
 
-    def walk(self, vx: float, vy: float, vyaw: float) -> None:
-        """One velocity command (body frame: vx forward, vy left, vyaw counter-clockwise), clamped."""
-        vx, vy, vyaw = clamp_velocity(vx, vy, vyaw)
+    # ------------------------------------------------------------------ walking
+    def _send_move(self, vx: float, vy: float, vyaw: float) -> None:
         self._walking = True
         try:
             resp = self.request("move", {"vx": round(vx, 3), "vy": round(vy, 3), "vyaw": round(vyaw, 3)})
         finally:
             self._walking = False
+        self.stream_log.append((time.monotonic(), vx, vy, vyaw))
         if not resp.get("ok"):
             raise BridgeError(f"move refused: {resp.get('msg')}")
 
+    def walk(self, vx: float, vy: float, vyaw: float) -> None:
+        """Set the walking velocity (body frame: vx forward, vy left, vyaw counter-clockwise), clamped.
+
+        Sent at once, then kept alive every STREAM_PERIOD_S by a small thread — but only while the caller keeps
+        calling walk(): a velocity older than STREAM_STALE_S is replaced by zero and the thread ends."""
+        vx, vy, vyaw = clamp_velocity(vx, vy, vyaw)
+        with self._stream_lock:
+            self._stream_v, self._stream_t = (vx, vy, vyaw), time.monotonic()
+            if self._stream_thread is None or not self._stream_thread.is_alive():
+                self._stream_thread = threading.Thread(target=self._stream, daemon=True, name="walk-keepalive")
+                self._stream_thread.start()
+        self._send_move(vx, vy, vyaw)
+
+    def _stream(self) -> None:
+        while True:
+            time.sleep(STREAM_PERIOD_S)
+            with self._stream_lock:
+                v, t = self._stream_v, self._stream_t
+                if t == 0.0:
+                    return  # halted
+                if time.monotonic() - t > STREAM_STALE_S:  # the caller stopped deciding: stop the robot
+                    self._stream_t = 0.0
+                    v = None
+            try:
+                if v is None:
+                    self.request("stop")
+                    return
+                self._send_move(*v)
+            except Exception as exc:
+                log.warning("walking keep-alive failed (%s) — stopping", exc)
+                with self._stream_lock:
+                    self._stream_t = 0.0
+                try:
+                    self.request("stop")
+                except Exception:
+                    pass
+                return
+
     def halt(self) -> None:
-        """Zero velocity now."""
+        """Zero velocity now (and end the keep-alive)."""
+        with self._stream_lock:
+            self._stream_t = 0.0
+            self._stream_v = (0.0, 0.0, 0.0)
         try:
             self.request("stop")
         except Exception:  # pragma: no cover
@@ -193,6 +283,8 @@ class ZhawBridgeAdapter:
     def stop(self) -> None:
         """Software stop: cancel our sequence, zero velocity, StopMove. NOT an emergency stop."""
         self._stop.set()
+        with self._stream_lock:
+            self._stream_t = 0.0
         for cmd, params in (("stop", None), ("action", {"name": "stop_move"})):
             try:
                 self.request(cmd, params)

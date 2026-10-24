@@ -20,6 +20,7 @@ REQUIRED = {
     "telegram_caption": ("painting", "meme"),
     "conversation": ("opening", "closing"),
     "presentation_consent": ("thanks", "declined"),
+    "consent_where": ("screen", "telegram"),
     "round": ("waiting", "nobody", "thinking", "found", "hold", "photo", "sent", "shown", "no_photo", "meme_found",
               "meme_no_photo"),
     "rescue": ("nobody", "alarm", "coming", "arrived", "wake", "stay", "saved"),

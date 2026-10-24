@@ -39,6 +39,9 @@ class Settings(BaseSettings):
     zhaw_bridge_host: str = "localhost"
     zhaw_bridge_cmd_port: int = 5555
     zhaw_bridge_pub_port: int = 5556
+    # Must match the bridge's GO2_SPORT_TIMEOUT_S (go2_main). We wait for each action this long + a margin, so
+    # our side never gives up before the robot's own SDK call can answer.
+    zhaw_bridge_sdk_timeout_s: float = 10.0
 
     telegram_bot_token: str = ""
     telegram_operator_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
@@ -111,6 +114,11 @@ class Settings(BaseSettings):
     show_encounter_photo: bool = True  # ask for a consented local THEN/NOW photo during the hold
     # presentation (beamer + robot): intro → one pose round per era → rescue finale. "show" = narrated show.
     show_programme: str = "presentation"
+    show_camera_fallback: str = ""  # e.g. zhaw_bridge: if the laptop camera fails, read poses with the robot's
+    # camera instead (no photo of person + robot then — the robot cannot photograph itself)
+    # which camera reads the participant's pose: robot (the dog's own camera, via the bridge; falls back to the
+    # laptop camera if it has none) | laptop. The laptop camera always takes the photo of the two together.
+    show_pose_camera: str = "robot"
     show_live_always: bool = True  # the camera view stays beside the picture for the whole show
     show_operator_key: str = ""  # fixed key for the operator page link (empty = one kept in data/runtime/)
     show_round_hold_seconds: float = 6.0  # each round: the robot holds its pose this long after settling
@@ -118,6 +126,8 @@ class Settings(BaseSettings):
     show_montage_flash_seconds: float = 1.4  # each remembered picture while the robot is busy
     # Camera-guided walking to the participant (`itu show --walk`). Off by default.
     show_walk_enabled: bool = False
+    # set to true only after `itu show walk-test --calibrate <m>` (sitting AND standing) wrote SHOW_WALK_K_* here
+    show_walk_calibrated: bool = False
     show_walk_camera: str = "zhaw_bridge"  # the ROBOT's camera (it must see the person from the robot)
     show_walk_speed: float = 0.22  # m/s, max (the adapter caps at 0.3)
     show_walk_max_distance_m: float = 3.5

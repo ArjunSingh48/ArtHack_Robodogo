@@ -331,6 +331,10 @@ def main(argv: list[str] | None = None) -> None:
 
     register_show(sub)
 
+    from .present_cli import register as register_present
+
+    register_present(sub)
+
     args = p.parse_args(argv)
     _setup_logging(args.verbose)
     code = args.fn(args)
