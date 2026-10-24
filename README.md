@@ -1,5 +1,10 @@
 # Is This Us? — A Dog's Memory
 
+**MCP integration plan:** [Robot, backend, and Telegram implementation plan](docs/IMPLEMENTATION_PLAN.md)
+and [Go2 MCP contract](docs/MCP_INTEGRATION.md). These describe the next implementation steps for
+`zhaw-physical-ai/go2_main`, including pose similarity, robot capability gaps, and delivery behavior.
+The setup guide below describes the existing direct SDK prototype; the proposed MCP adapter is not implemented yet.
+
 [![tests](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
 An interactive installation in which a Unitree robot dog tries to learn how to be a dog from

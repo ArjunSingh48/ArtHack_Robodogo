@@ -1,5 +1,9 @@
 # Architecture
 
+This page describes the existing direct SDK prototype. For the planned integration with
+`zhaw-physical-ai/go2_main`, see the [implementation plan](IMPLEMENTATION_PLAN.md) and
+[MCP contract](MCP_INTEGRATION.md), including the changes needed for pose-based retrieval.
+
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
 ## Pipeline
