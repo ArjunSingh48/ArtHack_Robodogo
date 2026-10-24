@@ -250,6 +250,105 @@ def cmd_live(args) -> None:
         robot.close()
 
 
+# ---------------------------------------------------------------------- talk
+def cmd_talk(args) -> None:
+    """Live spoken conversation with the dog (OpenAI Realtime speech-to-speech)."""
+    s = get_settings()
+    if args.list_devices:
+        from .talk.audio import list_devices
+
+        print(list_devices())
+        return
+    if not s.openai_api_key:
+        sys.exit("OPENAI_API_KEY is empty — talk mode needs it. See docs/TALK.md.")
+    from openai import AsyncOpenAI
+
+    from .bot.app import build_estimator, build_library, build_planner
+    from .motion.guard import MotionGuard
+    from .notifier import ConsoleNotifier
+    from .orchestrator import InteractionOrchestrator
+    from .speech.synthesizer import NullSynthesizer
+    from .storage import Storage
+    from .talk.audio import SoundDeviceAudio
+    from .talk.persona import build_instructions, load_story
+    from .talk.session import LiveConversation, TalkSettings
+    from .talk.tools import TalkTools
+    from .vision.frame_sources import make_frame_source
+
+    iface = args.interface or s.robot_network_interface
+    if args.robot == "go2":
+        if not args.i_have_physical_estop:
+            sys.exit("Refusing: --robot go2 needs --i-have-physical-estop (remote in hand, area clear).")
+        print(ESTOP_REMINDER)
+        robot, guard = _go2_guard(s, iface, cooldown=s.motion_cooldown_seconds)
+        ok, why = guard.arm(operator_id=0)
+        print(f"  arm: {ok} ({why})")
+        if not ok:
+            sys.exit(1)
+    else:
+        from .robot.mock import MockRobotAdapter
+
+        robot = MockRobotAdapter(time_scale=0.0)
+        robot.connect()
+        guard = MotionGuard(robot, hardware_gates_open=False, cooldown_s=0, timeout_s=s.motion_timeout_seconds)
+
+    estimator = build_estimator(s) if not args.no_camera else None
+    source = None
+    if not args.no_camera:
+        if estimator is None:
+            sys.exit("Pose model missing — run `itu setup` (or use --no-camera).")
+        source = make_frame_source(args.source or s.camera_source, network_interface=iface)
+    storage = Storage(":memory:")  # talk mode keeps nothing after the session
+    storage.touch_visitor(0, args.lang or s.default_language)
+    orch = InteractionOrchestrator(
+        repo=build_library(s), estimator=estimator, storage=storage, guard=guard, notifier=ConsoleNotifier(),
+        synthesizer=NullSynthesizer(),  # the live voice speaks; no second TTS voice
+        planner=build_planner(s), default_lang=args.lang or s.default_language,
+        default_archive=args.archive or s.default_archive,
+    )
+    lang_names = {"en": "English", "ru": "Russian", "de": "German"}
+    instructions = build_instructions(load_story(s.story_path), lang_names.get(args.lang or s.default_language, "English"))
+
+    def dev(x):
+        return int(x) if x.isdigit() else (x or None)
+
+    audio = SoundDeviceAudio(dev(s.talk_input_device), dev(s.talk_output_device))
+    talk_settings = TalkSettings(
+        model=s.talk_model or s.openai_realtime_model, voice=s.talk_voice or s.openai_realtime_voice,
+        half_duplex=not args.full_duplex and s.talk_half_duplex,
+        idle_timeout_s=s.talk_idle_seconds, max_session_s=s.talk_max_session_seconds,
+    )
+    print(f"\n  🐾 talk mode — model {talk_settings.model}, voice {talk_settings.voice}, "
+          f"{'half' if talk_settings.half_duplex else 'full'}-duplex, robot {robot.status().model}, "
+          f"camera {source.name if source else 'off'}")
+    print("  Microphone audio is streamed to OpenAI while a conversation runs. Nothing is recorded here.")
+    try:
+        while True:
+            cmd = input("\n  Enter = start a conversation   q = quit  > ").strip().lower()
+            if cmd == "q":
+                break
+            convo = LiveConversation(client=AsyncOpenAI(api_key=s.openai_api_key), audio=audio,
+                                     tools=TalkTools(orch, source), instructions=instructions,
+                                     settings=talk_settings)
+            try:
+                stats = asyncio.run(convo.run())
+            except KeyboardInterrupt:
+                guard.software_stop("Ctrl+C in talk mode")
+                print("\n  conversation stopped (software stop sent)")
+                continue
+            print(f"  ended ({stats.ended_by}); {stats.responses} replies; tools: {stats.tool_calls or '—'}")
+    except KeyboardInterrupt:
+        guard.software_stop("Ctrl+C")
+    finally:
+        guard.disarm("talk session ended")
+        guard.shutdown()
+        if source:
+            source.close()
+        if estimator:
+            estimator.close()
+        robot.close()
+
+
 def register(sub) -> None:
     rc = sub.add_parser("robot-check", help="read-only Go2 diagnosis (no motion)")
     rc.add_argument("--interface", help="override ROBOT_NETWORK_INTERFACE")
@@ -273,3 +372,15 @@ def register(sub) -> None:
     lv.add_argument("--no-motion", action="store_true", help="real camera + matching, robot does not move")
     lv.add_argument("--i-have-physical-estop", action="store_true")
     lv.set_defaults(fn=cmd_live)
+
+    tk = sub.add_parser("talk", help="live spoken conversation with the dog (OpenAI Realtime)")
+    tk.add_argument("--robot", choices=["mock", "go2"], default="mock")
+    tk.add_argument("--source", help="camera: webcam[:i] | unitree | image:<path> (default CAMERA_SOURCE)")
+    tk.add_argument("--no-camera", action="store_true", help="talk only; the dog cannot look")
+    tk.add_argument("--archive", choices=["art", "meme", "both", "surprise"])
+    tk.add_argument("--lang", choices=["en", "ru", "de"], help="fallback language (the dog follows the visitor)")
+    tk.add_argument("--full-duplex", action="store_true", help="allow interrupting the dog — headset/echo-cancelling only")
+    tk.add_argument("--interface")
+    tk.add_argument("--list-devices", action="store_true", help="show microphones and speakers, then exit")
+    tk.add_argument("--i-have-physical-estop", action="store_true")
+    tk.set_defaults(fn=cmd_talk)

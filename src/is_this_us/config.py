@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     openai_realtime_voice: str = "marin"
     local_audio_playback: bool = False
 
+    # Talk mode (`itu talk`): live conversation with the dog via OpenAI Realtime
+    talk_model: str = ""  # empty = OPENAI_REALTIME_MODEL
+    talk_voice: str = ""  # empty = OPENAI_REALTIME_VOICE
+    talk_half_duplex: bool = True  # true for an open speaker; false only with headset / echo-cancelling speakerphone
+    talk_idle_seconds: float = 45
+    talk_max_session_seconds: float = 300
+    talk_input_device: str = ""  # sounddevice name or index; empty = system default
+    talk_output_device: str = ""
+    story_path: Path = Path("./data/persona/story.md")
+
     camera_source: str = "webcam"
     pose_model_path: Path = Path("./models/pose_landmarker_lite.task")
 
