@@ -83,7 +83,7 @@ def make_director(tmp_path, script, catalog, lines, *, mode="automatic", posture
                       store=PhotoStore(tmp_path / "out", retention_minutes=60), pose_reader=reader,
                       frame_source_factory=factory, delivery=delivery if delivery is not None else CountingDelivery(),
                       mode=mode, tick_s=0.005, hint_gap_s=0.0, rng=random.Random(0),
-                      **{"try_seconds": 0.05, **kw})
+                      **{"try_seconds": 0.05, "moment_hold_s": 0.0, "live_linger_s": 0.0, **kw})
     return d
 
 
@@ -1088,3 +1088,54 @@ async def test_cancel_during_walk_stops_the_robot(tmp_path, script, catalog, lin
     res = await d.run(start_at="invitation")
     assert res.final_state is ShowState.CANCELLED
     assert approacher.robot.velocities[-1] == (0.0, 0.0, 0.0)
+
+
+# ---------------------------------------------------------------- regressions from the first real run
+@pytest.mark.parametrize("delay", [0.0, 0.003, 0.01, 0.02, 0.04, 0.07, 0.1])
+async def test_go_to_interactive_works_whenever_it_is_pressed(tmp_path, script, catalog, lines, delay):
+    """Pressing "Go to interactive" was lost if it landed during a short line before a screen change."""
+    d = make_director(tmp_path, script, catalog, lines, mode="guided")
+    answer(d, HAPPY)
+    pressed = {"ok": False}
+
+    def on_state(director, st):
+        if not pressed["ok"] and st in (ShowState.INTRODUCTION, ShowState.PARTICIPATION, ShowState.ARTWORK):
+            def press():
+                pressed["ok"] = director.command(Cmd.POSE)[0] or pressed["ok"]
+            asyncio.get_running_loop().call_later(delay, press)
+    d.listeners.append(on_state)
+
+    def hold_next(director, st):  # guided holds after the jump would otherwise wait forever
+        if st is ShowState.ARTWORK and director.chapter_id not in ("last_dog",):
+            asyncio.get_running_loop().call_later(0.01, lambda: director.command(Cmd.NEXT))
+    d.listeners.append(hold_next)
+    res = await asyncio.wait_for(d.run(), 20)
+    assert pressed["ok"]
+    assert res.chapters[:2] == ["last_dog", "invitation"], res.chapters
+    assert res.outcome == "together"
+
+
+async def test_camera_view_stays_up_through_the_moment(tmp_path, script, catalog, lines):
+    """The camera view vanished ~1 s after the robot saw someone; it must last through the reaction."""
+    d = make_director(tmp_path, script, catalog, lines, moment_hold_s=0.05, live_linger_s=0.05, try_seconds=1.0)
+    answer(d, HAPPY)
+    await d.run()
+    ev = d.stage.events
+    yes = next(i for i, (k, v) in enumerate(ev) if k == "subtitle" and v.startswith("Hello. You can look"))
+    before = [v for k, v in ev[:yes] if k == "live"]
+    after = [v for k, v in ev[yes:] if k == "live"]
+    assert before and before[-1] is True  # on while the robot reacts…
+    first_off = next(i for i, (k, v) in enumerate(ev) if i > yes and k == "live" and v is False)
+    assert any(k == "live" and v is True for k, v in ev[yes:first_off])  # …still updating after it…
+    assert after[-1] is False  # …and only then hidden
+
+
+async def test_next_pressed_during_a_line_is_not_lost(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines, mode="guided")
+    d.state = ShowState.PARTICIPATION
+    d._inbox.append(Cmd.NEXT)
+    d._set_state(ShowState.ARTWORK)
+    assert list(d._inbox) == [Cmd.NEXT]  # still meaningful at the hold
+    d._inbox.append(Cmd.SEND_YES)
+    d._set_state(ShowState.NARRATION)
+    assert Cmd.SEND_YES not in d._inbox  # meaningless now: dropped
