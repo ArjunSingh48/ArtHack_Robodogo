@@ -270,7 +270,11 @@ class StoryDirector:
         self._camera, self._camera_failed, self._picture = None, False, None
         self.photo_consent = self._consent_decided = True
         self._note("switched to the camera (they agreed to photos)")
+        self._show_source("camera")
         return True, "ok: camera"
+
+    def _show_source(self, kind: str) -> None:
+        getattr(self.stage, "source", lambda _: None)(kind)
 
     def _switch_to_samples(self) -> tuple[bool, str]:
         """Operator: the sample stand-in photos instead of the camera (next readings, next rounds)."""
@@ -283,6 +287,7 @@ class StoryDirector:
         self._camera, self._camera_failed, self._picture = None, False, None
         self.photo_consent = self._consent_decided = True
         self._note("switched to the sample photos")
+        self._show_source("photos")
         return True, "ok: sample photos"
 
     def use_picture(self, data: bytes) -> tuple[bool, str]:
@@ -1492,14 +1497,15 @@ class StoryDirector:
                 self.frame_source_factory = lambda: pic  # noqa: E731
                 self.pose_reader = PoseReader(pic)
                 break
-            self._note("no sample photo available — choose another start")
+            self._note("no sample photos available — choose another start")
         self.photo_consent, self._consent_decided = cmd is not Cmd.CONSENT_NO, True
         if self.photo_consent and self.delivery is not None:
             self._set_state(ShowState.DELIVERY, "send this presentation's photos to the Telegram chat too? "
                                                 "(otherwise: big screen only)")
             self.send_ok = await self._await_cmd({Cmd.SEND_YES, Cmd.SEND_NO, Cmd.SKIP},
                                                  timeout=self.send_timeout_s) is Cmd.SEND_YES
-        source = "an uploaded picture" if self._picture else "a sample photo" if cmd is Cmd.SAMPLE else "the camera"
+        source = "an uploaded picture" if self._picture else "the sample photos" if cmd is Cmd.SAMPLE else "the camera"
+        self._show_source("photos" if cmd is Cmd.SAMPLE else "camera")
         self._note(f"start: {'photos from ' + source if self.photo_consent else 'no photos, no camera'}")
 
     async def _consent_cue(self, ch: Chapter, cue: Cue) -> str:

@@ -62,9 +62,9 @@ URDF, trotting and taking its poses, and a rigged avatar posed from the photo ca
 right-drag to pan, scroll to zoom, double-click to return to auto-framing. Offline, the flat map is drawn instead.
 
 **Start screen.** `itu show` / `itu present` (without `--auto`) wait on the operator page before anything
-plays: ▶ *they agreed to photos* (only now does the camera open) · ▶ *an uploaded picture* · ▶ *a sample
-photo* (`data/standins/`, Unsplash) · ▶ *without photos* (no camera at all; poses are confirmed by hand).
-Keyboard: `y` / `sample` / `n`. The photo question later in the intro is then not asked again.
+plays: ▶ *they agreed to photos* (only now does the camera open) · ▶ *an uploaded picture* · ▶ *sample
+photos* (`data/standins/`, Unsplash, one matched to each round). Later: 📷 *Switch to the webcam* /
+🖼 *Switch to sample photos*. Keyboard: `y` / `sample`, then `camera` / `samples`. The photo question later in the intro is then not asked again.
 A drawn top-down room appears in the camera column ("SIMULATED DOG"). It shows where the dog walks, where the
 person is, and what the dog is doing (sitting down, giving a paw, walking…). The same pose and walking logic
 runs as with the real robot, through the same safety guard, but with a mock robot: nothing real moves.

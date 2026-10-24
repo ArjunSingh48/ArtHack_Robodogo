@@ -187,7 +187,7 @@ KEYS = {
     "cancel": "cancel", "pose": "pose", "ready": "ready", "capture": "ready", "d": "decline", "decline": "decline",
     "l": "listen", "listen": "listen", "sample": "sample", "start": "consent_yes", "camera": "camera", "webcam": "camera", "samples": "samples",
 }
-HELP = ("start: y = camera (they agreed to photos) · sample = sample photo · n = no photos — then "
+HELP = ("start: y = camera (they agreed to photos) · sample = sample photos — then "
         "keys: Enter=next · p=pause · r=resume · a=repeat · s=skip · pose · ready · y/n (consent/send) · "
         "d=decline · l=listen (push-to-talk) · ?=status · q=cancel")
 

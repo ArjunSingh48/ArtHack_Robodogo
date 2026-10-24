@@ -232,7 +232,7 @@ border:1px solid #c0525c;border-radius:8px;padding:10px 14px;font:14px/1.35 syst
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
 const ASK={lobby:[['consent_yes','▶ Start — they agreed to photos (camera)'],['upload','▶ Start with an uploaded picture'],
-  ['sample','▶ Start with a sample photo']],
+  ['sample','▶ Start with sample photos']],
  participant_readiness:[['ready','✓ Ready / start now'],['decline','✗ Declines']],
  final_pose:[['skip','End the pose now']],
  consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
@@ -252,10 +252,12 @@ async function send(cmd){
  if(cmd==='upload')return upload();
  const r=await fetch('/control?key='+encodeURIComponent(key)+'&cmd='+cmd,{method:'POST'});
  const j=await r.json().catch(()=>({msg:'error'}));document.getElementById('msg').textContent=j.msg||'';}
+let source='';  // camera | photos: only the switch to the other one is shown
 function controls(state){
  if(!key)return;const c=document.getElementById('controls');c.style.display='flex';
  const ask=(ASK[state]||[]).map(([k,t])=>`<button class="ask" onclick="send('${k}')">${t}</button>`).join('');
- const base=BASE.filter(([k])=>state!=='lobby'||k==='cancel').map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
+ const base=BASE.filter(([k])=>state!=='lobby'||k==='cancel')
+  .filter(([k])=>!(k==='camera'&&source!=='photos')&&!(k==='samples'&&source==='photos')).map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
  c.innerHTML=`<span id="state">${state}</span>`+ask+base;}
 function drawSim(m){
  // top-down: the dog starts at the bottom centre facing up (x forward, y to its left), 1 m = 70 px
@@ -295,7 +297,7 @@ async function tick(){
   if(any){document.body.classList.add('live');lv.style.display='grid';
    document.getElementById('checks').innerHTML=(checks||[]).map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
   else{document.body.classList.remove('live');lv.style.display='none';}
-  if(s.state!==lastState){controls(s.state);lastState=s.state;
+  if(s.state!==lastState||(s.source||'')!==source){source=s.source||'';controls(s.state);lastState=s.state;
    if(key&&s.note){document.getElementById('msg').textContent='🐕 '+s.note}}
  }catch(e){}
  setTimeout(tick,document.body.classList.contains('live')?150:350)}
@@ -425,6 +427,10 @@ class WebStage:
 
     def chapter(self, chapter_id: str, title: str) -> None:
         self._set(chapter=title, chapter_id=chapter_id, step=chapter_id)
+
+    def source(self, kind: str) -> None:
+        """Where the participant comes from: "camera" or "photos" — only the switch to the other one is shown."""
+        self._set(source=kind)
 
     def step(self, step_id: str) -> None:
         """A picture step (cue id): the operator page's address becomes #<step>, to come back to it."""
