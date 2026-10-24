@@ -34,7 +34,7 @@ AI_VOICE_NOTICE = "The robot's voice is AI-generated. Its words are written by t
 
 @dataclass
 class View:
-    kind: str  # title | blank | artifact | flash (a remembered picture, briefly) | memes | composition
+    kind: str  # title | blank | artifact | flash | consider (a grid the dog looks through; focus moves) | memes | composition
     artifact: ShowArtifact | None = None
     image: Path | None = None
     memes: list[ShowArtifact] = field(default_factory=list)
@@ -68,6 +68,8 @@ class TerminalStage:
     def show(self, view: View) -> None:
         if view.kind == "flash" and view.artifact:
             self._p(f"{self.dim}[screen] … {view.artifact.title}, {view.artifact.date}{self.reset}")
+        elif view.kind == "consider":
+            self._p(f"{self.dim}[screen] remembering: {len(view.memes)} pictures{self.reset}")
         elif view.kind == "artifact" and view.artifact:
             a = view.artifact
             pic = "" if a.displayable else "  (reference only — no image shown)"
@@ -86,6 +88,9 @@ class TerminalStage:
 
     def status(self, state: str, detail: str = "") -> None:
         self._p(f"{self.dim}   · {state}{': ' + detail if detail else ''}{self.reset}")
+
+    def focus(self, artifact_id: str) -> None:
+        pass
 
     def alert(self, text: str | None) -> None:
         if text:
@@ -114,6 +119,9 @@ class RecordingStage:
 
     def alert(self, text: str | None) -> None:
         self.events.append(("alert", text))
+
+    def focus(self, artifact_id: str) -> None:
+        self.events.append(("focus", artifact_id))
 
     def close(self) -> None:
         pass
@@ -155,12 +163,14 @@ font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 #chapter{position:fixed;top:3vh;left:4vw;letter-spacing:.35em;font:12px/1 system-ui,sans-serif;color:var(--accent);text-transform:uppercase}
 #stage{position:fixed;inset:9vh 4vw 26vh 4vw;display:flex;align-items:center;justify-content:center;gap:3vw}
 #view{height:100%;display:flex;align-items:center;justify-content:center;gap:4vw;min-width:0}
-#live{display:none;height:100%;flex-direction:column;align-items:center;justify-content:center;max-width:46vw;gap:1.2vh}
-#live .cam{display:none;flex-direction:column;align-items:center;justify-content:center;height:calc(47% - 1vh);width:100%}
-#live .cam img{height:calc(100% - 2.4em);max-height:calc(100% - 2.4em);width:auto;max-width:100%}
-#live img{max-width:100%;max-height:calc(100% - 2.2em);min-height:0;object-fit:contain;border-radius:6px;box-shadow:0 0 0 2px var(--accent)}
+#live{display:none;height:100%;flex:0 0 30vw;max-width:30vw;gap:1vh;grid-template-rows:repeat(var(--n,1),minmax(0,1fr)) auto}
+#live .cam{display:none;flex-direction:column;align-items:center;justify-content:center;min-height:0;width:100%}
+#live .cam img,#simsvg{flex:1 1 auto;min-height:0;max-height:none;width:100%;object-fit:contain;border-radius:6px}
+#live #cam-laptop img{box-shadow:0 0 0 2px var(--accent)}
 #live #cam-robot img{box-shadow:0 0 0 2px #8fc7d9}
-#live .cap{margin-top:.6vh;font:clamp(11px,1vw,15px) system-ui,sans-serif;color:var(--muted);letter-spacing:.2em}
+#simsvg{background:#26232a;box-shadow:0 0 0 2px #8fc7d9}
+#live .cap{margin-top:.5vh;font:11px system-ui,sans-serif;color:var(--muted);letter-spacing:.15em;white-space:nowrap}
+body.live #view{flex:1 1 auto;max-width:60vw}
 #checks{margin-top:.8vh;display:flex;gap:1.2vw;flex-wrap:wrap;justify-content:center;font:clamp(13px,1.3vw,19px) system-ui,sans-serif}
 #checks span{color:var(--muted)}#checks span.ok{color:#a0d6aa}
 body.live #view .figure{max-width:42vw}
@@ -175,6 +185,15 @@ body.live #view .figure{max-width:42vw}
 .flash{animation:flash .9s ease-out both}.flash img{filter:sepia(.25) saturate(.85)}
 .flash .label{color:var(--muted)}.flash .label b{display:block;color:var(--accent);letter-spacing:.35em;
 font:600 11px system-ui,sans-serif;margin-bottom:.6vh}
+.consider{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.consider b{color:var(--accent);letter-spacing:.35em;font:600 12px system-ui,sans-serif;margin-bottom:1.4vh}
+.cgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(9vw,1fr));gap:1.4vw;width:100%;align-items:center;justify-items:center}
+.cgrid figure{margin:0;opacity:.38;filter:grayscale(.55);transition:opacity 1.2s ease,filter 1.2s ease,transform 1.2s ease}
+.cgrid figure img{max-width:100%;max-height:24vh;object-fit:contain;box-shadow:none!important}
+.cgrid figure.on{opacity:1;filter:none;transform:scale(1.08)}
+.cgrid figure.on img{box-shadow:0 0 0 2px var(--accent)!important}
+.cgrid figcaption{font:clamp(10px,.9vw,13px) system-ui,sans-serif;color:var(--muted);text-align:center;margin-top:.6vh;opacity:0;transition:opacity 1.2s}
+.cgrid figure.on figcaption{opacity:1}
 @keyframes flash{from{opacity:0;transform:scale(1.035);filter:blur(3px)}to{opacity:1;transform:none;filter:none}}
 #subtitle{position:fixed;left:6vw;right:6vw;bottom:9vh;text-align:center;font-size:clamp(20px,2.8vw,40px);
 line-height:1.35;min-height:2.7em;white-space:pre-line}
@@ -192,6 +211,7 @@ border:1px solid #c0525c;border-radius:8px;padding:10px 14px;font:14px/1.35 syst
 </style></head><body>
 <div id="chapter"></div><div id="controls"></div><div id="msg"></div><div id="alert"></div>
 <div id="stage"><div id="view"></div><div id="live">
+<div class="cam" id="cam-sim"><svg id="simsvg" viewBox="0 0 400 260"></svg><div class="cap">SIMULATED DOG · <span id="simdoing"></span></div></div>
 <div class="cam" id="cam-robot"><img id="liveimg-robot" alt="what the robot dog sees"><div class="cap">WHAT THE DOG SEES</div></div>
 <div class="cam" id="cam-laptop"><img id="liveimg" alt="the photo camera"><div class="cap">THE PHOTO CAMERA</div></div>
 <div id="checks"></div></div></div><div id="subtitle"></div><div id="notice"></div>
@@ -203,6 +223,7 @@ const ASK={participant_readiness:[['ready','✓ Ready / start now'],['decline','
  consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
  delivery:[['send_yes','✓ Send to Telegram'],['send_no',"✗ Don't send"]],
  rescue:[['ready','✓ Yes, now'],['skip','Skip']],
+ artwork_display:[['next','▸ Continue (photo seen)']],
  participation:[['ready','✓ They did it'],['next','Move on']],
  awaiting_photo:[['consent_no','✗ No photo']]};
 const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['cancel','End']];
@@ -214,6 +235,20 @@ function controls(state){
  const ask=(ASK[state]||[]).map(([k,t])=>`<button class="ask" onclick="send('${k}')">${t}</button>`).join('');
  const base=BASE.map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
  c.innerHTML=`<span id="state">${state}</span>`+ask+base;}
+function drawSim(m){
+ // top-down: the dog starts at the bottom centre facing up (x forward, y to its left), 1 m = 70 px
+ const P=(x,y)=>[200-y*70,235-x*70];const [rx,ry,ryaw]=m.robot;const [px,py]=m.person;
+ const [sx,sy]=P(rx,ry),[qx,qy]=P(px,py);const a=-ryaw*180/Math.PI;
+ const trail=m.trail.map(([x,y])=>P(x,y).join(',')).join(' ');
+ const grid=[0,1,2,3].map(i=>`<line x1="0" y1="${235-i*70}" x2="400" y2="${235-i*70}" stroke="#34303a"/>`).join('');
+ const body={sitting:'SIT',lying:'DOWN',standing:'STAND'}[m.body]||'';
+ document.getElementById('simsvg').innerHTML=grid+
+  `<polyline points="${trail}" fill="none" stroke="#8fc7d9" stroke-dasharray="4 4" stroke-width="2"/>`+
+  `<g transform="translate(${qx},${qy})"><circle r="15" fill="#b7a6d6" opacity=".85"/><text y="32" fill="#efe9de" font-size="12" text-anchor="middle" font-family="system-ui">person · ${m.posture}</text></g>`+
+  `<g transform="translate(${sx},${sy}) rotate(${a})"><rect x="-11" y="-17" width="22" height="34" rx="8" fill="${m.walking?'#a0d6aa':'#8fc7d9'}"/><path d="M0,-26 L-6,-16 L6,-16 Z" fill="#efe9de"/></g>`+
+  `<text x="${sx+18}" y="${sy+4}" fill="#efe9de" font-size="12" font-family="system-ui">${body}</text>`+
+  `<text x="8" y="16" fill="#9c958c" font-size="11" font-family="system-ui">simulated room — nothing real moves</text>`;
+ document.getElementById('simdoing').textContent=(m.doing||m.body||'').toUpperCase();}
 async function tick(){
  try{const r=await fetch('/state',{cache:'no-store'});const s=await r.json();
   document.getElementById('chapter').textContent=s.chapter||'';
@@ -221,12 +256,16 @@ async function tick(){
   document.getElementById('notice').textContent=s.notice||'';
   const al=document.getElementById('alert');if(key&&s.alert){al.style.display='block';al.textContent='⚠ '+s.alert}else{al.style.display='none'}
   if(s.view_html!==last){document.getElementById('view').innerHTML=s.view_html;last=s.view_html}
+  document.querySelectorAll('.cgrid figure').forEach(f=>f.classList.toggle('on',f.dataset.id===s.focus));
   const lv=document.getElementById('live');const feeds=s.live||{};let any=false,checks=null;
   for(const f of ['robot','laptop']){const st=feeds[f]||{};const box=document.getElementById('cam-'+f);
    if(st.on){any=true;box.style.display='flex';const im=document.getElementById(f==='robot'?'liveimg-robot':'liveimg');
     const src='/live.jpg?feed='+f+'&v='+st.v;if(im.dataset.v!==String(st.v)){im.src=src;im.dataset.v=st.v}
     if(st.checks&&st.checks.length&&(!checks||f===feeds.pose))checks=st.checks}else{box.style.display='none'}}
-  if(any){document.body.classList.add('live');lv.style.display='flex';
+  const sb=document.getElementById('cam-sim');
+  if(s.sim){any=true;sb.style.display='flex';drawSim(s.sim)}else{sb.style.display='none'}
+  lv.style.setProperty('--n',['cam-sim','cam-robot','cam-laptop'].filter(id=>document.getElementById(id).style.display==='flex').length||1);
+  if(any){document.body.classList.add('live');lv.style.display='grid';
    document.getElementById('checks').innerHTML=(checks||[]).map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
   else{document.body.classList.remove('live');lv.style.display='none';}
   if(s.state!==lastState){controls(s.state);lastState=s.state;
@@ -328,16 +367,28 @@ class WebStage:
         with self._lock:
             self._state.update(kw, updated=time.time())
 
-    def _img(self, path: Path) -> str:
+    def _img(self, path: Path, keep: bool = False) -> str:
         token = f"{abs(hash((str(path), time.time()))) % 10**10}.jpg"
         with self._lock:
-            self._files = {token: path}  # only what is on screen right now
+            if keep:
+                self._files[token] = path  # several pictures on screen at once (the remembering grid)
+            else:
+                self._files = {token: path}  # only what is on screen right now
         return f"/img/{token}"
 
     def chapter(self, chapter_id: str, title: str) -> None:
         self._set(chapter=title)
 
     def show(self, view: View) -> None:
+        if view.kind == "consider" and view.memes:
+            with self._lock:
+                self._files = {}
+            figs = "".join(f"<figure data-id='{html.escape(a.id)}'><img src='{self._img(a.image_path, keep=True)}' alt=''>"
+                           f"<figcaption>{html.escape(a.title)}, {html.escape(a.date)}</figcaption></figure>"
+                           for a in view.memes if a.displayable)
+            body = f"<div class='consider'><b>REMEMBERING…</b><div class='cgrid'>{figs}</div></div>"
+            self._set(view_html=body, focus="")
+            return
         if view.kind == "flash" and view.artifact and view.artifact.displayable:
             a = view.artifact
             body = (f"<div class='figure flash'><img src='{self._img(a.image_path)}' alt=''><div class='label'>"
@@ -366,6 +417,14 @@ class WebStage:
     def status(self, state: str, detail: str = "") -> None:
         if state != "listening":
             self._set(state=state, note=detail)
+
+    def sim(self, snapshot: dict | None) -> None:
+        """The simulated dog (positions in metres), drawn on the page; None hides it."""
+        self._set(sim=snapshot)
+
+    def focus(self, artifact_id: str) -> None:
+        """Which picture of the remembering grid the dog is looking at (no re-render: no flicker)."""
+        self._set(focus=artifact_id)
 
     def alert(self, text: str | None) -> None:
         """Operator-only banner (shown on the ?key= page, never on the projector)."""

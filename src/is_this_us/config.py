@@ -123,7 +123,7 @@ class Settings(BaseSettings):
     show_operator_key: str = ""  # fixed key for the operator page link (empty = one kept in data/runtime/)
     show_round_hold_seconds: float = 6.0  # each round: the robot holds its pose this long after settling
     show_rescue_wait_seconds: float = 60.0  # finale: how long the robot waits for someone to lie down
-    show_montage_flash_seconds: float = 1.4  # each remembered picture while the robot is busy
+    show_montage_flash_seconds: float = 2.8  # each remembered picture while the robot is busy
     # Camera-guided walking to the participant (`itu show --walk`). Off by default.
     show_walk_enabled: bool = False
     # set to true only after `itu show walk-test --calibrate <m>` (sitting AND standing) wrote SHOW_WALK_K_* here

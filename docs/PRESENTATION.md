@@ -49,6 +49,20 @@ walking on.
 - `hello … code 3104 / outcome unknown`: the bridge is still on the old 3 s timeout. Restart it with
   `start_bridge.sh`, which sets 10 s.
 
+## 0b. Without the robot: the simulated dog
+
+```bash
+itu present --sim-robot                 # real laptop camera + voice + projector; the dog is simulated
+itu show --dry-run --sim-robot --display web --source synthetic:sitting   # fully simulated rehearsal
+```
+A drawn top-down room appears in the camera column ("SIMULATED DOG"). It shows where the dog walks, where the
+person is, and what the dog is doing (sitting down, giving a paw, walking…). The same pose and walking logic
+runs as with the real robot, through the same safety guard, but with a mock robot: nothing real moves.
+
+**While the dog "remembers"**, the era's pictures stay on screen together and its attention moves slowly
+from one to the next (`SHOW_MONTAGE_FLASH_SECONDS`, default 2.8 s). **After a photo appears**, the dog
+says something happy about it, and the photo stays until the operator presses **Next**.
+
 ## 1. Rehearse (no robot, no keys)
 
 ```bash
@@ -75,7 +89,7 @@ SHOW_MOTION_ENABLED=true
 SHOW_TELEGRAM_CHAT_ID=-100…          # the one private chat/group the pictures go to
 SHOW_ROUND_HOLD_SECONDS=6            # how long the robot holds each pose after settling
 SHOW_RESCUE_WAIT_SECONDS=60
-SHOW_MONTAGE_FLASH_SECONDS=1.4
+SHOW_MONTAGE_FLASH_SECONDS=2.8
 ```
 ```bash
 itu show --display web --motion --i-have-physical-estop --walk --telegram

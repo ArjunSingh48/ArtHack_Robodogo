@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import random
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -90,7 +91,7 @@ def director(tmp_path, pres, catalog, lines, *, camera=True, delivery=None, **kw
         frame_source_factory=(lambda: stand_in) if camera else None,
         delivery=delivery if delivery is not None else Delivery(), mode="automatic", tick_s=0.005, hint_gap_s=0.0,
         rng=random.Random(0), moment_hold_s=0.0, stable_s=0.02, round_hold_s=0.03, rescue_wait_s=0.3,
-        rescue_wake_s=0.05, flash_s=0.002, **kw)
+        rescue_wake_s=0.05, flash_s=0.002, **{"photo_view_timeout_s": 0.02, **kw})
 
 
 def answer(d, mapping, delay=0.01):
@@ -409,3 +410,51 @@ async def test_missing_dog_camera_falls_back_to_laptop_for_poses(tmp_path, pres,
     assert res.final_state is ShowState.FINISHED
     assert any(a and "ROBOT CAMERA" in a for a in d.stage.of("alert"))
     assert [r["posture"] for r in d.rounds[:3]] == ["sitting"] * 3 and all(r["photo"] for r in d.rounds)
+
+
+# ---------------------------------------------------------------- photo stays; calm remembering; simulated dog
+async def test_photo_stays_until_the_operator_continues(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines, photo_view_timeout_s=None)
+    shown_at = []
+
+    def on_state(director_, st):
+        if st is ShowState.ARTWORK:
+            shown_at.append(time.monotonic())
+            sid = director_.session_id
+            asyncio.get_running_loop().call_later(0.15, lambda: director_.command(Cmd.NEXT, sid))
+    d.listeners.append(on_state)
+    answer(d, YES)
+    t0 = time.monotonic()
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert len(shown_at) == 5  # every photo waited for "Next": 4 rounds + the rescue
+    subs = d.stage.of("subtitle")
+    assert sum(any(a in s_ for a in lines.variants("round", "admire")) for s_ in subs) == 5
+    assert time.monotonic() - t0 >= 5 * 0.15
+
+
+async def test_remembering_shows_a_calm_grid_with_moving_focus(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines)
+    answer(d, YES)
+    await d.run()
+    shows = d.stage.of("show")
+    assert "consider" in shows  # one grid per round, not a picture per flash
+    focus = d.stage.of("focus")
+    assert focus and all(catalog.get(f) is not None for f in focus)
+
+
+async def test_simulated_dog_walks_and_poses_without_a_robot(tmp_path, pres, catalog, lines):
+    from is_this_us.performance.sim_robot import SimRobot
+    from is_this_us.performance.approach import ApproachSettings
+
+    sim = SimRobot(ApproachSettings(speed=0.3, max_seconds=30), person=(1.2, 0.3), pose_time_scale=0.01)
+    snaps = []
+    d = director(tmp_path, pres, catalog, lines, motion=sim.motion, approacher=sim.approacher, sim_robot=sim)
+    d.stage.sim = lambda snap: snaps.append(snap)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert all(r["settled"] for r in d.rounds)  # the simulated dog "did" every pose
+    assert any(s["walking"] for s in snaps) and any(s["body"] == "sitting" for s in snaps)
+    assert sum(w.startswith("approach: arrived") for w in d.walk_log) >= 4
+    assert not sim.robot.is_real and "Hello" in sim.robot.calls

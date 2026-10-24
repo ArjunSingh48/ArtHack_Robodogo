@@ -115,6 +115,10 @@ def run_checks(args, settings) -> bool:
 def cmd_present(args) -> int:
     from .config import get_settings
 
+    if args.sim_robot and (args.motion or args.walk):
+        sys.exit("--sim-robot replaces the real robot: leave out --motion/--walk (the simulated dog does both).")
+    if args.sim_robot:
+        args.no_robot = True
     if (args.motion or args.walk) and not args.i_have_physical_estop:
         sys.exit("Refusing motion: add --i-have-physical-estop and keep the Unitree remote in your hand.")
     if args.walk and not args.motion:
@@ -127,6 +131,8 @@ def cmd_present(args) -> int:
     if args.motion:
         env.update({"APP_MODE": "installation", "ROBOT_MOTION_ENABLED": "true", "SHOW_MOTION_ENABLED": "true"})
     env["SHOW_WALK_ENABLED"] = "true" if args.walk else "false"
+    if args.sim_robot:
+        env["ROBOT_MODEL"] = "mock"  # nothing connects to a robot
     if not args.telegram:
         env["SHOW_TELEGRAM_CHAT_ID"] = ""  # Telegram off unless asked: local display only
     os.environ.update(env)
@@ -135,14 +141,15 @@ def cmd_present(args) -> int:
     if not run_checks(args, s) and not args.force:
         print("\nNot starting (fix the ✗ above, or --force to start anyway without what failed).")
         return 2
-    print("\nPoses: " + ("ON (armed, in place)" if args.motion else "off (add --motion --i-have-physical-estop)")
+    print("\nPoses: " + ("SIMULATED dog" if args.sim_robot else
+                         "ON (armed, in place)" if args.motion else "off (add --motion --i-have-physical-estop)")
           + " · Walking: " + ("ON" if args.walk else "off") + " · Telegram: " + ("on" if args.telegram else "off"))
     from .performance.cli import cmd_show
 
     show_args = argparse.Namespace(
         show_action=None, lang="en", dry_run=False, auto=False, mode="automatic", display="web", source=args.camera,
         no_voice=args.no_voice, fast=None, motion=args.motion, out=None, seed=None, walk=args.walk, finale=None,
-        programme="presentation", telegram=args.telegram, interactive=args.rounds_only, start_at=None,
+        programme="presentation", telegram=args.telegram, sim_robot=args.sim_robot, interactive=args.rounds_only, start_at=None,
         participant="one", consent="yes", send="yes", i_have_physical_estop=args.i_have_physical_estop)
     return cmd_show(show_args) or 0
 
@@ -164,6 +171,8 @@ def register(sub) -> None:
     p.add_argument("--i-have-physical-estop", action="store_true")
     p.add_argument("--telegram", action="store_true", help="also send to the configured Telegram chat")
     p.add_argument("--no-robot", action="store_true", help="skip robot checks (projector + camera only)")
+    p.add_argument("--sim-robot", action="store_true",
+                   help="no robot: a simulated dog (poses + walking) is drawn on the projector instead")
     p.add_argument("--no-voice", action="store_true")
     p.add_argument("--rounds-only", action="store_true", help="skip the narration, straight to each round")
     p.add_argument("--force", action="store_true", help="start even if a check failed (what failed stays off)")

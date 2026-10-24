@@ -32,6 +32,7 @@ class MockRobotAdapter:
         self.can_walk = True
         self.velocities: list[tuple[float, float, float]] = []
         self.world = None  # optional SimWorld (tests): walking moves the simulated robot
+        self.doing = ""  # the SDK step in progress (for the simulated-robot view)
 
     def connect(self) -> None:
         self.connected = True
@@ -54,6 +55,7 @@ class MockRobotAdapter:
                                        detail=f"stopped before {call}", duration_s=time.monotonic() - start)
             check_args(call, args)
             self.calls.append(f"{call}{args}" if args else call)
+            self.doing = call
             if call in self.fail_on:
                 return ExecutionResult(behavior=behavior, status=ExecutionStatus.FAILED,
                                        detail=f"simulated SDK error in {call} (code 3104)",
@@ -66,6 +68,7 @@ class MockRobotAdapter:
                                            detail=f"stopped during {call}", duration_s=time.monotonic() - start)
                 time.sleep(0.01)
             self.body = new_body
+            self.doing = ""
             self.battery = max(0.0, self.battery - 0.05)
         return ExecutionResult(behavior=behavior, status=ExecutionStatus.SIMULATED,
                                detail=" → ".join(st.call for st in steps), duration_s=time.monotonic() - start)

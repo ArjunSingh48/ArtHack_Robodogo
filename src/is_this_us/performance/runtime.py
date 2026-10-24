@@ -85,7 +85,9 @@ class ParticipantScript:
     def attach(self, director: StoryDirector) -> None:
         def on_state(d: StoryDirector, st: ShowState) -> None:
             cmd = None
-            if st is ShowState.RESCUE:
+            if st is ShowState.ARTWORK and d.script.is_presentation:
+                cmd = Cmd.NEXT  # rehearsal: "we've looked at the photo"
+            elif st is ShowState.RESCUE:
                 cmd = Cmd.READY if self.takes_part else Cmd.SKIP
             elif st is ShowState.READINESS:
                 cmd = Cmd.READY if self.takes_part else Cmd.DECLINE
@@ -179,6 +181,7 @@ class ShowOptions:
     walk: bool = False  # camera-guided walking to the participant
     finale: str | None = None  # encounter | imitate (default SHOW_FINALE)
     programme: str | None = None  # presentation | show (default SHOW_PROGRAMME)
+    sim_robot: bool = False  # no Go2: a simulated dog (poses + walking) drawn in the interface
 
 
 _WEB_STAGES: dict = {}
@@ -208,7 +211,7 @@ def robot_camera_factory(settings: Settings, opts: "ShowOptions", source: str | 
     if source and source.startswith("synthetic"):
         stand_in = getattr(reader, "estimator", None)
         return (lambda: _RobotView(stand_in, "robot:rehearsal")) if stand_in is not None else None
-    if opts.dry_run or settings.robot_model.value != "zhaw_bridge" or not settings.show_walk_camera:
+    if opts.dry_run or opts.sim_robot or settings.robot_model.value != "zhaw_bridge" or not settings.show_walk_camera:
         return None
     from ..vision.frame_sources import make_frame_source
 
@@ -339,7 +342,15 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     if delivery is None and opts.dry_run and settings.show_telegram_chat_id:
         delivery = PreviewDelivery(out_root)  # rehearsal of a configured Telegram: writes what WOULD be sent
 
-    motion = MotionCues(guard, planner, enabled=bool(opts.motion and settings.show_motion_enabled and not opts.dry_run))
+    sim = None
+    if opts.sim_robot:
+        from .sim_robot import SimRobot
+
+        sim = SimRobot(approach_settings(settings), pose_time_scale=min(1.0, opts.fast))
+        motion = sim.motion  # the same MotionGuard path as the real robot — with the mock robot
+    else:
+        motion = MotionCues(guard, planner,
+                            enabled=bool(opts.motion and settings.show_motion_enabled and not opts.dry_run))
 
     conversation = None
     if (voice_enabled and settings.voice_provider == "openai" and settings.openai_enable_live_conversation
@@ -360,7 +371,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
             language=LANGUAGE_NAMES.get(script.lang, "English"),
             story_path=settings.story_path)
 
-    approacher = build_approacher(settings, opts, guard, estimator)
+    approacher = sim.approacher if sim is not None else build_approacher(settings, opts, guard, estimator)
 
     director = StoryDirector(
         approacher=approacher,
@@ -375,7 +386,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         round_hold_s=settings.show_round_hold_seconds * opts.fast, rescue_wait_s=settings.show_rescue_wait_seconds * opts.fast,
         rescue_wake_s=20.0 * opts.fast, flash_s=settings.show_montage_flash_seconds * opts.fast,
         live_always=settings.show_live_always,
-        robot_frame_source_factory=robot_factory, pose_from=settings.show_pose_camera, font_path=settings.card_font_path, rng=rng,
+        robot_frame_source_factory=robot_factory, pose_from=settings.show_pose_camera, sim_robot=sim, font_path=settings.card_font_path, rng=rng,
         photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery))
     if delivery is None:
         log.info("Telegram not configured: photos stay on the local display")

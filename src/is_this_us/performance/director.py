@@ -136,6 +136,7 @@ class StoryDirector:
                  photo_in_encounter: bool = True, round_hold_s: float = 6.0, rescue_wait_s: float = 60.0,
                  rescue_wake_s: float = 20.0, flash_s: float = 1.4, live_always: bool = True,
                  robot_frame_source_factory: Callable | None = None, pose_from: str = "robot",
+                 photo_view_timeout_s: float | None = None, sim_robot=None,
                  clock=time.monotonic):
         self.script, self.catalog, self.lines, self.voice, self.stage = script, catalog, lines, voice, stage
         self.store, self.pose_reader, self.frame_source_factory = store, pose_reader, frame_source_factory
@@ -167,6 +168,9 @@ class StoryDirector:
         # the dog's OWN camera (via the bridge): shown as a second feed, and — with pose_from="robot" — the camera
         # that reads the person's pose. The laptop camera ("laptop" feed) takes the photo of the two together.
         self.robot_frame_source_factory = robot_frame_source_factory
+        # after a photo appears, it stays until the operator presses Next (None = wait; a number = at most that long)
+        self.photo_view_timeout_s = photo_view_timeout_s
+        self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
         self._robot_cam = None
         self._robot_cam_failed = False
@@ -771,6 +775,21 @@ class StoryDirector:
         except Exception as exc:
             log.warning("camera view stopped: %s", exc)
 
+    async def _sim_feed(self) -> None:
+        """Draw the simulated dog in the interface (no robot connected)."""
+        sim = getattr(self.stage, "sim", None)
+        if sim is None or self.sim_robot is None:
+            return
+        try:
+            while True:
+                try:
+                    sim(self.sim_robot.snapshot())
+                except Exception as exc:
+                    log.debug("sim view failed: %s", exc)
+                await asyncio.sleep(0.15)
+        except asyncio.CancelledError:
+            pass
+
     def _clear_live(self) -> None:
         if self.live_always:
             self._live_at = {"laptop": -1e9, "robot": -1e9}  # hand the views back to the always-on cameras
@@ -1214,6 +1233,8 @@ class StoryDirector:
 
     async def _walk_to_person_at(self, side: str, posture: str, speak: bool = True) -> bool:
         self._set_state(ShowState.APPROACH, f"walking to the person's {side}")
+        if self.sim_robot is not None:  # the simulated person takes the pose the camera read
+            self.sim_robot.set_person_posture(posture)
         if speak:
             await self.say_line("approach", "ask")
         if self.motion is not None:
@@ -1479,11 +1500,11 @@ class StoryDirector:
                 log.exception("round picture failed: %s", exc)
                 self._note(f"{era}: picture failed ({type(exc).__name__})")
                 path = None
+        if path is not None:
+            await self._admire()
         home = asyncio.ensure_future(self._walk_home(speak=False)) if reading is not None else None
         try:
-            if path is not None:
-                await self._speak_plain(self.lines.pick("round", "shown"))
-            elif era == "internet" and reading is not None:
+            if path is None and era == "internet" and reading is not None:
                 self.stage.show(View("memes", memes=self.catalog.for_chapter("internet")))
                 await self._speak_plain(self.lines.pick("round", "meme_no_photo"))
             sent = await self._send_round(art, path, kind)
@@ -1494,6 +1515,14 @@ class StoryDirector:
             if home is not None:
                 await home
         return "done"
+
+    async def _admire(self) -> None:
+        """The photo stays on screen: the dog says something happy about it, then waits for the operator's Next
+        (so everyone can really look at it)."""
+        await self.say(self.lines.pick("round", "admire"))
+        self._set_state(ShowState.ARTWORK, "the photo is on the screen — press Next to continue")
+        cmd = await self._await_cmd({Cmd.NEXT, Cmd.SKIP}, timeout=self.photo_view_timeout_s)
+        self._note("photo viewed — continuing" if cmd else "photo viewed (time limit) — continuing")
 
     async def _round_robot(self, behavior: str, side: str, posture: str | None) -> bool:
         """Walk to the person (only with --walk) and take the pose. → True only if the robot reports it."""
@@ -1520,19 +1549,30 @@ class StoryDirector:
         from .rounds import montage_order
 
         self._set_state(ShowState.REMEMBERING, "remembering — the robot walks / takes its pose")
-        flashes = montage_order(self.catalog, era, chosen)
+        flashes = montage_order(self.catalog, era, chosen)[:7]
         done = asyncio.Event()
-        minimum = min(3, len(flashes)) if flashes else 1
+        minimum = min(2, len(flashes)) if flashes else 1
+        # the era's pictures stay on screen together; the dog's attention moves slowly from one to the next
+        grid = list(flashes)
+        if chosen is not None and chosen.displayable:
+            grid.insert(self.rng.randrange(len(grid) + 1), chosen)  # it was there all along
 
         async def montage():
             line = asyncio.ensure_future(self._speak_plain(self.lines.pick("round", "thinking")))
             shown = 0
+            focus = getattr(self.stage, "focus", None)
             try:
                 if not flashes and era == "internet":
                     self.stage.show(View("memes", memes=self.catalog.for_chapter("internet")))
+                elif grid:
+                    self.stage.show(View("consider", memes=grid, heading="remembering…"))
                 while True:
                     if self.state is not ShowState.PAUSED and flashes:
-                        self.stage.show(View("flash", artifact=flashes[shown % len(flashes)]))
+                        a = flashes[shown % len(flashes)]
+                        if focus is not None:
+                            focus(a.id)
+                        else:
+                            self.stage.show(View("flash", artifact=a))
                     if self.state is not ShowState.PAUSED:
                         shown += 1
                     await asyncio.sleep(self.flash_s)
@@ -1680,6 +1720,7 @@ class StoryDirector:
             path = self.store.save(self.session_id, "rescue.jpg", data)
             self.composition = path
             self.stage.show(View("composition", image=path))
+            await self._admire()
             if self.delivery is not None and self.send_ok:
                 self._set_state(ShowState.SENDING)
                 res = await self._deliver_one(path, photo_caption(self.lines.caption("rescue"), "rescue"),
@@ -1721,6 +1762,7 @@ class StoryDirector:
         ambient = (asyncio.ensure_future(self._ambient_live())
                    if self.live_always and self._live is not None
                    and (self.frame_source_factory is not None or self.robot_frame_source_factory is not None) else None)
+        simview = asyncio.ensure_future(self._sim_feed()) if self.sim_robot is not None else None
         try:
             while idx < len(chapters):
                 ch = chapters[idx]
@@ -1766,9 +1808,10 @@ class StoryDirector:
                 self.motion.stop("performance error")
             self._set_state(ShowState.ERROR, str(exc))
         finally:
-            if ambient is not None:
-                ambient.cancel()
-                await asyncio.gather(ambient, return_exceptions=True)
+            for task in (ambient, simview):
+                if task is not None:
+                    task.cancel()
+                    await asyncio.gather(task, return_exceptions=True)
             self.live_always, keep = False, self.live_always
             self._clear_live()
             self.live_always = keep

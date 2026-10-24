@@ -46,7 +46,7 @@ def test_link_ok_and_every_failure_is_explained():
 
 
 def _args(**kw):
-    base = dict(pose_camera="robot", interface="en6", robot_ip="192.168.123.161", camera="synthetic:sitting", fallback="", motion=False,
+    base = dict(sim_robot=False, pose_camera="robot", interface="en6", robot_ip="192.168.123.161", camera="synthetic:sitting", fallback="", motion=False,
                 walk=False, i_have_physical_estop=False, telegram=False, no_robot=False, no_voice=True,
                 rounds_only=False, force=False)
     base.update(kw)

@@ -107,6 +107,8 @@ round:
   photo: ["Click."]
   sent: ["I sent it to you. And to the big screen."]
   shown: ["Look. There we are."]
+  # said while the photo stays on screen (the operator presses Next to go on)
+  admire: ["Look! That's us. I'm keeping this one forever.", "Oh… look at us. We look like a painting.", "This is my favourite picture now. Again.", "Wow. Very us. Much archive."]
   no_photo: ["No picture this time. I will remember it anyway."]
   meme_found: ["Wait. We don't need an old picture. We can be the meme."]
   meme_no_photo: ["No photo? Then this one stays in my memory. Much private. Wow."]

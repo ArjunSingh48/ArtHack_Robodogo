@@ -342,6 +342,9 @@ def cmd_walk_test(args) -> int:
 # ---------------------------------------------------------------------- run
 def capability_lines(s, opts, director) -> list[str]:
     """Poses and walking are SEPARATE capabilities; say exactly which are on and why not."""
+    if getattr(opts, "sim_robot", False):
+        return ["poses:   SIMULATED — the drawn dog takes them (nothing real moves)",
+                "walking: SIMULATED — in a drawn room, with the same approach logic as the real robot"]
     poses = ("ON — supported poses in place (sit, lie down, stand, paw, stretch), armed guard"
              if director.motion.enabled else "off — add --motion --i-have-physical-estop (SHOW_MOTION_ENABLED=true)")
     if director.approacher is not None:
@@ -372,6 +375,8 @@ def cmd_show(args) -> int:
     s = get_settings()
     from .runtime import ShowOptions
 
+    if getattr(args, "sim_robot", False) and (args.motion or args.walk):
+        sys.exit("--sim-robot replaces the real robot: leave out --motion/--walk (the simulated dog does both).")
     if args.motion and not args.i_have_physical_estop:
         sys.exit("Refusing motion: pass --i-have-physical-estop and keep the remote / e-stop in your hand.")
     if args.walk and not args.dry_run and not args.motion:
@@ -383,7 +388,8 @@ def cmd_show(args) -> int:
                        display=args.display, source=source, voice=not args.no_voice,
                        fast=args.fast if args.fast else 1.0, motion=args.motion,
                        out_dir=Path(args.out) if args.out else (Path("./data/runtime/rehearsal") if args.dry_run else None),
-                       seed=args.seed, walk=args.walk, finale=args.finale, programme=args.programme)
+                       seed=args.seed, walk=args.walk, finale=args.finale, programme=args.programme,
+                       sim_robot=getattr(args, "sim_robot", False))
     if args.telegram:
         if args.dry_run:
             sys.exit("--telegram cannot be combined with --dry-run (rehearsals never contact Telegram).")
@@ -485,6 +491,8 @@ def register(sub) -> None:
     sh.add_argument("--finale", choices=["encounter", "imitate"],
                     help="encounter (default): the good boy encounter — any pose → matched picture → Telegram → "
                          "the dog's pose held 10 s; imitate: copy a picture the robot chose")
+    sh.add_argument("--sim-robot", action="store_true",
+                    help="no robot: a simulated dog takes the poses and walks in a simulated room, drawn on the page")
     sh.add_argument("--walk", action="store_true",
                     help="the robot finds the participant with its camera and walks to their side "
                          "(real robot: needs --motion and SHOW_WALK_ENABLED; --dry-run: simulated room)")
