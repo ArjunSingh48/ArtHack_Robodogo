@@ -308,11 +308,14 @@ async function round(cue, g) {
   if (grid.length) screen('grid', grid);
   let focus = 0;
   const flash = setInterval(() => { document.querySelectorAll('.cgrid img').forEach((im, i) => im.classList.toggle('on', i === focus % grid.length)); focus++; }, 1400);
-  try {
-    await Promise.all([line('round', 'thinking', g),
-      goBeside(a ? a.side : 'left', a ? a.facing : 'person', g).then(() => takePose(a ? a.dog : MEME_BEHAVIOR[group] || 'sit', g))]);
+  try {  // first it remembers: the line, and attention goes over every picture at least once
+    await Promise.all([line('round', 'thinking', g), sleep(Math.max(4000, grid.length * 1400 + 600), g)]);
   } finally { clearInterval(flash); }
   if (a) { screen('art', id); await line('round', 'found', g); } else await line('round', 'meme_found', g);
+  // then it walks over and takes the painted dog's pose
+  state = 'remembering'; controls(state);
+  await goBeside(a ? a.side : 'left', a ? a.facing : 'person', g);
+  await takePose(a ? a.dog : MEME_BEHAVIOR[group] || 'sit', g);
   await line('round', 'hold', g);
   await sleep(2500, g);
   const shot = photo();
