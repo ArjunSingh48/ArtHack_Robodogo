@@ -2,6 +2,14 @@
 
 [![tests](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
+**Current UX direction:** the robot is the main interface: a shy good boy that
+sees a human, occasionally speaks, and finishes with a 10-second pose. Telegram
+receives a painting or meme with one short caption and italic attribution. The
+web interface is for debugging. See [the UX contract](docs/UX.md) for the agreed
+journey and implementation gaps, and [AGENTS.md](AGENTS.md) for contributor rules.
+The broader modes documented below are existing capabilities and experiments;
+they are not all part of this primary experience.
+
 An interactive installation in which a Unitree robot dog tries to learn how to be a dog from
 humanity's pictures of dogs. A visitor takes a posture; the robot remembers a scene with a similar
 **human–dog relationship**, tries to become that dog with its own body, sends the picture to the
@@ -69,6 +77,23 @@ pytest             # everything should pass
 ```
 
 ## 2. First simulation (no Telegram, no robot)
+
+For a browser rehearsal using the local `.venv`:
+
+```bash
+./run_simulation.sh --auto                 # full show with a simulated participant
+./run_simulation.sh                        # guided rehearsal: press Enter between chapters
+./run_simulation.sh --auto --fast 0.05 --display terminal  # quick end-to-end check
+```
+
+Open **http://127.0.0.1:8765/** while the browser rehearsal is running. It shows the
+artworks and narration as subtitles, with a synthetic participant and preview-only
+delivery. The launcher uses text-only voice and mock-robot settings; no camera,
+API key, pose-model download, or Telegram account is needed. The page closes when
+the show finishes. Stop an automatic run with Ctrl+C; in guided mode, type `q` and
+press Enter. Rehearsal pictures are saved under `data/runtime/rehearsal/`.
+
+For a single pose-to-memory interaction:
 
 ```bash
 itu simulate --posture sitting --another --card card.jpg          # SYNTHETIC skeleton, paintings + memes
