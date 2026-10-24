@@ -39,7 +39,7 @@ No tool has a parameter that chooses a movement. The model decides *when* to loo
 
 1. **OpenAI key.** Get one at https://platform.openai.com/api-keys (billing must be enabled). In `.env`:
    ```
-   OPENAI_API_KEY=sk-...
+   AZURE_OPENAI_API_KEY=sk-...
    OPENAI_REALTIME_MODEL=gpt-realtime-2.1
    OPENAI_VOICE=marin
    ```

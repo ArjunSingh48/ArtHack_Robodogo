@@ -236,9 +236,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     conversation = None
     if settings.openai_enable_live_conversation and settings.voice_configured and not opts.dry_run:
         def client_factory():
-            from openai import AsyncOpenAI
-
-            return AsyncOpenAI(api_key=settings.openai_api_key)
+            return settings.openai_client()
 
         def audio_factory():
             from ..talk.audio import SoundDeviceAudio

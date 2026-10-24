@@ -46,7 +46,9 @@ class Settings(BaseSettings):
     pairing_token_ttl_minutes: int = 10
     session_ttl_minutes: int = 30
 
-    openai_api_key: str = ""
+    # Azure OpenAI (v1 API). Model settings below are Azure deployment names.
+    azure_openai_api_key: str = ""
+    azure_openai_endpoint: str = ""
     # openai = OpenAI voice; none = text-only everywhere (no audio requests at all)
     openai_voice_provider: str = "openai"
     # Free-play lines and `itu talk` (live speech-to-speech)
@@ -121,7 +123,13 @@ class Settings(BaseSettings):
 
     @property
     def voice_configured(self) -> bool:
-        return bool(self.openai_api_key) and self.openai_voice_provider.strip().lower() == "openai"
+        return bool(self.azure_openai_api_key) and self.openai_voice_provider.strip().lower() == "openai"
+
+    def openai_client(self):
+        from openai import AsyncOpenAI
+
+        return AsyncOpenAI(api_key=self.azure_openai_api_key,
+                           base_url=self.azure_openai_endpoint.rstrip("/") + "/openai/v1/")
 
     @property
     def primary_voice(self) -> str:

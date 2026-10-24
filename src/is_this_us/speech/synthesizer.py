@@ -151,10 +151,10 @@ class OpenAIRealtimeSynthesizer:
     def _get_client(self):
         if self._client is not None:
             return self._client
-        from openai import AsyncOpenAI
+        from ..config import get_settings
 
         # a fresh client per utterance: each phrase runs in its own short event loop
-        return AsyncOpenAI(api_key=self._api_key)
+        return get_settings().openai_client()
 
     @staticmethod
     def instructions_for(lang: str, direction: str = "") -> str:
@@ -336,9 +336,9 @@ def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesize
             import openai  # noqa: F401
             import websockets  # noqa: F401  (pulled in by openai[realtime])
         except ImportError:
-            log.warning("OPENAI_API_KEY set but the SDK is missing: pip install -e '.[voice]'. Text-only for now.")
+            log.warning("AZURE_OPENAI_API_KEY set but the SDK is missing: pip install -e '.[voice]'. Text-only for now.")
             return NullSynthesizer()
-        return OpenAIRealtimeSynthesizer(settings.openai_api_key, model, voice, cache,
+        return OpenAIRealtimeSynthesizer(settings.azure_openai_api_key, model, voice, cache,
                                          voice_notes=(purpose == "dialogue"))
     if purpose != "dialogue":
         # no key (or provider=none): previously generated cues still play offline

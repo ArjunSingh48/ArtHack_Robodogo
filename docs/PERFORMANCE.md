@@ -62,7 +62,7 @@ the camera is a drawn **stand-in figure** unless you pass `--source`; the compos
 ## 2. Run the live show
 
 ```bash
-cp .env.example .env              # fill in: OPENAI_API_KEY, TELEGRAM_*, SHOW_TELEGRAM_CHAT_ID …
+cp .env.example .env              # fill in: AZURE_OPENAI_API_KEY, TELEGRAM_*, SHOW_TELEGRAM_CHAT_ID …
 itu setup                         # pose model etc.
 itu show validate
 itu show voice pregenerate        # all narration + short lines → local cache (see docs/VOICE.md)

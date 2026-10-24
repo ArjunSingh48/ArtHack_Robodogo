@@ -40,7 +40,7 @@ def cmd_setup(args) -> None:
     print("Voice:", f"OpenAI — voice {s.primary_voice}; lines {s.openai_realtime_model}, "
                     f"show narration {s.openai_narration_model}, conversation "
                     f"{s.openai_live_model if s.openai_enable_live_conversation else 'off'}"
-          if s.voice_configured else "text-only (no OPENAI_API_KEY)")
+          if s.voice_configured else "text-only (no AZURE_OPENAI_API_KEY)")
 
 
 # ---------------------------------------------------------------------- simulate

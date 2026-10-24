@@ -315,10 +315,8 @@ def cmd_talk(args) -> None:
 
         print(list_devices())
         return
-    if not s.openai_api_key:
-        sys.exit("OPENAI_API_KEY is empty — talk mode needs it. See docs/TALK.md.")
-    from openai import AsyncOpenAI
-
+    if not s.azure_openai_api_key:
+        sys.exit("AZURE_OPENAI_API_KEY is empty — talk mode needs it. See docs/TALK.md.")
     from .bot.app import build_estimator, build_library, build_planner
     from .motion.guard import MotionGuard
     from .notifier import ConsoleNotifier
@@ -383,7 +381,7 @@ def cmd_talk(args) -> None:
             cmd = input("\n  Enter = start a conversation   q = quit  > ").strip().lower()
             if cmd == "q":
                 break
-            convo = LiveConversation(client=AsyncOpenAI(api_key=s.openai_api_key), audio=audio,
+            convo = LiveConversation(client=s.openai_client(), audio=audio,
                                      tools=TalkTools(orch, source), instructions=instructions,
                                      settings=talk_settings)
             try:

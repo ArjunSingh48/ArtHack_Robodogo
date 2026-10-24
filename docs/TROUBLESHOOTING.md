@@ -11,7 +11,7 @@
 | `/arm` refused "gates closed" | Need `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOTION_ENABLED=true`. |
 | Robot never moves after `/stop` | By design: re-arm with `/arm`. |
 | "cooldown" in logs | `MOTION_COOLDOWN_SECONDS` between motions (default 8 s). |
-| No voice | `OPENAI_API_KEY` missing or invalid (log: "OpenAI rejected credentials"); installation continues text-only. |
+| No voice | `AZURE_OPENAI_API_KEY` missing or invalid (log: "OpenAI rejected credentials"); installation continues text-only. |
 | "voice discarded … model said …" in logs | The Realtime model improvised instead of reading; the moment continues as text. Try another `OPENAI_REALTIME_VOICE`/model if frequent. |
 | Voice file but no voice note | `ffmpeg` missing — install it (`brew install ffmpeg` / `apt install ffmpeg`). |
 | Met API 403 | Missing User-Agent (our client sends one); or Met bot protection — retry later. |
@@ -25,7 +25,7 @@
 | Robot stands instead of side-eye / peer | `look_aside` / `peer` not approved yet: test, then `/approve`. |
 | No 📷 button | `IMITATION_CAMERA_SOURCE` empty, or the moment came from a photo (robot not present). |
 | `itu show validate` reports a problem | Fix the named file (`data/performance/…`); unknown `@show` ids must be in `catalog.yaml`. |
-| Show text only, no voice | Clips not generated: `itu show voice status` / `pregenerate` (needs `OPENAI_API_KEY`). No audio player found: install ffmpeg (ffplay). |
+| Show text only, no voice | Clips not generated: `itu show voice status` / `pregenerate` (needs `AZURE_OPENAI_API_KEY`). No audio player found: install ffmpeg (ffplay). |
 | Show voice changed after editing a line | Expected: that cue is regenerated; run `itu show voice pregenerate` before the show and `prune` after. |
 | Projector page blank | Open the URL printed at start; firewall; `SHOW_WEB_HOST=0.0.0.0` to reach it from another machine (private network only). |
 | "does nothing while …" in Telegram | The command doesn't apply in the current state (e.g. `/send` during narration). `/status` shows the state. |

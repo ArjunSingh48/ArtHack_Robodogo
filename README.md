@@ -134,7 +134,7 @@ itu show validate                                    # script, lines, catalog
 itu show --dry-run --auto --fast 0.05                # whole show, unattended, no hardware/keys/Telegram
 itu show --dry-run --display web                     # rehearse with the projector page; you press Enter
 itu show --dry-run --interactive --display web --source webcam   # straight to the pose part
-itu show voice pregenerate                           # needs OPENAI_API_KEY; then the show plays offline
+itu show voice pregenerate                           # needs AZURE_OPENAI_API_KEY; then the show plays offline
 itu show --display web --source webcam               # the real thing (guided: you advance each chapter)
 itu show --display web --source webcam --telegram    # + operator controls /show /next /pause … in Telegram
 ```

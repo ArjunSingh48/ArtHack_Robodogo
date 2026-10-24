@@ -105,7 +105,7 @@ def cmd_voice(args) -> int:
         print(f"removed {prune(items, voice)} unused clip(s)")
         return 0
     if not s.voice_configured:
-        print("OPENAI_API_KEY is not set (or OPENAI_VOICE_PROVIDER is not 'openai'): cannot generate audio.")
+        print("AZURE_OPENAI_API_KEY is not set (or OPENAI_VOICE_PROVIDER is not 'openai'): cannot generate audio.")
         return 2
     targets = items
     if args.action == "regenerate":
@@ -138,7 +138,7 @@ def cmd_audition(args) -> int:
     """Same sample in several voices, so the team can choose ONE voice for the whole show."""
     s = get_settings()
     if not s.voice_configured:
-        print("Set OPENAI_API_KEY first.")
+        print("Set AZURE_OPENAI_API_KEY first.")
         return 2
     from ..speech.synthesizer import AudioCache, OpenAIRealtimeSynthesizer
     from .voice import Speaker
@@ -155,7 +155,7 @@ def cmd_audition(args) -> int:
         if v not in REALTIME_VOICES:
             print(f"  {v}: not a Realtime voice — skipped")
             continue
-        synth = OpenAIRealtimeSynthesizer(s.openai_api_key, args.model or s.openai_narration_model, v,
+        synth = OpenAIRealtimeSynthesizer(s.azure_openai_api_key, args.model or s.openai_narration_model, v,
                                           AudioCache(out / v), voice_notes=False)
         res = synth.synthesize(text, args.lang, "shy curiosity; soft, young in spirit but not childish")
         if res is None:
