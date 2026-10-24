@@ -126,6 +126,12 @@ data/performance/catalog.yaml   ← which picture belongs to which chapter; what
    pipeline) · composer · PhotoStore · Delivery (Telegram / preview) · MotionCues (existing guard)
 ```
 
+**The participant sees what the robot sees.** Whenever the robot is looking (the small moments and the
+pose session), the projector page shows the camera image next to the painting — mirrored like a mirror,
+with the detected skeleton drawn on top and a short checklist: ✓ I can see you · ✓ whole body in the
+picture · ✓ in the middle · ✓ sitting · ✓ head tilted. It disappears before the photo/composition. Frames
+stay in memory (replaced ~5× per second) and are never saved.
+
 **The participant is part of the story from the first chapter.** Every chapter ends with a small
 *moment* (`@try` in the script): the robot turns to the person in front of the camera and asks for
 something small that belongs to that chapter — "Is someone there?", "Could you stand like the hunter?",

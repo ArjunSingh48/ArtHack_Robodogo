@@ -27,6 +27,7 @@ from typing import Callable
 
 from .catalog import PerformanceCatalog, ShowArtifact
 from .lines import Lines
+from .live_view import checks_for
 from .pose_session import Comparison, PoseCoach, PoseReader, PoseReading, compare, read_painted_figure
 from .script import Chapter, Cue, Script
 from .stage import Stage, View
@@ -138,6 +139,7 @@ class StoryDirector:
         self.tries: list[tuple[str, bool]] = []  # (cue id, seen) — what the participant joined
         self._camera = None
         self._camera_failed = False
+        self.live_tick_s = min(tick_s, 0.2)  # faster looking while the live view is on screen
 
         self.session_id = ""
         self.state = ShowState.IDLE
@@ -492,7 +494,10 @@ class StoryDirector:
         deadline = self.clock() + self.try_seconds
         streak, seen = 0, False
         while self.clock() < deadline:
-            reading, _ = await self._read_pose(camera)
+            reading, frame = await self._read_pose(camera)
+            await self._publish_live(frame, reading, checks_for(
+                reading, posture=cue.target if cue.target in ("standing", "sitting") else None,
+                head_tilt=cue.target == "head_tilt", any_person=cue.target == "any"))
             if reading is not None:
                 self.last_reading = reading
                 streak = streak + 1 if self._moment_seen(cue.target, reading) else 0
@@ -500,7 +505,7 @@ class StoryDirector:
                     seen = True
                     break
             try:
-                cmd = await asyncio.wait_for(self._get_cmd(), self.tick_s)
+                cmd = await asyncio.wait_for(self._get_cmd(), self._tick())
             except asyncio.TimeoutError:
                 continue
             if cmd is Cmd.CANCEL:
@@ -522,6 +527,7 @@ class StoryDirector:
                 return {Cmd.NEXT: "done", Cmd.SKIP: "skip", Cmd.POSE: "pose"}[cmd]
         self.tries.append((cue.id, seen))
         await self.say(cue.yes if seen else cue.no, kind="narration", direction=ch.voice)
+        self._clear_live()
         return "done"
 
     async def _read_pose(self, camera) -> tuple[PoseReading | None, object | None]:
@@ -535,6 +541,36 @@ class StoryDirector:
         except Exception as exc:
             log.warning("pose reading failed: %s", exc)
             return None, None
+
+    @property
+    def _live(self):
+        return getattr(self.stage, "live", None)
+
+    async def _publish_live(self, frame, reading: PoseReading | None, checks) -> None:
+        """Show the participant what the camera sees (mirrored, skeleton, checklist). In memory only."""
+        live = self._live
+        if live is None or frame is None:
+            return
+        from .live_view import render
+
+        try:
+            # like a mirror — unless the camera already mirrors, or it is the drawn rehearsal stand-in
+            mirror = not getattr(self.pose_reader, "mirrored", False) and frame.source != "synthetic"
+            jpeg = await asyncio.to_thread(render, frame.image, reading, mirror=mirror)
+            live(jpeg, [(c.label, c.ok) for c in checks])
+        except Exception as exc:
+            log.debug("live view failed: %s", exc)
+
+    def _clear_live(self) -> None:
+        live = self._live
+        if live is not None:
+            try:
+                live(None, [])
+            except Exception:
+                pass
+
+    def _tick(self) -> float:
+        return self.live_tick_s if self._live is not None else self.tick_s
 
     async def _guide_pose(self, art: ShowArtifact, camera) -> str:
         """Participant readiness. → "ready" | "declined" | "timeout". No forced timer for capture."""
@@ -551,7 +587,9 @@ class StoryDirector:
                 return "timeout"
             hint = None
             if not manual:
-                reading, _ = await self._read_pose(camera)
+                reading, frame = await self._read_pose(camera)
+                await self._publish_live(frame, reading, checks_for(reading, posture=spec.posture,
+                                                                    head_tilt=spec.head_tilt))
                 if reading is not None:
                     self.last_reading = reading
                     hint = coach.next_hint(reading)
@@ -562,7 +600,7 @@ class StoryDirector:
                     await self.say_line("pose", "ready_prompt")
             # wait a tick for operator commands
             try:
-                cmd = await asyncio.wait_for(self._get_cmd(), self.tick_s)
+                cmd = await asyncio.wait_for(self._get_cmd(), self._tick())
             except asyncio.TimeoutError:
                 continue
             if cmd is Cmd.CANCEL:
@@ -582,6 +620,7 @@ class StoryDirector:
         self._set_state(ShowState.CAPTURE)
         await self.say_line("consent", "capture")
         reading, frame = await self._read_pose(camera)
+        self._clear_live()
         if frame is None and camera is not None:
             try:
                 frame = await asyncio.to_thread(camera.read)
@@ -619,6 +658,7 @@ class StoryDirector:
         try:
             ready = await self._guide_pose(art, camera)
             if ready != "ready":
+                self._clear_live()
                 await self.say_line("decline", "ok")
                 return "alone"
             self._set_state(ShowState.CONSENT)
@@ -627,6 +667,7 @@ class StoryDirector:
             cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.CONSENT_NO, Cmd.DECLINE, Cmd.SKIP},
                                         timeout=self.consent_timeout_s)
             if cmd is not Cmd.CONSENT_YES:
+                self._clear_live()
                 await self.say_line("consent", "declined")
                 return "alone"
             await self.say_line("consent", "thanks")
@@ -759,6 +800,7 @@ class StoryDirector:
                 self.motion.stop("performance error")
             self._set_state(ShowState.ERROR, str(exc))
         finally:
+            self._clear_live()
             self._close_camera()
         return ShowResult(self.session_id, self.state, self.outcome, self.artifact.id if self.artifact else None,
                           self.composition, self.delivered, self.delivery_detail, list(self.transitions),

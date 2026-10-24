@@ -108,6 +108,9 @@ class RecordingStage:
     def close(self) -> None:
         pass
 
+    def live(self, jpeg: bytes | None, checks: list) -> None:
+        self.events.append(("live", bool(jpeg)))
+
     def of(self, kind: str) -> list:
         return [v for k, v in self.events if k == kind]
 
@@ -116,6 +119,11 @@ class MultiStage:
     def __init__(self, *stages: Stage):
         self.stages = [s for s in stages if s is not None]
         self.web = None
+
+    @property
+    def live(self):
+        """Live camera view: only when a projector page exists."""
+        return self.web.live if self.web is not None else None
 
     def __getattr__(self, name):
         def call(*a, **kw):
@@ -135,7 +143,14 @@ PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 *{box-sizing:border-box}html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
 font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 #chapter{position:fixed;top:3vh;left:4vw;letter-spacing:.35em;font:12px/1 system-ui,sans-serif;color:var(--accent);text-transform:uppercase}
-#stage{position:fixed;inset:9vh 4vw 26vh 4vw;display:flex;align-items:center;justify-content:center;gap:4vw}
+#stage{position:fixed;inset:9vh 4vw 26vh 4vw;display:flex;align-items:center;justify-content:center;gap:3vw}
+#view{height:100%;display:flex;align-items:center;justify-content:center;gap:4vw;min-width:0}
+#live{display:none;height:100%;flex-direction:column;align-items:center;justify-content:center;max-width:46vw}
+#live img{max-width:100%;max-height:calc(100% - 5.5em);object-fit:contain;border-radius:6px;box-shadow:0 0 0 2px var(--accent)}
+#live .cap{margin-top:1.2vh;font:clamp(11px,1vw,15px) system-ui,sans-serif;color:var(--muted);letter-spacing:.2em}
+#checks{margin-top:.8vh;display:flex;gap:1.2vw;flex-wrap:wrap;justify-content:center;font:clamp(13px,1.3vw,19px) system-ui,sans-serif}
+#checks span{color:var(--muted)}#checks span.ok{color:#a0d6aa}
+body.live #view .figure{max-width:42vw}
 #stage img{max-width:100%;max-height:calc(100% - 6.5em);min-height:0;object-fit:contain;box-shadow:0 0 0 1px #3a363d}
 .figure{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;max-width:62vw}
 .label{margin-top:1.6vh;text-align:center;font-size:clamp(13px,1.6vw,22px)}
@@ -157,7 +172,8 @@ font:13px system-ui,sans-serif;z-index:5}
 #msg{position:fixed;top:6.5vh;right:2vw;color:var(--muted);font:12px system-ui,sans-serif}
 </style></head><body>
 <div id="chapter"></div><div id="controls"></div><div id="msg"></div>
-<div id="stage"></div><div id="subtitle"></div><div id="notice"></div>
+<div id="stage"><div id="view"></div><div id="live"><img id="liveimg" alt="what the robot sees">
+<div class="cap">WHAT I SEE</div><div id="checks"></div></div></div><div id="subtitle"></div><div id="notice"></div>
 <script>
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
@@ -180,10 +196,15 @@ async function tick(){
   document.getElementById('chapter').textContent=s.chapter||'';
   document.getElementById('subtitle').textContent=s.subtitle||'';
   document.getElementById('notice').textContent=s.notice||'';
-  if(s.view_html!==last){document.getElementById('stage').innerHTML=s.view_html;last=s.view_html}
+  if(s.view_html!==last){document.getElementById('view').innerHTML=s.view_html;last=s.view_html}
+  const lv=document.getElementById('live');
+  if(s.live&&s.live.on){document.body.classList.add('live');lv.style.display='flex';
+   document.getElementById('liveimg').src='/live.jpg?v='+s.live.v;
+   document.getElementById('checks').innerHTML=s.live.checks.map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
+  else{document.body.classList.remove('live');lv.style.display='none';}
   if(s.state!==lastState){controls(s.state);lastState=s.state}
  }catch(e){}
- setTimeout(tick,350)}
+ setTimeout(tick,document.body.classList.contains('live')?150:350)}
 tick();
 </script></body></html>"""
 
@@ -210,6 +231,7 @@ class WebStage:
                        "updated": 0.0}
         self._files: dict[str, Path] = {}
         self._control = None  # (callback, loop) once enabled
+        self._live_jpeg: bytes | None = None  # newest camera frame, in memory only
         self.key = secrets.token_urlsafe(9)  # only the operator URL can press buttons
         stage = self
 
@@ -240,6 +262,12 @@ class WebStage:
             def do_GET(self):  # noqa: N802
                 if urlparse(self.path).path in ("/", "/index.html"):
                     return self._send(200, "text/html; charset=utf-8", PAGE.encode())
+                if urlparse(self.path).path == "/live.jpg":
+                    with stage._lock:
+                        frame = stage._live_jpeg
+                    if frame:
+                        return self._send(200, "image/jpeg", frame)
+                    return self._send(404, "text/plain", b"no live view")
                 if self.path.startswith("/state"):
                     with stage._lock:
                         body = json.dumps(stage._state).encode()
@@ -302,6 +330,14 @@ class WebStage:
     def status(self, state: str, detail: str = "") -> None:
         if state != "listening":
             self._set(state=state)
+
+    def live(self, jpeg: bytes | None, checks: list) -> None:
+        """Newest camera view (or None to hide it). Kept in memory, replaced by the next frame."""
+        with self._lock:
+            self._live_jpeg = jpeg
+            v = (self._state.get("live") or {}).get("v", 0) + 1
+            self._state["live"] = {"on": jpeg is not None, "checks": checks if jpeg else [], "v": v}
+            self._state["updated"] = time.time()
 
     def enable_controls(self, callback, loop) -> None:
         """callback(cmd) -> (ok, msg), run on the show's event loop."""

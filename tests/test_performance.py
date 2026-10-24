@@ -832,3 +832,57 @@ async def test_telegram_show_interactive(tmp_path, script, catalog, lines):
     assert ctrl.director.chapters_played == ["invitation"]
     ctrl.command(Cmd.CANCEL)
     await ctrl.task
+
+
+# ---------------------------------------------------------------- live camera view
+async def test_live_view_only_while_the_robot_is_looking(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines)
+    answer(d, HAPPY)
+    await d.run()
+    live = [v for k, v in d.stage.events if k == "live"]
+    assert True in live and live[-1] is False  # shown, and hidden again at the end
+    # it is on during the pose session and hidden before the composition appears
+    ev = d.stage.events
+    first_comp = next(i for i, (k, v) in enumerate(ev) if k == "show" and v == "composition")
+    last_live = max(i for i, (k, v) in enumerate(ev) if k == "live" and v is True)
+    assert last_live < first_comp
+    assert any(k == "live" and v is False for k, v in ev[last_live:first_comp])
+
+
+def test_live_view_render_and_checks():
+    from is_this_us.performance.live_view import checks_for, render
+    from is_this_us.performance.runtime import SyntheticParticipant
+
+    stand_in = SyntheticParticipant("sitting", head_tilt_deg=14)
+    frame = stand_in.read()
+    reading = PoseReader(stand_in).read(frame.image)
+    jpeg = render(frame.image, reading)
+    assert Image.open(BytesIO(jpeg)).format == "JPEG"
+    checks = {c.label: c.ok for c in checks_for(reading, posture="sitting", head_tilt=True)}
+    assert checks == {"I can see you": True, "whole body in the picture": True, "in the middle": True,
+                      "sitting": True, "head tilted": True}
+    nobody = checks_for(None, posture="standing")
+    assert not any(c.ok for c in nobody)
+    assert [c.label for c in checks_for(reading, any_person=True)] == ["I can see you"]
+
+
+def test_web_live_frame_is_memory_only_and_hidden_when_off():
+    import json
+    import urllib.error
+    import urllib.request
+
+    from is_this_us.performance.stage import WebStage
+
+    web = WebStage("127.0.0.1", 0)
+    try:
+        with pytest.raises(urllib.error.HTTPError):
+            urllib.request.urlopen(web.url + "live.jpg")
+        web.live(b"\xff\xd8jpeg", [("sitting", True)])
+        assert urllib.request.urlopen(web.url + "live.jpg").read() == b"\xff\xd8jpeg"
+        state = json.loads(urllib.request.urlopen(web.url + "state").read())
+        assert state["live"]["on"] and state["live"]["checks"] == [["sitting", True]]
+        web.live(None, [])
+        with pytest.raises(urllib.error.HTTPError):
+            urllib.request.urlopen(web.url + "live.jpg")
+    finally:
+        web.close()

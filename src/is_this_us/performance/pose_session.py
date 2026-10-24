@@ -39,6 +39,7 @@ class PoseReading:
     head_tilt: bool | None = None
     observation: HumanObservation | None = None
     people: int = 0
+    landmarks: object | None = None  # the selected person's PersonLandmarks (for the live view only)
 
     def summary(self) -> dict:
         """Structured observation for a voice model — no numbers, no appearance."""
@@ -91,7 +92,7 @@ class PoseReader:
             side = "move_left" if self.mirrored else "move_right"
         tilt = head_tilt_deg(person.xy, person.visibility)
         posture = obs.posture.value if obs.posture is not HumanPosture.UNKNOWN else None
-        return PoseReading(person_visible=True, framing=framing, side=side, posture=posture,
+        return PoseReading(person_visible=True, landmarks=person, framing=framing, side=side, posture=posture,
                            head_tilt=None if tilt is None else tilt >= HEAD_TILT_DEG, observation=obs,
                            people=len(people))
 
