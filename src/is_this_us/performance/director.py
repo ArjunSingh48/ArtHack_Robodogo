@@ -1516,6 +1516,9 @@ class StoryDirector:
             pic = self._picture or (self.photo_factory(None) if self.photo_factory else None)
             if pic is not None:
                 self._camera = None
+                if getattr(pic, "pictures", 0) > 1:  # sample photos: a different one opens each show
+                    pic.select(self.rng.randrange(pic.pictures))
+                    self._shown_pictures = {pic._i}
                 self.frame_source_factory = lambda: pic  # noqa: E731
                 self.pose_reader = PoseReader(pic)
                 break
@@ -1573,9 +1576,12 @@ class StoryDirector:
             camera.select(i)
             frame = camera.read()
             posture = self.pose_reader.read(frame.image, frame.source).posture
-            return match_score(self.catalog, era, posture) - (2.0 if i in used else 0.0)
+            return match_score(self.catalog, era, posture) - (100.0 if i in used else 0.0)  # never twice
+        if len(used) >= camera.pictures:  # all shown: start over
+            used.clear()
         scores = [await asyncio.to_thread(fit, i) for i in range(camera.pictures)]
-        best = max(range(len(scores)), key=lambda i: scores[i])
+        top = max(scores)
+        best = self.rng.choice([i for i, sc in enumerate(scores) if sc == top])  # ties: not always the same one
         camera.select(best)
         used.add(best)
 
