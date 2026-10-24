@@ -1,42 +1,56 @@
 """The robot's voice.
 
-* `ElevenLabsSynthesizer` — official `elevenlabs` SDK (`client.text_to_speech.convert`).
-  Receives ONLY the sentence to speak: never images, landmarks or user identifiers.
-* Audio is cached by a hash of (text, voice, model, settings) to avoid repeat API calls.
-* Telegram voice notes need OGG/Opus; we convert with FFmpeg (libopus).
-* Any failure (no key, invalid key, rate limit, network) degrades to text-only; the
-  installation never stops because the voice is unavailable.
+* `OpenAIRealtimeSynthesizer` — OpenAI Realtime API over WebSocket (official `openai`
+  SDK, `client.realtime.connect`). It receives ONLY the sentence to speak: never
+  images, landmarks or user identifiers.
+* Realtime models are conversational. We use them as a *reader*: the session
+  instructions say "read this text aloud exactly", and the model's own transcript of
+  what it said is compared with the script. If it improvised, the audio is discarded
+  and the moment continues as text. The robot never says words it was not given, and
+  nothing the voice model returns is ever used for anything but playback.
+* Audio (24 kHz PCM16 mono) is cached as WAV by a hash of (text, voice, model,
+  direction) to avoid repeat API calls; Telegram voice notes are OGG/Opus via FFmpeg.
+* Any failure (no key, invalid key, rate limit, network, timeout) degrades to
+  text-only; the installation never stops because the voice is unavailable.
 """
 
 from __future__ import annotations
 
+import asyncio
+import base64
+import difflib
 import hashlib
 import json
 import logging
+import re
 import shutil
 import subprocess
 import threading
-import time
+import wave
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
 log = logging.getLogger(__name__)
 
-# Voice direction: soft, calm, slightly slow; low style exaggeration so it is not "cute".
-DEFAULT_VOICE_SETTINGS = {
-    "stability": 0.62,
-    "similarity_boost": 0.75,
-    "style": 0.12,
-    "use_speaker_boost": False,
-    "speed": 0.9,
-}
+SAMPLE_RATE = 24_000  # Realtime "audio/pcm" output: 24 kHz, mono, signed 16-bit little-endian
+
+LANGUAGE_NAMES = {"en": "English", "ru": "Russian", "de": "German"}
+
+# Voice direction for the Realtime model: soft, calm, slightly shy; not cute, not dramatic.
+VOICE_DIRECTION = (
+    "You are the voice of a small robot dog in an art installation. You are a reader, not a "
+    "conversation partner. Read the user's text aloud EXACTLY as written, word for word, in {language}. "
+    "Do not answer it, comment on it, translate it, greet, or add anything before or after. "
+    "Voice: soft, gentle, calm, intimate, slightly shy and curious; a little slow; "
+    "take a short breath at every '…'. Not robotic, not cartoonishly cute, not theatrical."
+)
 
 
 @dataclass
 class SpeechAudio:
-    mp3_path: Path
-    ogg_path: Path | None
+    audio_path: Path  # WAV (cached); playable locally
+    ogg_path: Path | None  # Telegram voice note
     cached: bool
     provider: str
 
@@ -53,23 +67,31 @@ class AudioCache:
         self.dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def key(text: str, voice_id: str, model_id: str, settings: dict) -> str:
-        blob = json.dumps({"t": text, "v": voice_id, "m": model_id, "s": settings}, sort_keys=True)
+    def key(text: str, voice: str, model: str, settings: dict) -> str:
+        blob = json.dumps({"t": text, "v": voice, "m": model, "s": settings}, sort_keys=True)
         return hashlib.sha256(blob.encode()).hexdigest()[:24]
 
     def paths(self, key: str) -> tuple[Path, Path]:
-        return self.dir / f"{key}.mp3", self.dir / f"{key}.ogg"
+        return self.dir / f"{key}.wav", self.dir / f"{key}.ogg"
 
 
-def to_telegram_voice(mp3: Path, ogg: Path) -> Path | None:
+def write_wav(path: Path, pcm16: bytes, rate: int = SAMPLE_RATE) -> None:
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm16)
+
+
+def to_telegram_voice(src: Path, ogg: Path) -> Path | None:
     """Convert to OGG/Opus mono (Telegram voice-note format). Returns None if FFmpeg missing."""
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
-        log.warning("ffmpeg not found; voice notes disabled (audio still sent as file)")
+        log.warning("ffmpeg not found; voice notes disabled")
         return None
     if ogg.exists():
         return ogg
-    cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", str(mp3), "-ac", "1", "-c:a", "libopus",
+    cmd = [ffmpeg, "-y", "-loglevel", "error", "-i", str(src), "-ac", "1", "-c:a", "libopus",
            "-b:a", "48k", "-application", "voip", str(ogg)]
     try:
         subprocess.run(cmd, check=True, timeout=30)
@@ -77,6 +99,18 @@ def to_telegram_voice(mp3: Path, ogg: Path) -> Path | None:
     except (subprocess.SubprocessError, OSError) as exc:
         log.warning("ffmpeg conversion failed: %s", exc)
         return None
+
+
+def _normalize(s: str) -> str:
+    return re.sub(r"[^\w]+", " ", s.lower()).strip()
+
+
+def faithful(script: str, spoken: str, threshold: float = 0.8) -> bool:
+    """Did the voice model say (essentially) the script? Compared on words only."""
+    a, b = _normalize(script), _normalize(spoken)
+    if not a or not b:
+        return False
+    return difflib.SequenceMatcher(None, a, b).ratio() >= threshold
 
 
 class NullSynthesizer:
@@ -88,70 +122,110 @@ class NullSynthesizer:
         return None
 
 
-class ElevenLabsSynthesizer:
-    def __init__(self, api_key: str, voice_id: str, model_id: str, cache: AudioCache,
-                 voice_settings: dict | None = None, client=None):
-        self.voice_id = voice_id
-        self.model_id = model_id
+class VoiceRejected(RuntimeError):
+    """The model did not read the script faithfully."""
+
+
+class OpenAIRealtimeSynthesizer:
+    def __init__(self, api_key: str, model: str, voice: str, cache: AudioCache, *,
+                 timeout_s: float = 25.0, fidelity: float = 0.8, client=None):
+        self.model = model
+        self.voice = voice
         self.cache = cache
-        self.settings = dict(voice_settings or DEFAULT_VOICE_SETTINGS)
-        self.available = bool(api_key and voice_id)
-        self._client = client
+        self.timeout_s = timeout_s
+        self.fidelity = fidelity
+        self.available = bool(api_key)
         self._api_key = api_key
+        self._client = client  # AsyncOpenAI-compatible; injectable for tests
         self._lock = threading.Lock()
 
     def _get_client(self):
-        if self._client is None:
-            from elevenlabs.client import ElevenLabs
+        if self._client is not None:
+            return self._client
+        from openai import AsyncOpenAI
 
-            self._client = ElevenLabs(api_key=self._api_key)
-        return self._client
+        # a fresh client per utterance: each phrase runs in its own short event loop
+        return AsyncOpenAI(api_key=self._api_key)
 
-    def _request(self, text: str, lang: str) -> bytes:
-        from elevenlabs import VoiceSettings
-
-        kwargs = dict(
-            voice_id=self.voice_id,
-            text=text,
-            model_id=self.model_id,
-            output_format="mp3_44100_128",
-            voice_settings=VoiceSettings(**self.settings),
-        )
-        if lang and lang != "en" and "multilingual" not in self.model_id:
-            kwargs["language_code"] = lang
-        chunks = self._get_client().text_to_speech.convert(**kwargs)
-        return b"".join(chunks)
+    async def _speak(self, text: str, lang: str) -> tuple[bytes, str]:
+        """One short Realtime session: configure → send text → collect audio + transcript."""
+        instructions = VOICE_DIRECTION.format(language=LANGUAGE_NAMES.get(lang, "English"))
+        audio, transcript = bytearray(), []
+        async with self._get_client().realtime.connect(model=self.model, max_retries=1) as conn:
+            await conn.session.update(session={
+                "type": "realtime",
+                "instructions": instructions,
+                "output_modalities": ["audio"],
+                "audio": {"output": {"format": {"type": "audio/pcm", "rate": SAMPLE_RATE}, "voice": self.voice}},
+            })
+            await conn.conversation.item.create(item={
+                "type": "message", "role": "user",
+                "content": [{"type": "input_text", "text": text}],
+            })
+            await conn.response.create()
+            while True:
+                event = await conn.recv()
+                etype = getattr(event, "type", "")
+                if etype == "response.output_audio.delta":
+                    audio.extend(base64.b64decode(event.delta))
+                elif etype == "response.output_audio_transcript.done":
+                    transcript.append(event.transcript or "")
+                elif etype == "error":
+                    err = getattr(event, "error", None)
+                    raise RealtimeError(getattr(err, "code", None) or "error", getattr(err, "message", "") or "")
+                elif etype == "response.done":
+                    break
+        return bytes(audio), " ".join(transcript)
 
     def synthesize(self, text: str, lang: str = "en") -> SpeechAudio | None:
         if not self.available or not text.strip():
             return None
-        key = AudioCache.key(text, self.voice_id, self.model_id, self.settings)
-        mp3, ogg = self.cache.paths(key)
-        if mp3.exists():
-            return SpeechAudio(mp3, to_telegram_voice(mp3, ogg), cached=True, provider="elevenlabs")
+        key = AudioCache.key(text, self.voice, self.model, {"direction": VOICE_DIRECTION, "lang": lang})
+        wav, ogg = self.cache.paths(key)
+        if wav.exists():
+            return SpeechAudio(wav, to_telegram_voice(wav, ogg), cached=True, provider="openai-realtime")
         with self._lock:
             for attempt in range(2):
                 try:
-                    audio = self._request(text, lang)
+                    audio, said = asyncio.run(asyncio.wait_for(self._speak(text, lang), self.timeout_s))
+                    if not audio:
+                        raise VoiceRejected("no audio returned")
+                    if not faithful(text, said, self.fidelity):
+                        raise VoiceRejected(f"model said {said!r} instead of the script")
                     break
-                except Exception as exc:  # SDK raises elevenlabs.core.api_error.ApiError + httpx errors
+                except VoiceRejected as exc:
+                    log.warning("voice discarded (%s); %s", exc, "retrying once" if attempt == 0 else "text-only")
+                    if attempt == 1:
+                        return None
+                except Exception as exc:  # openai.* errors, websocket errors, timeouts
                     status = getattr(exc, "status_code", None)
-                    if status in (401, 403):
-                        log.error("ElevenLabs rejected credentials (HTTP %s); voice disabled", status)
+                    # Realtime reports problems as WebSocket close reasons,
+                    # e.g. Close(code=3000, reason="invalid_request_error.invalid_api_key")
+                    reason = str(getattr(exc, "reason", "") or getattr(exc, "code", "") or "")
+                    code = getattr(exc, "code", None)
+                    if (status in (401, 403) or code in ("invalid_api_key", "authentication_error")
+                            or "invalid_api_key" in reason or "authentication" in reason):
+                        log.error("OpenAI rejected credentials; voice disabled")
                         self.available = False
                         return None
-                    if status == 429 and attempt == 0:
-                        log.warning("ElevenLabs rate limit; retrying once in 2 s")
+                    if (status == 429 or code == "rate_limit_exceeded" or "rate_limit" in reason) and attempt == 0:
+                        log.warning("OpenAI rate limit; retrying once in 2 s")
+                        import time
+
                         time.sleep(2)
                         continue
-                    log.warning("ElevenLabs request failed (%s); continuing text-only", status or exc)
+                    log.warning("OpenAI Realtime failed (%s); continuing text-only", reason or status or exc)
                     return None
             else:
                 return None
-        if not audio:
-            return None
-        mp3.write_bytes(audio)
-        return SpeechAudio(mp3, to_telegram_voice(mp3, ogg), cached=False, provider="elevenlabs")
+        write_wav(wav, audio)
+        return SpeechAudio(wav, to_telegram_voice(wav, ogg), cached=False, provider="openai-realtime")
+
+
+class RealtimeError(RuntimeError):
+    def __init__(self, code: str, message: str):
+        super().__init__(f"{code}: {message}")
+        self.code = code
 
 
 class MockSynthesizer:
@@ -169,11 +243,11 @@ class MockSynthesizer:
         if self.fail:
             return None
         key = AudioCache.key(text, "mock", "mock", {})
-        mp3, ogg = self.cache.paths(key)
-        cached = mp3.exists()
-        mp3.write_bytes(b"ID3mock" + text.encode())
+        wav, ogg = self.cache.paths(key)
+        cached = wav.exists()
+        write_wav(wav, b"\x00\x00" * 240)
         ogg.write_bytes(b"OggSmock")
-        return SpeechAudio(mp3, ogg, cached=cached, provider="mock")
+        return SpeechAudio(wav, ogg, cached=cached, provider="mock")
 
 
 class LocalSpeakerPlayer:
@@ -182,7 +256,7 @@ class LocalSpeakerPlayer:
     Used because the Go2 Python SDK exposes no audio-playback API.
     """
 
-    CANDIDATES = (["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"], ["afplay"], ["mpg123", "-q"])
+    CANDIDATES = (["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet"], ["afplay"], ["aplay", "-q"])
 
     def __init__(self, enabled: bool = True):
         self.cmd = None
@@ -202,13 +276,14 @@ class LocalSpeakerPlayer:
 
 def make_synthesizer(settings) -> SpeechSynthesizer:
     cache = AudioCache(settings.audio_cache_dir)
-    if settings.elevenlabs_configured:
+    if settings.voice_configured:
         try:
-            import elevenlabs  # noqa: F401
+            import openai  # noqa: F401
+            import websockets  # noqa: F401  (pulled in by openai[realtime])
         except ImportError:
-            log.warning("ELEVENLABS_* set but the SDK is missing: pip install -e '.[voice]'. Text-only for now.")
+            log.warning("OPENAI_API_KEY set but the SDK is missing: pip install -e '.[voice]'. Text-only for now.")
             return NullSynthesizer()
-        return ElevenLabsSynthesizer(settings.elevenlabs_api_key, settings.elevenlabs_voice_id,
-                                     settings.elevenlabs_model_id, cache)
-    log.info("ElevenLabs not configured; text-only voice")
+        return OpenAIRealtimeSynthesizer(settings.openai_api_key, settings.openai_realtime_model,
+                                         settings.openai_realtime_voice, cache)
+    log.info("OpenAI voice not configured; text-only voice")
     return NullSynthesizer()

@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     pairing_token_ttl_minutes: int = 10
     session_ttl_minutes: int = 30
 
-    elevenlabs_api_key: str = ""
-    elevenlabs_voice_id: str = ""
-    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    openai_api_key: str = ""
+    openai_realtime_model: str = "gpt-realtime-2.1"
+    openai_realtime_voice: str = "marin"
     local_audio_playback: bool = False
 
     camera_source: str = "webcam"
@@ -74,8 +74,8 @@ class Settings(BaseSettings):
         return [int(part) for part in str(value).replace(" ", "").split(",") if part]
 
     @property
-    def elevenlabs_configured(self) -> bool:
-        return bool(self.elevenlabs_api_key and self.elevenlabs_voice_id)
+    def voice_configured(self) -> bool:
+        return bool(self.openai_api_key)
 
     @property
     def real_robot_possible(self) -> bool:

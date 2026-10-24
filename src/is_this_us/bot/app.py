@@ -255,7 +255,7 @@ async def run_bot(settings: Settings) -> None:
 
     task = asyncio.create_task(cleanup_loop())
     log.info("Bot @%s running (mode=%s, robot=%s, voice=%s, archives=%s, default=%s)", me.username,
-             settings.app_mode, settings.robot_model, "elevenlabs" if settings.elevenlabs_configured else "text-only",
+             settings.app_mode, settings.robot_model, "openai-realtime" if settings.voice_configured else "text-only",
              ",".join(repo.archives()), settings.default_archive)
     try:
         await dp.start_polling(bot)

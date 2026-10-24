@@ -33,6 +33,6 @@ class ConsoleNotifier:
         print(f"\n    {outcome.utterance.lines[-1]} 🥺")
         print("    [♡ Yes, that's us]  [↻ Try another painting]  [✧ Keep this memory]")
         if outcome.speech:
-            print(f"    🔊 voice: {outcome.speech.ogg_path or outcome.speech.mp3_path}")
+            print(f"    🔊 voice: {outcome.speech.ogg_path or outcome.speech.audio_path}")
         print("─" * 64)
         return "printed"

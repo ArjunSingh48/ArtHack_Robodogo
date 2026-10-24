@@ -37,7 +37,8 @@ def cmd_setup(args) -> None:
         print("  " + line)
     Storage(s.database_path).close()
     print("Database ready:", s.database_path)
-    print("Voice:", "ElevenLabs configured" if s.elevenlabs_configured else "text-only (no ElevenLabs key)")
+    print("Voice:", f"OpenAI Realtime ({s.openai_realtime_model}, voice {s.openai_realtime_voice})"
+          if s.voice_configured else "text-only (no OPENAI_API_KEY)")
 
 
 # ---------------------------------------------------------------------- simulate

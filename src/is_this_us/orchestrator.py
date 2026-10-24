@@ -251,7 +251,7 @@ class InteractionOrchestrator:
                                      first_meme=first_meme)
         speech = await asyncio.to_thread(self.synth.synthesize, utterance.spoken, lang)
         if speech and origin == "installation" and self.player and self.player.available:
-            self.player.play(speech.mp3_path)
+            self.player.play(speech.audio_path)
 
         shown = exclude + ([artwork.id] if artwork else [])
         self.storage.save_interaction(
