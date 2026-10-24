@@ -82,7 +82,8 @@ def make_director(tmp_path, script, catalog, lines, *, mode="automatic", posture
     d = StoryDirector(script=script, catalog=catalog, lines=lines, voice=voice or fast_voice(), stage=RecordingStage(),
                       store=PhotoStore(tmp_path / "out", retention_minutes=60), pose_reader=reader,
                       frame_source_factory=factory, delivery=delivery if delivery is not None else CountingDelivery(),
-                      mode=mode, tick_s=0.005, hint_gap_s=0.0, rng=random.Random(0), **kw)
+                      mode=mode, tick_s=0.005, hint_gap_s=0.0, rng=random.Random(0),
+                      **{"try_seconds": 0.05, **kw})
     return d
 
 
@@ -348,7 +349,8 @@ async def test_repeat_at_hold_replays_last_segment(tmp_path, script, catalog, li
             asyncio.get_running_loop().call_later(0.01, lambda: director.command(cmd))
     d.listeners.append(on_state)
     await d.run()
-    assert d.stage.of("subtitle").count("How do I become a good dog?") == 2
+    # the first hold follows the "Is someone there?" moment: repeat asks again
+    assert d.stage.of("subtitle").count("Oh.\nIs someone there?") == 2
 
 
 async def test_pose_command_jumps_to_interactive(tmp_path, script, catalog, lines):
@@ -721,3 +723,112 @@ def test_web_stage_serves_only_what_is_on_screen(catalog):
         assert "reference only" in state["view_html"] and "<img" not in state["view_html"]
     finally:
         web.close()
+
+
+# ---------------------------------------------------------------- moments inside the story
+def test_script_weaves_moments_into_every_chapter(script):
+    tries = script.try_cues()
+    assert {c.chapter for c in tries} == {"last_dog", "prehistory", "middle_ages", "paintings", "photography",
+                                          "internet"}
+    for c in tries:
+        assert c.text and c.yes and c.no
+    with pytest.raises(ScriptError):
+        parse_script((SHOW / "script.en.md").read_text().replace("@yes: Oh. Yes. I think a dog would follow you.\n", ""))
+
+
+async def test_moments_react_to_what_the_camera_sees(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines, posture="sitting")  # stand-in sits, head tilted
+    answer(d, HAPPY)
+    res = await d.run()
+    seen = dict(d.tries)
+    assert seen["middle_ages.19"] is True  # "sit down" — seen
+    assert seen["prehistory.16"] is False  # "stand like the hunter" — not seen
+    subs = d.stage.of("subtitle")
+    assert "Oh. I think I would stay too." in subs
+    assert "That's all right. Hunters were probably very busy." in subs
+    assert "We have practised a little already." in subs  # the finale remembers
+    assert "participation" in [b for _, b in res.transitions]
+    assert not any((tmp_path / "out").glob("*/moment*"))  # moments never store anything
+
+
+async def test_operator_can_confirm_or_skip_a_moment(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines, posture="sitting", try_seconds=5)
+    answer(d, HAPPY)
+
+    def on_state(director, st):
+        if st is ShowState.PARTICIPATION:
+            cmd = Cmd.READY if director.cue_id == "prehistory.16" else Cmd.NEXT
+            asyncio.get_running_loop().call_soon(lambda: director.command(cmd))
+    d.listeners.append(on_state)
+    await d.run()
+    assert dict(d.tries)["prehistory.16"] is True  # operator said "they did it" although the camera saw sitting
+    assert dict(d.tries)["middle_ages.19"] is False  # operator moved on
+    assert "Oh. I think I would stay too." not in d.stage.of("subtitle")
+
+
+async def test_no_camera_leaves_moments_out(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines, camera=None)
+    answer(d, HAPPY)
+    res = await d.run()
+    assert d.tries == [] and "participation" not in [b for _, b in res.transitions]
+    assert "Is someone there?" not in " ".join(d.stage.of("subtitle"))
+    assert "We have practised a little already." not in d.stage.of("subtitle")
+
+
+async def test_start_directly_at_the_interactive_part(tmp_path, script, catalog, lines):
+    d = make_director(tmp_path, script, catalog, lines)
+    answer(d, HAPPY)
+    res = await d.run(start_at="invitation")
+    assert res.chapters == ["invitation", "present"] and res.outcome == "together"
+    assert d.stage.of("subtitle")[0] == "I have studied dogs for a very long time."
+    with pytest.raises(ValueError):
+        await make_director(tmp_path, script, catalog, lines).run(start_at="dinosaurs")
+
+
+def test_web_buttons_need_the_operator_key(catalog):
+    import json
+    import threading
+    import urllib.error
+    import urllib.request
+
+    from is_this_us.performance.stage import WebStage
+
+    loop = asyncio.new_event_loop()
+    t = threading.Thread(target=loop.run_forever, daemon=True)
+    t.start()
+    pressed = []
+    web = WebStage("127.0.0.1", 0)
+    try:
+        def post(url):
+            return json.loads(urllib.request.urlopen(urllib.request.Request(url, method="POST")).read())
+        with pytest.raises(urllib.error.HTTPError):  # controls not enabled yet
+            post(web.url + "control?key=" + web.key + "&cmd=pose")
+        web.enable_controls(lambda c: (pressed.append(c) or (True, f"ok: {c}")), loop)
+        assert post(web.control_url.replace("?", "control?") + "&cmd=pose") == {"ok": True, "msg": "ok: pose"}
+        with pytest.raises(urllib.error.HTTPError):
+            post(web.url + "control?key=wrong&cmd=pose")
+        with pytest.raises(urllib.error.HTTPError):
+            post(web.control_url.replace("?", "control?") + "&cmd=rm_rf")
+        assert pressed == ["pose"]
+        page = urllib.request.urlopen(web.url).read().decode()
+        assert "Go to interactive" in page  # buttons are drawn only when the page URL has the key
+    finally:
+        web.close()
+        loop.call_soon_threadsafe(loop.stop)
+
+
+async def test_telegram_show_interactive(tmp_path, script, catalog, lines):
+    from is_this_us.bot.show_controls import ShowController
+
+    class Bot:
+        async def send_message(self, *a, **k):
+            pass
+
+    ctrl = ShowController(lambda: make_director(tmp_path, script, catalog, lines), [1])
+    assert "Unknown part" in ctrl.start(1, Bot(), start_at="dinosaurs")
+    assert "straight to the interactive part" in ctrl.start(1, Bot(), start_at="invitation")
+    while ctrl.director.state is not ShowState.READINESS:
+        await asyncio.sleep(0.005)
+    assert ctrl.director.chapters_played == ["invitation"]
+    ctrl.command(Cmd.CANCEL)
+    await ctrl.task

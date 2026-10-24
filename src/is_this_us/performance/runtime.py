@@ -137,6 +137,14 @@ def keyboard_command(director: StoryDirector, line: str) -> tuple[bool, str]:
     return False, f"unknown key {key!r} — {HELP}"
 
 
+def keyboard_or_cmd(director: StoryDirector, cmd: str) -> tuple[bool, str]:
+    """Web buttons send command names ("pose", "consent_yes" …) or keys ("y")."""
+    try:
+        return director.command(Cmd(cmd))
+    except ValueError:
+        return keyboard_command(director, cmd)
+
+
 def start_keyboard(director: StoryDirector, loop: asyncio.AbstractEventLoop, out=None) -> threading.Thread:
     out = out or sys.stdout
 
@@ -174,7 +182,9 @@ def build_stage(settings: Settings, display: str) -> tuple[Stage, WebStage | Non
         web = WebStage(settings.show_web_host, settings.show_web_port)
         log.info("projector page: %s", web.url)
         print(f"Projector page: {web.url}")
-        return MultiStage(term, web), web
+        stage = MultiStage(term, web)
+        stage.web = web
+        return stage, web
     return term, None
 
 
@@ -247,7 +257,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         frame_source_factory=frame_factory, delivery=delivery, motion=motion, conversation=conversation,
         mode=opts.mode or settings.show_mode, pose_preference=settings.show_pose_preference,
         tick_s=0.8 * min(1.0, opts.fast) if opts.fast < 1 else 0.8,
-        hint_gap_s=8.0 * opts.fast, font_path=settings.card_font_path, rng=rng,
+        hint_gap_s=8.0 * opts.fast, try_seconds=12.0 * opts.fast, font_path=settings.card_font_path, rng=rng,
         photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery))
 
 

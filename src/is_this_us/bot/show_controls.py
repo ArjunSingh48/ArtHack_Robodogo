@@ -23,11 +23,12 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import BotCommand, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from ..performance.director import Cmd, ShowState, StoryDirector
+from ..performance.script import CHAPTER_ORDER
 
 log = logging.getLogger(__name__)
 
 SHOW_COMMANDS = [
-    BotCommand(command="show", description="(operator) start the performance"),
+    BotCommand(command="show", description="(operator) start the performance · /show interactive = skip to the pose"),
     BotCommand(command="next", description="(operator) next scene / cue"),
     BotCommand(command="pause", description="(operator) pause"),
     BotCommand(command="resume", description="(operator) resume"),
@@ -128,14 +129,18 @@ class ShowController:
         except Exception as exc:  # Telegram down must not stop the show
             log.warning("could not send show prompt: %s", exc)
 
-    def start(self, chat_id: int, bot) -> str:
+    def start(self, chat_id: int, bot, start_at: str | None = None) -> str:
         if self.running:
             return "A performance is already running. /status, /cancel"
+        if start_at and start_at not in CHAPTER_ORDER:
+            return f"Unknown part {start_at!r}. Use /show, /show interactive, or /show <{'|'.join(CHAPTER_ORDER)}>"
         self.bot, self.control_chat = bot, chat_id
         self.director = self.director_factory()
         self.director.listeners.append(self._on_state)
-        self.task = asyncio.ensure_future(self.director.run())
-        return "▶️ Performance starting. /next /pause /resume /repeat /skip /pose /capture /send /cancel"
+        self.task = asyncio.ensure_future(self.director.run(start_at=start_at))
+        where = " — straight to the interactive part" if start_at == "invitation" else (
+            f" — from '{start_at}'" if start_at else "")
+        return f"▶️ Performance starting{where}. /next /pause /resume /repeat /skip /pose /capture /send /cancel"
 
     def command(self, cmd: Cmd, session_id: str | None = None) -> str:
         if self.director is None or not self.running:
@@ -157,10 +162,12 @@ def build_show_router(ctrl: ShowController) -> Router:
         await m.answer(text)
 
     @r.message(Command("show"))
-    async def show(m: Message):
+    async def show(m: Message, command: CommandObject):
         if not ctrl.is_operator(m.from_user.id):
             return await reply(m, "This command is for the operators.")
-        await reply(m, ctrl.start(m.chat.id, m.bot))
+        arg = (command.args or "").strip().lower()
+        start_at = "invitation" if arg in ("interactive", "pose", "invitation") else (arg or None)
+        await reply(m, ctrl.start(m.chat.id, m.bot, start_at=start_at))
 
     @r.message(Command(*SIMPLE.keys()))
     async def simple(m: Message, command: CommandObject):

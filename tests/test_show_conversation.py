@@ -213,7 +213,7 @@ async def test_director_holds_with_conversation_window(tmp_path):
                       lines=Lines.load(root / "data/performance", rng=random.Random(0)),
                       voice=ShowVoice(NullSynthesizer(), NullSynthesizer(), Speaker(enabled=False), time_scale=0),
                       stage=RecordingStage(), store=PhotoStore(tmp_path), conversation=svc, mode="guided",
-                      tick_s=0.005, readiness_timeout_s=0.05)
+                      tick_s=0.005, readiness_timeout_s=0.05, try_seconds=0.05)
 
     def on_state(director, st):
         if st is ShowState.CONVERSATION:

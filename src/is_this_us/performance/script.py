@@ -15,6 +15,7 @@ CHAPTER_ORDER = ("last_dog", "prehistory", "middle_ages", "paintings", "photogra
                  "invitation", "present")
 BRANCHES = ("always", "together", "alone")
 SPECIAL_SHOWS = {"title", "blank", "memes", "composition", "chosen"}
+TRY_TARGETS = ("any", "standing", "sitting", "head_tilt")
 
 _PAUSE = re.compile(r"^\[pause\s+([0-9.]+)\]$", re.I)
 _CHAPTER = re.compile(r"^##\s+([a-z_]+)\s*\|\s*(.+)$")
@@ -29,13 +30,16 @@ class ScriptError(ValueError):
 class Cue:
     id: str  # "<chapter>.<nn>" — stable while the chapter's order is unchanged
     chapter: str
-    kind: str  # "speech" | "pause"
+    kind: str  # "speech" | "pause" | "try" (a small moment for the participant, inside the story)
     text: str = ""  # lines joined with "\n"
     seconds: float = 0.0  # pauses
     show: str | None = None  # display change when this cue starts
     motion: str | None = None  # optional robot behavior with this cue
     hold_after: bool = False  # guided mode: wait for the operator after this cue
     branch: str = "always"
+    target: str = ""  # try cues: any | standing | sitting | head_tilt
+    yes: str = ""  # try cues: said when the camera sees it
+    no: str = ""  # try cues: said when it doesn't (or nobody is there)
 
     @property
     def needs_pose_request(self) -> bool:
@@ -80,7 +84,18 @@ class Script:
         raise KeyError(cue_id)
 
     def speech_cues(self) -> list[Cue]:
-        return [c for ch in self.chapters for c in ch.cues if c.kind == "speech"]
+        """Everything with fixed words: narration and the requests/reactions of try cues."""
+        out = []
+        for ch in self.chapters:
+            for c in ch.cues:
+                if c.kind == "speech":
+                    out.append(c)
+                elif c.kind == "try":
+                    out.append(c)
+        return out
+
+    def try_cues(self) -> list[Cue]:
+        return [c for ch in self.chapters for c in ch.cues if c.kind == "try"]
 
     def shown_ids(self) -> set[str]:
         return {c.show for ch in self.chapters for c in ch.cues if c.show and c.show not in SPECIAL_SHOWS}
@@ -106,9 +121,10 @@ def parse_script(text: str, lang: str = "en", source: Path | None = None) -> Scr
         if not buf:
             return
         assert cur is not None
-        cur.cues.append(Cue(id=f"{cur.id}.{len(cur.cues) + 1:02d}", chapter=cur.id, kind="speech",
-                            text="\n".join(buf), show=pending.get("show"), motion=pending.get("motion"),
-                            branch=branch))
+        cur.cues.append(Cue(id=f"{cur.id}.{len(cur.cues) + 1:02d}", chapter=cur.id,
+                            kind="try" if "try" in pending else "speech", text="\n".join(buf),
+                            show=pending.get("show"), motion=pending.get("motion"), branch=branch,
+                            target=pending.get("try", "")))
         buf, pending = [], {}
 
     for n, raw in enumerate(_strip_comments(text).splitlines(), 1):
@@ -145,6 +161,19 @@ def parse_script(text: str, lang: str = "en", source: Path | None = None) -> Scr
                 if value not in BRANCHES:
                     raise ScriptError(f"line {n}: @branch must be one of {BRANCHES}")
                 branch = value
+            elif name == "try":
+                flush()
+                if value not in TRY_TARGETS:
+                    raise ScriptError(f"line {n}: @try must be one of {TRY_TARGETS}")
+                pending["try"] = value
+            elif name in ("yes", "no"):
+                flush()
+                if not cur.cues or cur.cues[-1].kind != "try":
+                    raise ScriptError(f"line {n}: @{name} must follow a @try cue")
+                if not value:
+                    raise ScriptError(f"line {n}: @{name} needs a line")
+                last = cur.cues[-1]
+                cur.cues[-1] = Cue(**{**last.__dict__, name: value})
             elif name in ("show", "motion"):
                 flush()
                 if not value:
@@ -176,6 +205,9 @@ def validate_structure(script: Script) -> None:
     for ch in script.chapters:
         if not any(c.kind == "speech" for c in ch.cues):
             raise ScriptError(f"chapter {ch.id} has no spoken lines")
+        for c in ch.cues:
+            if c.kind == "try" and not (c.text and c.yes and c.no):
+                raise ScriptError(f"{c.id}: a @try needs the request text, @yes and @no")
     inter = [c for c in script.chapters if c.interactive]
     if [c.id for c in inter] != ["invitation"]:
         raise ScriptError("exactly the 'invitation' chapter must be @interactive")

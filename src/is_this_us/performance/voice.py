@@ -168,7 +168,15 @@ def all_utterances(script: Script, catalog: PerformanceCatalog, lines: Lines) ->
     requests = sorted({a.interactive.request for a in catalog.interactive("any")})
     for ch in script.chapters:
         for c in ch.cues:
+            if c.kind == "try":
+                out.append(CueAudio(c.id, "narration", c.text, ch.voice, None))
+                out.append(CueAudio(f"{c.id}.yes", "narration", c.yes, ch.voice, None))
+                out.append(CueAudio(f"{c.id}.no", "narration", c.no, ch.voice, None))
+                continue
             if c.kind != "speech":
+                continue
+            if c.text.strip() == "{practised}":
+                out.append(CueAudio(c.id, "narration", lines.text("invite", "practised"), ch.voice, None))
                 continue
             if c.needs_pose_request:
                 for i, req in enumerate(requests or ["Could you try sitting like this?"]):

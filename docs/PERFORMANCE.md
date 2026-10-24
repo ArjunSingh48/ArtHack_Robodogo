@@ -22,6 +22,16 @@ voice, same Telegram bot, same safety guard. Free-play (`itu bot`, `itu live`, `
 
 ---
 
+## 0. Straight to the interactive part
+
+```bash
+itu show --interactive --display web --source webcam      # starts at the invitation: pose → photo → ending
+itu show --start-at photography …                         # or begin with any chapter
+```
+During any show: the **✦ Go to interactive** button on the operator page, `pose` on the keyboard, or
+`/pose` in Telegram jumps there at once. In Telegram, `/show interactive` starts a performance that
+begins with the invitation.
+
 ## 1. Rehearse without hardware
 
 Works in a clean checkout: no robot, no camera, no OpenAI key, no Telegram.
@@ -67,6 +77,10 @@ itu show --display web --source webcam --telegram   # + Telegram controls (the e
   waits for a real "ready" — nothing is captured by a timer.
 * `--display web` serves a projector page (dark, museum label, subtitles, AI-voice notice). Open it
   full-screen on the projector computer. `SHOW_WEB_HOST=0.0.0.0` only on a private network.
+* It also prints an **operator page** (`…/?key=…`): the same page with buttons — Next, Pause, Resume,
+  Repeat, **✦ Go to interactive**, End — and, when the robot asks something, the matching answers
+  (✓ Ready / ✗ Declines, ✓ They agreed / ✗ No photo, Send / Don't send, ✓ They did it). Without the key the
+  page has no buttons, so the projector URL can be shown to anyone. Use it on the operator's laptop or phone.
 * Camera: `--source webcam[:i]` (a webcam that sees the participant — recommended), `unitree` /
   `zhaw_bridge` (the robot's own camera), `image:<path>`, or `none`.
 * With the robot: the show is fully playable with a **stationary** robot. Motion cues are off unless
@@ -82,7 +96,8 @@ itu show --display web --source webcam --telegram   # + Telegram controls (the e
 | pause / resume | `p` / `r` | `/pause` / `/resume` |
 | repeat last segment | `a` | `/repeat` |
 | skip current stage | `s` | `/skip` |
-| go to the pose session | `pose` | `/pose` |
+| go to the pose session | `pose` · **✦ Go to interactive** button | `/pose` (or start with `/show interactive`) |
+| "they did it" in a small moment | `ready` · **✓ They did it** | `/capture` |
 | participant is ready | `ready` | `/capture` or the ✓ button |
 | participant declines | `d` | `/decline` or the ✗ button |
 | photo consent | `y` / `n` (when asked) | ✓ *They agreed* / ✗ *No photo* buttons |
@@ -111,10 +126,22 @@ data/performance/catalog.yaml   ← which picture belongs to which chapter; what
    pipeline) · composer · PhotoStore · Delivery (Telegram / preview) · MotionCues (existing guard)
 ```
 
+**The participant is part of the story from the first chapter.** Every chapter ends with a small
+*moment* (`@try` in the script): the robot turns to the person in front of the camera and asks for
+something small that belongs to that chapter — "Is someone there?", "Could you stand like the hunter?",
+"Would you sit down… like someone a dog would stay beside?", "Could you tilt your head a little?",
+"Could you be very ordinary for a moment?", "Could you do something completely unnecessary?". The camera
+looks for a few seconds (two readings in a row) and the robot reacts with the `@yes` or `@no` line. No
+photo is taken and nothing is stored. The operator can confirm (`ready` / ✓ They did it) when the camera
+misses it, or move on (`Enter`). If at least one moment worked, the invitation begins with "We have
+practised a little already." Without a camera the moments are simply left out.
+
 **Script format** (top of `script.en.md`): `## id | Title` chapters; a blank line ends a cue (one audio
 clip); `@show: <artifact id>` changes the picture exactly when the next cue starts; `[pause 2]`;
 `@hold` (guided wait); `@voice:` delivery direction; `@motion:` an optional robot cue; `@branch:
-together|alone|always` for the two endings; `{pose_request}` = the chosen picture's request.
+together|alone|always` for the two endings; `{pose_request}` = the chosen picture's request;
+`@try: any|standing|sitting|head_tilt` + request lines + `@yes:` / `@no:` = a moment with the participant;
+`{practised}` = the "we have practised" line, only when a moment worked.
 
 Narrative time and robot movement are separate: a motion cue is requested and forgotten; the story never
 waits for the body. One thing speaks at a time. Pausing stops the clip; resume plays that cue again from
@@ -243,7 +270,8 @@ armed guard. Recommended: run the show with the robot **stationary**.
 **Show**
 | Moment | Operator does |
 |---|---|
-| Lights down | start `itu show --display web --source webcam --telegram` (or `/show`) |
+| Lights down | start `itu show --display web --source webcam --telegram` (or `/show`); operator page on your laptop/phone |
+| A moment ("Could you stand like the hunter?") | let the person try; ✓ They did it if the camera misses it, Next to move on |
 | End of each chapter (guided) | wait a breath, then `Enter` / `/next` |
 | Audience laughs / noise | `p` … `r` (the line is repeated) |
 | Invitation | choose the participant with a glance; they take the spot |

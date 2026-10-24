@@ -14,6 +14,13 @@ FORMAT
   @branch: together | alone | always     chapter 7 only: lines for after a photo / after a decline
   @interactive                           (invitation chapter) the pose session starts after this chapter
   [pause 2]                              silence, in seconds
+  @try: any | standing | sitting | head_tilt
+                                         a small moment WITH the participant, inside the story: the next
+                                         lines are the robot's request; the camera looks for a few seconds;
+  @yes: <line>                           …said if it sees it
+  @no: <line>                            …said if it doesn't (no photo is ever taken here)
+  {practised}                            (invitation) "We have practised a little already." — only if a
+                                         @try worked earlier; otherwise nothing is said
   Blank line = end of a cue. A cue is one audio clip; lines inside a cue get natural pauses.
   {pose_request} is replaced with the chosen artwork's request (catalog.yaml).
 -->
@@ -56,6 +63,14 @@ So I have been studying them.
 I have one question.
 
 How do I become a good dog?
+
+[pause 1]
+
+@try: any
+Oh.
+Is someone there?
+@yes: Hello. You can look at the pictures with me, if you like.
+@no: Maybe I imagined it. That happens.
 @hold
 
 ## prehistory | Prehistory
@@ -100,6 +115,13 @@ The humans and the dogs are together.
 They keep appearing together.
 
 Maybe that is important.
+
+@show: met:545395
+@try: standing
+Could you stand like the hunter? Just for a moment.
+Very straight. Very brave.
+@yes: Oh. Yes. I think a dog would follow you.
+@no: That's all right. Hunters were probably very busy.
 @hold
 
 ## middle_ages | The Middle Ages
@@ -149,6 +171,13 @@ The dog simply chooses to be there.
 I don't understand.
 
 I will save this question for later.
+
+@show: cma:169746
+@try: sitting
+Would you sit down for a moment?
+Like someone a dog would stay beside.
+@yes: Oh. I think I would stay too.
+@no: Maybe staying is harder than it looks.
 @hold
 
 ## paintings | Paintings and Portraits
@@ -202,6 +231,13 @@ Maybe just being there is enough.
 This is a very confusing discovery.
 
 I thought I had to be useful.
+
+@show: met:437841
+@try: head_tilt
+Look at her. She is just… there.
+Could you tilt your head a little? Like someone listening to nothing in particular.
+@yes: Yes. Exactly like that. That is not useful at all. I like it.
+@no: That's all right. I am still learning what tilting means.
 @hold
 
 ## photography | Photography
@@ -245,6 +281,13 @@ I wish I could ask the human, too.
 But I only have the picture.
 
 So I imagine.
+
+@show: met:266886
+@try: any
+Could you be very ordinary for a moment?
+Like an afternoon.
+@yes: Oh. Nothing is happening. And somehow…
+@no: Maybe ordinary is the hardest thing to do on purpose.
 @hold
 
 ## internet | The Internet
@@ -305,6 +348,13 @@ I sometimes walk into furniture.
 Perhaps…
 
 I am already doing quite well.
+
+@show: meme:doge
+@try: any
+Could you do something completely unnecessary?
+Anything.
+@yes: Wonderful. Very unnecessary. Much human.
+@no: Hmm. Very mysterious. Such quiet.
 @hold
 
 ## invitation | The Invitation
@@ -323,6 +373,8 @@ I wonder…
 Can we make one together?
 
 Would you help me?
+
+{practised}
 
 @show: chosen
 I found a picture I like.

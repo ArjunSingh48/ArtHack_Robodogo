@@ -213,7 +213,7 @@ def cmd_show(args) -> int:
 
 
 async def _run_local(s, opts, args) -> int:
-    from .runtime import HELP, ParticipantScript, build_director, start_keyboard
+    from .runtime import HELP, ParticipantScript, build_director, keyboard_or_cmd, start_keyboard
 
     guard = planner = robot = None
     if opts.motion:
@@ -242,8 +242,14 @@ async def _run_local(s, opts, args) -> int:
           f"voice {'cached/generated' if opts.voice else 'off (text only)'}; "
           f"camera {opts.source or s.show_camera_source or s.camera_source}; robot motion "
           f"{'ON (armed cues only)' if director.motion.enabled else 'off'}")
+    web = getattr(director.stage, "web", None)
+    if web is not None:
+        loop = asyncio.get_running_loop()
+        web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop)
+        print(f"Operator page (buttons): {web.control_url}")
+    start_at = "invitation" if args.interactive else args.start_at
     try:
-        result = await director.run()
+        result = await director.run(start_at=start_at)
     finally:
         director.stage.close()
         if guard is not None:
@@ -284,6 +290,11 @@ def register(sub) -> None:
     sh.add_argument("--fast", type=float, default=None, help="time scale for rehearsal, e.g. 0.05")
     sh.add_argument("--out", help="where rehearsal pictures go (default data/runtime/rehearsal)")
     sh.add_argument("--seed", type=int)
+    sh.add_argument("--interactive", action="store_true",
+                    help="skip the history chapters: start at the invitation (pose, photo, ending)")
+    sh.add_argument("--start-at", choices=["last_dog", "prehistory", "middle_ages", "paintings", "photography",
+                                           "internet", "invitation", "present"],
+                    help="begin with this chapter (rehearsing one part)")
     sh.add_argument("--telegram", action="store_true", help="also run the Telegram bot in this process (/show …)")
     sh.add_argument("--motion", action="store_true", help="allow the script's robot cues (needs all gates + e-stop)")
     sh.add_argument("--i-have-physical-estop", action="store_true")

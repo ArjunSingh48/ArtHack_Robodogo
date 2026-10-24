@@ -53,7 +53,7 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 - Performance mode: seven narrated chapters with 28 verified artifacts, guided/automatic control, pause/
   resume/repeat/skip/cancel, guided pose with gentle hints, consented capture, THEN/NOW composition,
   confirmed Telegram delivery, projector page, cached narration, optional GPT-Live conversation windows.
-- 205 tests (simulated — no robot, microphone, OpenAI or Telegram account involved), GitHub Actions CI.
+- 212 tests (simulated — no robot, microphone, OpenAI or Telegram account involved), GitHub Actions CI.
 
 ## 1. Install
 
@@ -133,6 +133,7 @@ Microphone audio is streamed to OpenAI during a conversation; put up the sign su
 itu show validate                                    # script, lines, catalog
 itu show --dry-run --auto --fast 0.05                # whole show, unattended, no hardware/keys/Telegram
 itu show --dry-run --display web                     # rehearse with the projector page; you press Enter
+itu show --dry-run --interactive --display web --source webcam   # straight to the pose part
 itu show voice pregenerate                           # needs OPENAI_API_KEY; then the show plays offline
 itu show --display web --source webcam               # the real thing (guided: you advance each chapter)
 itu show --display web --source webcam --telegram    # + operator controls /show /next /pause … in Telegram
@@ -197,7 +198,7 @@ src/is_this_us/
   storage.py        SQLite: pairing, sessions, memories, archive choice, /forget
   cards.py          memory cards and diptychs
   cli.py, hardware_cli.py
-tests/              205 tests
+tests/              212 tests
 ```
 
 ## Privacy

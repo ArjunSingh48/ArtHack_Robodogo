@@ -49,6 +49,10 @@ delivery:
 decline:
   ok: ["That's all right. Maybe another time."]
 
+invite:
+  # said before "I found a picture I like." when the participant already joined a small moment
+  practised: ["We have practised a little already."]
+
 conversation:
   opening: ["You can ask me something, if you like."]
   closing: ["Let's look at the next pictures."]

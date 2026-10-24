@@ -9,8 +9,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import hmac
 import html
 import json
+import secrets
 import logging
 import threading
 import time
@@ -18,11 +21,14 @@ from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Protocol
+from urllib.parse import parse_qs, urlparse
 
 from .catalog import ShowArtifact
 
 log = logging.getLogger(__name__)
 
+CONTROL_COMMANDS = {"next", "pause", "resume", "repeat", "skip", "pose", "ready", "decline", "consent_yes",
+                    "consent_no", "send_yes", "send_no", "cancel", "listen"}
 AI_VOICE_NOTICE = "The robot's voice is AI-generated (OpenAI). Its words are written by the artists."
 
 
@@ -109,6 +115,7 @@ class RecordingStage:
 class MultiStage:
     def __init__(self, *stages: Stage):
         self.stages = [s for s in stages if s is not None]
+        self.web = None
 
     def __getattr__(self, name):
         def call(*a, **kw):
@@ -140,16 +147,41 @@ font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 #subtitle{position:fixed;left:6vw;right:6vw;bottom:9vh;text-align:center;font-size:clamp(20px,2.8vw,40px);
 line-height:1.35;min-height:2.7em;white-space:pre-line}
 #notice{position:fixed;bottom:2.4vh;left:0;right:0;text-align:center;color:var(--muted);font:12px system-ui,sans-serif}
+#controls{position:fixed;top:1.6vh;right:2vw;display:none;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:70vw;
+font:13px system-ui,sans-serif;z-index:5}
+#controls button{background:#2b282e;color:var(--ink);border:1px solid #4a4550;border-radius:999px;padding:7px 13px;cursor:pointer}
+#controls button:hover{border-color:var(--accent)}
+#controls button.main{background:var(--accent);color:#1f1d21;border-color:var(--accent);font-weight:600}
+#controls button.ask{border-color:var(--accent);color:var(--accent)}
+#state{color:var(--muted);align-self:center;margin-right:6px}
+#msg{position:fixed;top:6.5vh;right:2vw;color:var(--muted);font:12px system-ui,sans-serif}
 </style></head><body>
-<div id="chapter"></div><div id="stage"></div><div id="subtitle"></div><div id="notice"></div>
+<div id="chapter"></div><div id="controls"></div><div id="msg"></div>
+<div id="stage"></div><div id="subtitle"></div><div id="notice"></div>
 <script>
-let last="";
+let last="", lastState=null;
+const key=new URLSearchParams(location.search).get('key');
+const ASK={participant_readiness:[['ready','✓ Ready'],['decline','✗ Declines']],
+ consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
+ delivery:[['send_yes','Send the picture'],['send_no',"Don't send"]],
+ participation:[['ready','✓ They did it'],['next','Move on']],
+ awaiting_photo:[['consent_no','✗ No photo']]};
+const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['cancel','End']];
+async function send(cmd){
+ const r=await fetch('/control?key='+encodeURIComponent(key)+'&cmd='+cmd,{method:'POST'});
+ const j=await r.json().catch(()=>({msg:'error'}));document.getElementById('msg').textContent=j.msg||'';}
+function controls(state){
+ if(!key)return;const c=document.getElementById('controls');c.style.display='flex';
+ const ask=(ASK[state]||[]).map(([k,t])=>`<button class="ask" onclick="send('${k}')">${t}</button>`).join('');
+ const base=BASE.map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
+ c.innerHTML=`<span id="state">${state}</span>`+ask+base;}
 async function tick(){
  try{const r=await fetch('/state',{cache:'no-store'});const s=await r.json();
   document.getElementById('chapter').textContent=s.chapter||'';
   document.getElementById('subtitle').textContent=s.subtitle||'';
   document.getElementById('notice').textContent=s.notice||'';
   if(s.view_html!==last){document.getElementById('stage').innerHTML=s.view_html;last=s.view_html}
+  if(s.state!==lastState){controls(s.state);lastState=s.state}
  }catch(e){}
  setTimeout(tick,350)}
 tick();
@@ -174,16 +206,39 @@ def _ref_card(a: ShowArtifact) -> str:
 class WebStage:
     def __init__(self, host: str = "127.0.0.1", port: int = 8765):
         self._lock = threading.Lock()
-        self._state = {"chapter": "", "subtitle": "", "view_html": "", "notice": AI_VOICE_NOTICE, "updated": 0.0}
+        self._state = {"chapter": "", "subtitle": "", "view_html": "", "notice": AI_VOICE_NOTICE, "state": "",
+                       "updated": 0.0}
         self._files: dict[str, Path] = {}
+        self._control = None  # (callback, loop) once enabled
+        self.key = secrets.token_urlsafe(9)  # only the operator URL can press buttons
         stage = self
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *a):  # quiet
                 pass
 
+            def do_POST(self):  # noqa: N802
+                url = urlparse(self.path)
+                q = parse_qs(url.query)
+                if url.path != "/control":
+                    return self._send(404, "text/plain", b"not found")
+                if not stage._control or not hmac.compare_digest(q.get("key", [""])[0], stage.key):
+                    return self._send(403, "application/json", b'{"msg": "not allowed"}')
+                cmd = q.get("cmd", [""])[0]
+                if cmd not in CONTROL_COMMANDS:
+                    return self._send(400, "application/json", b'{"msg": "unknown command"}')
+                fn, loop = stage._control
+
+                async def call():
+                    return fn(cmd)
+                try:
+                    ok, msg = asyncio.run_coroutine_threadsafe(call(), loop).result(timeout=3)
+                except Exception as exc:  # loop gone, timeout
+                    ok, msg = False, f"error: {type(exc).__name__}"
+                return self._send(200, "application/json", json.dumps({"ok": ok, "msg": msg}).encode())
+
             def do_GET(self):  # noqa: N802
-                if self.path in ("/", "/index.html"):
+                if urlparse(self.path).path in ("/", "/index.html"):
                     return self._send(200, "text/html; charset=utf-8", PAGE.encode())
                 if self.path.startswith("/state"):
                     with stage._lock:
@@ -245,7 +300,16 @@ class WebStage:
         self._set(subtitle=text or "")
 
     def status(self, state: str, detail: str = "") -> None:
-        pass
+        if state != "listening":
+            self._set(state=state)
+
+    def enable_controls(self, callback, loop) -> None:
+        """callback(cmd) -> (ok, msg), run on the show's event loop."""
+        self._control = (callback, loop)
+
+    @property
+    def control_url(self) -> str:
+        return f"{self.url}?key={self.key}"
 
     def close(self) -> None:
         self.server.shutdown()
