@@ -1,6 +1,5 @@
-> **Archived.** This is the original Python installation (real Go2, Telegram bot, projector page). The live
-> project is the browser version at the repo root (`web/`, https://isthisus.vercel.app). Run everything here from
-> this folder: `cd archive/python`.
+> **The real-robot application.** This Python package drives the real Go2 (through the ZHAW go2_bridge), the Telegram bot and the projector page, and relays the browser show (`web/`) to the robot. The browser show (`web/`, https://isthisus.vercel.app) is the public version.
+> Run everything here from this folder: `cd python`. Real robot, step by step: [the repository README](../README.md#the-real-robot).
 
 # Is This Us? — A Dog's Memory
 

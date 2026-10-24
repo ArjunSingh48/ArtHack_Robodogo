@@ -149,8 +149,8 @@ def test_metadata_comes_from_verified_records_not_hand_typing(catalog):
     a = catalog.get("met:545395")
     assert a.title == "Inscribed block with bowman and dog" and a.date == "ca. 2051–2000 B.C."
     assert catalog.get("cma:290412").artist.startswith("Raja Deen Dayal")
-    assert catalog.get("meme:doge").rights_status.startswith("reference only")
-    assert not catalog.get("meme:doge").displayable
+    assert catalog.get("meme:doge").rights_status.startswith("shown for this presentation")
+    assert catalog.get("meme:doge").displayable  # the five familiar memes are shown, with credits
 
 
 def test_catalog_flags_bad_entries(tmp_path, catalog):
@@ -551,8 +551,8 @@ async def test_preview_delivery_sends_nothing(tmp_path):
 
 
 def test_private_images_are_git_ignored():
-    ignore = (ROOT / ".gitignore").read_text()
-    assert "data/runtime/" in ignore
+    ignore = (ROOT.parent / ".gitignore").read_text()  # the repository's, at the root
+    assert "python/data/runtime/" in ignore and "python/data/visitor_images/" in ignore
 
 
 # ---------------------------------------------------------------- telegram controls
@@ -723,7 +723,7 @@ def test_web_stage_serves_only_what_is_on_screen(catalog):
             urllib.request.urlopen(web.url + "img/" + token)
         web.show(View("artifact", artifact=catalog.get("meme:doge")))
         state = json.loads(urllib.request.urlopen(web.url + "state").read())
-        assert "reference only" in state["view_html"] and "<img" not in state["view_html"]
+        assert "shown for this presentation" in state["view_html"] and "Atsuko Sato" in state["view_html"]
     finally:
         web.close()
 

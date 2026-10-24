@@ -7,6 +7,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
     strategy:
       fail-fast: false
       matrix:
@@ -17,11 +20,12 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
+          cache-dependency-path: python/pyproject.toml
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install package
         run: pip install -e ".[voice,dev]"
       - name: Validate curated artworks
         run: itu artworks validate
-      - name: Run tests (no robot, no network to Telegram/OpenAI)
+      - name: Run tests (mock robot only — never the real Go2; no network to Telegram/OpenAI)
         run: pytest -q

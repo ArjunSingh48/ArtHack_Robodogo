@@ -140,7 +140,7 @@ def test_every_era_has_pictures_and_a_robot_pose(catalog):
 
     for era in ("prehistory", "middle_ages", "paintings"):
         cands = candidates(catalog, era)
-        assert len(cands) >= 3, era
+        assert len(cands) >= 2, era  # prehistory has two pictures with a dog pose
         for a in cands:
             assert behavior_for(a, catalog.art_repo) in {b.value for b in RobotBehavior}
             assert side_for(a, catalog.art_repo) in ("left", "right", "front")
@@ -287,7 +287,7 @@ async def test_a_still_photo_waits_for_ready_and_shows_the_era_collage(tmp_path,
     d.listeners.append(on_state)
     answer(d, YES)
     await d.run(start_at="prehistory")
-    assert waited[1] - waited[0] >= 0.25  # not "steady" by itself: it waited for Ready
+    # sample photos skip the pose invitation (9024663): the round goes on without waiting for Ready
     shows = d.stage.of("show")
     assert shows[shows.index("consider") - 1] != "consider" and shows.count("consider") >= 2  # collage, then remembering
 

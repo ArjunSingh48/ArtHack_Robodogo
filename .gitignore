@@ -28,7 +28,7 @@ test_frame.jpg
 env
 .DS_Store
 
-# archived Python show: runtime data (sessions, visitor photos, audio cache) — never commit
-archive/python/data/runtime/
-archive/python/data/visitor_images/
-archive/python/models/*.task
+# Python show: runtime data (sessions, visitor photos, audio cache) — never commit
+python/data/runtime/
+python/data/visitor_images/
+python/models/*.task

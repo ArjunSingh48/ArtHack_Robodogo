@@ -5,8 +5,8 @@ placement), the runtime lines and the sample photos are written to web/data/show
 are copied, every spoken line is pre-generated once with the configured voice (MP3), and the sample
 photos' poses are read here with the same MediaPipe pipeline — so the browser needs no API keys.
 
-    cd archive/python && .venv/bin/python scripts/export_web.py   # everything (voice: cached clips are reused)
-    cd archive/python && .venv/bin/python scripts/export_web.py --no-audio  # data + pictures only (subtitles, no voice)
+    cd python && .venv/bin/python scripts/export_web.py   # everything (voice: cached clips are reused)
+    cd python && .venv/bin/python scripts/export_web.py --no-audio  # data + pictures only (subtitles, no voice)
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-WEB = ROOT.parents[1] / "web"  # the site lives at the repo root; this archive is archive/python
+WEB = ROOT.parent / "web"  # the site lives at the repo root; this is python/
 SPOKEN = ("round", "rescue")  # runtime line sections the web show says
 # the internet round's memes, online: free Unsplash photos of similar dogs (web/memes/<slug>.jpg) — photographer
 MEME_STANDINS = {"meme:doge": "mpetrucho", "meme:cheems": "kobi_kadosh", "meme:long-nose-borzoi": "karolinawv",
