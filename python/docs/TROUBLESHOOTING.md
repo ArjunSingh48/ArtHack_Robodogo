@@ -16,7 +16,7 @@
 | Voice file but no voice note | `ffmpeg` missing — install it (`brew install ffmpeg` / `apt install ffmpeg`). |
 | Met API 403 | Missing User-Agent (our client sends one); or Met bot protection — retry later. |
 | Met `/v1/search` message | Retired 2026-10-01; this project uses `/v1.1/search`. |
-| "bridge not answering" | Start `python -m go2_bridge` in the go2_main repo first; check `ZHAW_BRIDGE_HOST`/ports. Don't run our direct SDK mode at the same time. |
+| "bridge not answering" | Start the bridge first with `python/scripts/start_bridge.sh <interface>` (go2_main unchanged, 10 s SDK timeout); check `ZHAW_BRIDGE_HOST`/ports. Don't run our direct SDK mode at the same time. |
 | Bridge mode: robot stands instead of side-eye/peer | Expected: the bridge has no Euler command. |
 | `unitree_sdk2py` import error | Install from GitHub (HARDWARE_SETUP.md). Not needed for simulation. |
 | Painting images slow | `itu artworks cache` stores them locally; bot then sends local files. |

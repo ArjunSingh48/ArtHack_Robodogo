@@ -51,6 +51,11 @@ font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 #controls button:hover{border-color:var(--accent)}
 #controls button.ask{border-color:var(--accent);color:var(--accent)}
 #msg{position:fixed;top:6.5vh;right:2vw;max-width:46vw;text-align:right;color:var(--accent);font:13px system-ui,sans-serif}
+#robot{position:fixed;left:2vw;bottom:1.6vh;z-index:50;max-width:calc(100vw - 4vw);font:12px system-ui,sans-serif;letter-spacing:.06em;padding:6px 12px;border-radius:999px;border:1px solid #4a4550;background:#2b282e;color:var(--ink)}
+#robot.on{border-color:#5fbf7a;color:#9fe0b0}
+#robot.warn{border-color:#e0a050;color:#f3c98a}
+#robot.off{color:var(--muted)}
+#robot button{margin-left:8px;background:none;color:inherit;border:1px solid currentColor;border-radius:999px;padding:2px 9px;cursor:pointer;font:inherit}
 #lobby{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3vh;z-index:10;padding:16px;text-align:center}
 #lobby .title{margin-bottom:1vh}
 #lobby p{max-width:620px;color:var(--muted);font:15px/1.5 system-ui,sans-serif;margin:0}
@@ -67,6 +72,7 @@ font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 </head>
 <body>
 <div id="chapter"></div><div id="controls"></div><div id="msg"></div>
+<div id="robot" hidden></div>
 <div id="stage"><div id="view"></div>
  <div id="live">
   <div class="cam"><div class="box" id="sim3d"></div><div class="cap">SIMULATED DOG · <span id="simdoing">STANDING</span></div></div>

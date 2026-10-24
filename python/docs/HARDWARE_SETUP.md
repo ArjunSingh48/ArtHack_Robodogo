@@ -22,8 +22,8 @@ Follow `SAFETY_CHECKLIST.md` throughout.
    Laptop Ethernet IP: `192.168.123.100` (from their INSTALL.md).
 2. Start the bridge (leave this terminal open):
    ```bash
-   cd go2_main && source go2_py311/bin/activate
-   GO2_NETWORK_INTERFACE=<your ethernet interface> python -m go2_bridge
+   python/scripts/start_bridge.sh <your ethernet interface>   # from the Is_this_us checkout; GO2_MAIN=/path/to/go2_main
+   # (not `python -m go2_bridge` directly: its 3 s SDK timeout makes hello return 3104; ours sets 10 s)
    ```
    Wait for `Go2 Bridge running — CMD port 5555, PUB port 5556`.
 3. In a second terminal, in this project:

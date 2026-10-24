@@ -3,6 +3,8 @@
 // intro → one round per era (pose → closest picture → the dog walks over and takes the painted dog's pose →
 // THEN/NOW) → the rescue finale. Every step has a hash (#prehistory.04) to come back to it.
 
+import { robot } from './robot.js';  // the real Go2 when opened with ?robot=ws://127.0.0.1:8770 (python/README.md)
+
 const $ = (id) => document.getElementById(id);
 const show = await (await fetch('data/show.json')).json();
 const PERSON = [2.2, 0.45];  // where the participant stands in the simulated room (m; x forward, y left)
@@ -19,7 +21,7 @@ class Stop extends Error {}
 const alive = (g) => { if (g !== gen) throw new Stop(); };
 const bus = new EventTarget();
 function send(cmd) {
-  if (cmd === 'pause') { paused = true; audio.pause(); }
+  if (cmd === 'pause') { paused = true; audio.pause(); if (dog.walking) robot.walk(0, 0, 0); }
   if (cmd === 'resume') { paused = false; if (audio.src && !audio.ended) audio.play().catch(() => {}); }
   if (cmd === 'cancel') return toLobby();
   if (cmd === 'camera') return useCamera(true);
@@ -189,42 +191,66 @@ setInterval(() => {
   $('simdoing').textContent = (dog.walking ? 'walking' : doing[dog.action] || dog.body).toUpperCase();
 }, 100);
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// The simulated dog moves at the speeds the real one is sent (under the relay's clamps 0.3 m/s · 0.6 rad/s), by the
+// real elapsed time, so the real dog — walking open loop, by time — ends up about where the drawn one does.
+const SPEED = 0.25, TURN = 0.5;
+function ticker() { let t = performance.now(); return () => { const n = performance.now(), dt = Math.min((n - t) / 1000, 0.2); t = n; return dt; }; }
 async function turnTo(heading, g) {
   dog.walking = true;
-  for (;;) { const e = wrap(heading - dog.yaw); if (Math.abs(e) < 0.03) break; dog.yaw += Math.sign(e) * Math.min(Math.abs(e), 0.05); await sleep(60, g); }
+  const dt = ticker();
+  for (;;) {
+    const e = wrap(heading - dog.yaw); if (Math.abs(e) < 0.03) break;
+    robot.walk(0, 0, Math.sign(e) * TURN);
+    await sleep(60, g);
+    dog.yaw += Math.sign(e) * Math.min(Math.abs(e), TURN * dt());
+  }
+  robot.walk(0, 0, 0);
   dog.walking = false;
 }
 async function walkTo(tx, ty, g) {
   if (Math.hypot(tx - dog.x, ty - dog.y) < 0.05) return;
   await turnTo(Math.atan2(ty - dog.y, tx - dog.x), g);
   dog.walking = true;
+  const dt = ticker();
   for (;;) {
     const d = Math.hypot(tx - dog.x, ty - dog.y); if (d < 0.02) break;
-    const s = Math.min(d, 0.3 * 0.06);  // 0.3 m/s
-    dog.yaw = Math.atan2(ty - dog.y, tx - dog.x); dog.x += Math.cos(dog.yaw) * s; dog.y += Math.sin(dog.yaw) * s;
+    robot.walk(SPEED, 0, 0);
     await sleep(60, g);
+    const s = Math.min(d, SPEED * dt());
+    dog.yaw = Math.atan2(ty - dog.y, tx - dog.x); dog.x += Math.cos(dog.yaw) * s; dog.y += Math.sin(dog.yaw) * s;
   }
+  robot.walk(0, 0, 0);
   dog.walking = false;
 }
 const FACING = { away: 0, viewer: Math.PI, left: Math.PI / 2, right: -Math.PI / 2 };
 async function standUp(g) {
   if (dog.body === 'standing') return;
-  dog.action = dog.body === 'sitting' ? 'RiseSit' : 'StandUp'; await sleep(1500, g); dog.action = ''; dog.body = 'standing';
+  dog.action = dog.body === 'sitting' ? 'RiseSit' : 'StandUp';
+  await Promise.all([robot.pose('stand'), sleep(1500, g)]);
+  dog.action = ''; dog.body = 'standing';
+}
+async function walking(fn) {  // every walk, however it ends (End, a jump, an error), ends the real dog's gait
+  try { await fn(); } finally { dog.walking = false; await robot.walkEnd(); }
 }
 async function goBeside(side, facing, g) {  // like Approacher.approach: next to the person as the audience sees it
   await standUp(g);
   const [px, py] = PERSON, gap = 0.75;
   const goal = side === 'right' ? [px, py - gap] : side === 'front' ? [px - 0.85, py] : [px, py + gap];
-  await walkTo(goal[0], goal[1], g);
-  await turnTo(facing in FACING ? FACING[facing] : Math.atan2(py - dog.y, px - dog.x), g);
+  await walking(async () => {
+    await walkTo(goal[0], goal[1], g);
+    await turnTo(facing in FACING ? FACING[facing] : Math.atan2(py - dog.y, px - dog.x), g);
+  });
 }
 async function takePose(b, g) {
   const steps = { sit: ['Sit', 'sitting', 3000], lie_down: ['StandDown', 'lying', 2500], greet: ['Hello', 'standing', 4000],
     stretch: ['Stretch', 'standing', 4000], stand: ['', 'standing', 500] }[b] || ['', 'standing', 500];
-  dog.action = steps[0]; await sleep(steps[2], g);
+  dog.action = steps[0];
+  await Promise.all([robot.pose(b), sleep(steps[2], g)]);  // the real dog's pose is confirmed before the show goes on
   if (b === 'sit' || b === 'lie_down') { dog.body = steps[1]; dog.action = steps[0]; } else { dog.action = ''; dog.body = 'standing'; }
 }
-async function goHome(g) { await standUp(g); await walkTo(0, 0, g); await turnTo(0, g); }
+async function goHome(g) { await standUp(g); await walking(async () => { await walkTo(0, 0, g); await turnTo(0, g); }); }
+// Esc: the real dog stops at once (software stop, latched until Arm on the badge) and the show pauses
+window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && robot.on) { robot.stop(); if (!paused) send('pause'); } });
 
 // ---------------------------------------------------------------- rounds
 function score(a, group) {

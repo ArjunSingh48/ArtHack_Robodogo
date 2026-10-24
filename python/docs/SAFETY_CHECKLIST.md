@@ -33,6 +33,12 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] The participant is seated/standing still before Ready is pressed; tell them the robot will come.
 - [ ] Anything unexpected: physical stop first, then End / `/cancel` (stops the walk, software stop).
 
+### The browser show with the real robot (`itu web-link`, README → The real robot)
+- [ ] Bridge started with `python/scripts/start_bridge.sh` (10 s SDK timeout); `itu web-link` printed `ARMED`.
+- [ ] The page's badge says **REAL GO2 · armed**; the operator knows **Esc** stops the dog and pauses the show.
+- [ ] Only one page drives (a second tab is refused). Reloading the page disarms: press Arm again on purpose.
+- [ ] Walking is open loop (by time): a clear floor between the start and the person; the remote in hand.
+
 ## During the show
 - [ ] Operator arms with `/arm` only when the area is clear and they are watching.
 - [ ] Visitors interact from the edge of the marked area. The robot walks ONLY in the show's `--walk` mode

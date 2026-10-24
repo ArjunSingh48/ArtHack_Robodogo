@@ -18,11 +18,11 @@ Intro (shy dog, first picture, "may I take pictures of us?")
 ## 0. The normal way: two terminals
 
 ```bash
-# Terminal 1 — the bridge (go2_main). Checks en6 first; calm actions only; SDK timeout 10 s.
-cd ~/Projects/go2-dog/go2_main && ./scripts/start_bridge.sh en6
+# Terminal 1 — the bridge: go2_main unchanged, started by OUR launcher (checks en6; SDK timeout 10 s).
+cd ~/Projects/go2-dog/Is_this_us && python/scripts/start_bridge.sh en6
 
 # Terminal 2 — the presentation (this repo). Checks network, robot, bridge, camera; prints the two URLs.
-cd ~/Projects/go2-dog/Is_this_us && source .venv/bin/activate
+cd ~/Projects/go2-dog/Is_this_us/python && source .venv/bin/activate
 itu present                                               # projector + camera + voice, the robot does not move
 itu present --motion --i-have-physical-estop              # + poses in place (sit, lie down, paw, stretch)
 itu present --motion --walk --i-have-physical-estop       # + walking — only after calibration (section 5)
@@ -46,8 +46,11 @@ walking on.
   macOS). The message lists the interface that has the 192.168.123.x address.
 - `camera: … macOS did not allow the camera`: System Settings → Privacy & Security → Camera → allow your
   terminal app, then quit and reopen the terminal.
-- `hello … code 3104 / outcome unknown`: the bridge is still on the old 3 s timeout. Restart it with
-  `start_bridge.sh`, which sets 10 s.
+- `hello … code 3104 / outcome unknown`, or `NOT armed: … stock go2_main (3 s SDK timeout)`: the bridge was
+  started with `python -m go2_bridge`. Stop it and start it with `python/scripts/start_bridge.sh en6`, which sets 10 s.
+- `!! ROBOT DISARMED: <reason>`: every disarm is printed with its reason (a failed pose, an unknown outcome, a
+  walk whose cleanup was not confirmed). Poses and walking are skipped from then on. Check the dog, then type
+  `arm`. Type `robot` to see the arming state at any time.
 
 ## 0b. Without the robot: the simulated dog
 

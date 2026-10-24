@@ -203,7 +203,7 @@ code. Run sheet, consent rules and every control: [`docs/PERFORMANCE.md`](docs/P
 ## 7. The real robot
 
 **In the lab, use the ZHAW bridge** ([zhaw-physical-ai/go2_main](https://github.com/zhaw-physical-ai/go2_main)):
-start `python -m go2_bridge` there, then set `ROBOT_MODEL=zhaw_bridge` and `CAMERA_SOURCE=zhaw_bridge` here
+start it with `scripts/start_bridge.sh <interface>` (go2_main unchanged, 10 s SDK timeout), then set `ROBOT_MODEL=zhaw_bridge` and `CAMERA_SOURCE=zhaw_bridge` here
 (`pip install -e ".[bridge]"`). No Unitree SDK needed in this project. Details: `docs/HARDWARE_SETUP.md`.
 
 Direct SDK alternative:
