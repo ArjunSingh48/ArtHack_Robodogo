@@ -1,0 +1,83 @@
+robot:
+  opening:
+    - "Warte…"
+    - "Hm… ich glaube, das habe ich schon einmal gesehen…"
+    - "Oh… ich erinnere mich an ein Gemälde."
+  hesitant_prefix:
+    - "Ich bin nicht sicher… aber"
+    - "Vielleicht…"
+  found:
+    in_arms: "jemand hat einen Hund gemalt, gehalten in den Armen eines Menschen wie dir."
+    on_lap: "jemand hat einen Hund gemalt, der auf dem Schoss eines Menschen wie dir ruht."
+    beside: "jemand hat einen Hund gemalt, der neben einem Menschen wie dir {posture}."
+    at_feet: "jemand hat einen Hund gemalt, der zu Füssen eines Menschen wie dir {posture}."
+    in_front: "jemand hat einen Hund gemalt, der vor einem Menschen wie dir {posture}."
+    behind: "jemand hat einen Hund gemalt, der direkt hinter einem Menschen wie dir {posture}."
+    apart: "jemand hat einen Hund gemalt, der ein wenig abseits von einem Menschen wie dir {posture}… und doch bei ihm ist."
+  dog_posture:
+    standing: "steht"
+    sitting: "sitzt"
+    lying: "liegt"
+    held: "gehalten wird"
+    leaning_against: "sich anlehnt"
+    jumping_up: "sich aufrichtet"
+    walking: "geht"
+    stretching: "sich streckt"
+  attempt:
+    - "Ich versuche es."
+    - "Lass mich versuchen, dieser Hund zu sein."
+  outcome:
+    success:
+      - "Ich glaube, das kann ich auch."
+      - "So… glaube ich."
+    partial:
+      - "Auf dem Bild sah es leichter aus."
+      - "Ich konnte nicht ganz der Hund auf dem Bild werden. Aber ich habe es versucht."
+    still:
+      - "Ich bleibe ganz still… so wie er."
+    imagined:
+      - "Dieses Mal stelle ich es mir nur vor."
+    failed:
+      - "Mein Körper hat diesmal nicht gehorcht."
+    stopped:
+      - "Ich habe angehalten. Das ist in Ordnung."
+  question: "Sind das wir?"
+  no_match:
+    - "Ich glaube, diese Geste habe ich noch nie gesehen."
+  nobody:
+    - "Ich kann dich noch nicht richtig sehen."
+  repeat_visit:
+    - "Noch einmal… ich lerne noch."
+  response_yes:
+    - "Ich frage mich, ob das Nähe bedeutet."
+  response_keep:
+    - "Dann behalte ich diese Erinnerung."
+  response_another:
+    - "Vielleicht habe ich mich an den falschen Hund erinnert. Ich versuche es nochmal."
+
+bot:
+  intro: "Hallo.\n\nIch habe viele Hunde auf Gemälden gesehen.\nIch versuche zu verstehen, wie man einer ist.\n\nMöchtest du mit mir eine Erinnerung machen?"
+  start_button: "♡ Beginnen"
+  privacy_short: "Eine Kamera bei mir erkennt deine Körperhaltung. Bilder bleiben auf diesem Computer und werden nicht gespeichert. /privacy"
+  begin: "Danke.\n\nWenn du bei der Installation bist, scanne den QR-Code neben mir — oder schick mir ein Foto, auf dem du sitzt, stehst oder kniest… und ich suche nach uns."
+  help: "<b>Sind das wir?</b>\n\nEin Roboterhund lernt aus alten Gemälden, wie man ein Hund ist.\n\n/pair — mit der Installation verbinden\n/observe — den Roboter dich ansehen lassen\nFoto senden — ohne Roboter ausprobieren\n/memory — gespeicherte Gemälde\n/privacy — Datenschutz\n/forget — alles über dich löschen\n/stop — anhalten"
+  privacy: "<b>Datenschutz</b>\n\n• Die Kamera schätzt nur die Körperhaltung. Keine Gesichtserkennung, keine Identifikation.\n• Kamerabilder und Fotos werden im Speicher verarbeitet und nicht gespeichert.\n• An den Sprachdienst (ElevenLabs) geht nur der kurze Satz des Roboters.\n• Erinnerungen enthalten nur das Gemälde und die Zeit. Sitzungen laufen automatisch ab.\n• /forget löscht sofort alle deine Daten."
+  pair_ok: "Wir sind verbunden. Wenn du bereit bist, stell dich, setz dich oder knie dich zu mir und drücke /observe."
+  pair_invalid: "Dieser Code ist abgelaufen… Bitte scanne den QR-Code noch einmal."
+  pair_needed: "Bitte scanne zuerst den QR-Code bei der Installation. Oder schick mir ein Foto."
+  observe_closed: "Ich ruhe mich gerade aus. Die Person, die auf mich aufpasst, weckt mich bald."
+  observe_busy: "Einen Moment… ich versuche noch etwas."
+  looking: "Ich sehe dich an…"
+  photo_processing: "Lass mich schauen…"
+  photo_no_person: "Ich sehe keinen Menschen auf diesem Foto. Vielleicht eines, auf dem dein ganzer Körper zu sehen ist?"
+  memory_empty: "Wir haben noch keine Erinnerungen behalten."
+  memory_header: "Unsere Erinnerungen:"
+  forget_done: "Ich habe alles über dich vergessen. Schön, dich kennengelernt zu haben."
+  stop_done: "Angehalten."
+  stop_motion: "Ich habe den Roboter gebeten anzuhalten. (Software-Stopp — der physische Not-Aus liegt beim Operator.)"
+  button_yes: "♡ Ja, das sind wir"
+  button_another: "↻ Anderes Gemälde"
+  button_keep: "✧ Erinnerung behalten"
+  expired: "Dieser Moment ist vorbei… mach einen neuen mit /observe oder einem Foto."
+  simulated_note: "(simulierter Roboter: {behavior})"
+  operator_only: "Dieser Befehl ist nur für die Betreuung der Installation."

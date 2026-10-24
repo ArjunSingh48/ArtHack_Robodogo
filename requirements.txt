@@ -1,0 +1,20 @@
+# Core (Phase 2: Telegram simulation)
+aiogram>=3.31,<4
+pydantic>=2.13,<3
+pydantic-settings>=2.16,<3
+httpx>=0.28,<1
+PyYAML>=6.0
+numpy>=2.0
+Pillow>=11
+qrcode[pil]>=8
+
+# Vision (Phase 3)
+mediapipe>=0.10.30
+opencv-python>=4.10
+
+# Voice (Phase 4)
+elevenlabs>=2.74,<3
+
+# Tests
+pytest>=8
+pytest-asyncio>=1.4

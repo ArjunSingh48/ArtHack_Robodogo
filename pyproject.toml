@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "is-this-us"
+version = "0.2.0"
+description = "Is This Us? — an interactive installation in which a robot dog learns companionship from historical paintings."
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+license = { text = "MIT" }
+dependencies = [
+    "aiogram>=3.31,<4",
+    "pydantic>=2.13,<3",
+    "pydantic-settings>=2.16,<3",
+    "httpx>=0.28,<1",
+    "PyYAML>=6.0",
+    "numpy>=2.0",
+    "Pillow>=11",
+    "qrcode[pil]>=8",
+]
+
+[project.optional-dependencies]
+vision = ["mediapipe>=0.10.30", "opencv-python>=4.10"]
+voice = ["elevenlabs>=2.74,<3"]
+dev = ["pytest>=8", "pytest-asyncio>=1.4"]
+# unitree_sdk2py is not on PyPI in a reliable form; install it from the official
+# GitHub repository (see docs/HARDWARE_SETUP.md).
+
+[project.scripts]
+itu = "is_this_us.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+is_this_us = ["dialogue/locales/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"

@@ -1,0 +1,65 @@
+# MOCK FIXTURES — NOT REAL ARTWORKS. Used only by unit tests.
+# Every entry has is_fixture: true and an example.invalid URL.
+version: 1
+artworks:
+- id: mock:held
+  museum: Mock Museum (test fixture)
+  museum_object_id: held
+  title: "[fixture] Person holding a small dog"
+  artist: "[fixture]"
+  date: ""
+  image_url: https://example.invalid/held.jpg
+  page_url: https://example.invalid/held
+  rights: {status: fixture, source_statement: test fixture, verified_on: "2026-10-24"}
+  human: {posture: standing, gestures: [arms_holding], confidence: 0.9}
+  dog: {posture: held, relation: in_arms, interaction: holding, gaze_at_human: false,
+        reproducible: approximate, robot_behavior: sit, confidence: 0.9}
+  is_fixture: true
+- id: mock:feet
+  museum: Mock Museum (test fixture)
+  museum_object_id: feet
+  title: "[fixture] Seated person, dog lying at feet"
+  artist: "[fixture]"
+  image_url: https://example.invalid/feet.jpg
+  page_url: https://example.invalid/feet
+  rights: {status: fixture, source_statement: test fixture, verified_on: "2026-10-24"}
+  human: {posture: sitting, gestures: [], confidence: 0.9}
+  dog: {posture: lying, relation: at_feet, interaction: resting_together, gaze_at_human: false,
+        reproducible: "yes", robot_behavior: lie_down, confidence: 0.9}
+  is_fixture: true
+- id: mock:offer
+  museum: Mock Museum (test fixture)
+  museum_object_id: offer
+  title: "[fixture] Kneeling person reaching to a sitting dog"
+  artist: "[fixture]"
+  image_url: https://example.invalid/offer.jpg
+  page_url: https://example.invalid/offer
+  rights: {status: fixture, source_statement: test fixture, verified_on: "2026-10-24"}
+  human: {posture: kneeling, gestures: [extending_arm], confidence: 0.9}
+  dog: {posture: sitting, relation: in_front, interaction: offering, gaze_at_human: true,
+        reproducible: "yes", robot_behavior: sit, confidence: 0.9}
+  is_fixture: true
+- id: mock:apart
+  museum: Mock Museum (test fixture)
+  museum_object_id: apart
+  title: "[fixture] Standing person, dog standing apart"
+  artist: "[fixture]"
+  image_url: https://example.invalid/apart.jpg
+  page_url: https://example.invalid/apart
+  rights: {status: fixture, source_statement: test fixture, verified_on: "2026-10-24"}
+  human: {posture: standing, gestures: [], confidence: 0.9}
+  dog: {posture: standing, relation: apart, interaction: accompanying, gaze_at_human: false,
+        reproducible: "yes", robot_behavior: stand, confidence: 0.9}
+  is_fixture: true
+- id: mock:jump
+  museum: Mock Museum (test fixture)
+  museum_object_id: jump
+  title: "[fixture] Dog jumping up at a seated person"
+  artist: "[fixture]"
+  image_url: https://example.invalid/jump.jpg
+  page_url: https://example.invalid/jump
+  rights: {status: fixture, source_statement: test fixture, verified_on: "2026-10-24"}
+  human: {posture: sitting, gestures: [], confidence: 0.8}
+  dog: {posture: jumping_up, relation: in_front, interaction: greeting, gaze_at_human: true,
+        reproducible: "no", robot_behavior: stillness, confidence: 0.8}
+  is_fixture: true

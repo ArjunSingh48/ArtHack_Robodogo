@@ -1,0 +1,85 @@
+# Robot voice: soft, shy, curious, uncertain. Short lines. "…" marks a breath.
+robot:
+  opening:
+    - "Wait…"
+    - "Hm… I think I've seen this before…"
+    - "Oh… I remember a painting."
+  hesitant_prefix:
+    - "I'm not sure… but"
+    - "Maybe…"
+  found:
+    in_arms: "someone painted a dog held close, in the arms of a person like you."
+    on_lap: "someone painted a dog resting on the lap of a person like you."
+    beside: "someone painted a dog {posture} beside a person like you."
+    at_feet: "someone painted a dog {posture} at the feet of a person like you."
+    in_front: "someone painted a dog {posture} in front of a person like you."
+    behind: "someone painted a dog {posture} just behind a person like you."
+    apart: "someone painted a dog {posture} a little apart from a person like you… but still with them."
+  dog_posture:
+    standing: "standing"
+    sitting: "sitting"
+    lying: "lying"
+    held: "being held"
+    leaning_against: "leaning in"
+    jumping_up: "rising up"
+    walking: "walking"
+    stretching: "stretching"
+  attempt:
+    - "I'm going to try."
+    - "Let me try to be that dog."
+  outcome:
+    success:
+      - "I think I can do that too."
+      - "Like this… I think."
+    partial:
+      - "This was harder than it looked in the painting."
+      - "I couldn't quite become the dog in the painting. But I tried."
+    still:
+      - "I'll stay very still… the way it stayed."
+    imagined:
+      - "I'll only imagine it this time."
+    failed:
+      - "My body didn't listen this time."
+    stopped:
+      - "I stopped. That's alright."
+  question: "Is this us?"
+  no_match:
+    - "I don't think I've seen this gesture before."
+    - "None of my paintings look like this… yet."
+  nobody:
+    - "I can't quite see you yet."
+  repeat_visit:
+    - "Again… I'm still learning this."
+  response_yes:
+    - "I wonder if this is what being close means."
+  response_keep:
+    - "Then I'll keep this one."
+  response_another:
+    - "Maybe I remembered the wrong dog. Let me try again."
+
+bot:
+  intro: "Hello.\n\nI have seen many dogs in paintings.\nI'm trying to understand how to be one.\n\nWould you like to make a memory with me?"
+  start_button: "♡ Start"
+  privacy_short: "A camera near me sees your body's posture. Images stay on this computer and are not kept. /privacy"
+  begin: "Thank you.\n\nIf you are at the installation, scan the QR code next to me — or send me a photo of yourself sitting, standing, kneeling… and I'll look for us."
+  help: "<b>Is This Us?</b>\n\nA robot dog is learning how to be a dog from old paintings.\nYou make a gesture. A painting becomes a memory. The robot tries to answer with its body.\n\n/pair — join the installation (or scan the QR code)\n/observe — ask the robot to look at you\nSend a photo — try it without the robot\n/memory — paintings you kept\n/privacy — what happens to your data\n/forget — delete everything about you\n/stop — stop the current moment"
+  privacy: "<b>Privacy</b>\n\n• The camera is used only to estimate body posture (joint positions). No face recognition, no identification.\n• Camera frames and photos you send are processed in memory on this computer and are not stored.\n• Only the robot's short sentence is sent to the voice service (ElevenLabs). Never images or body data.\n• Saved memories contain only the painting and the time. Sessions expire automatically.\n• /forget deletes all your data immediately."
+  pair_ok: "We are connected now. When you're ready, stand, sit or kneel near me and press /observe."
+  pair_invalid: "This code has expired… Please scan the QR code at the installation again."
+  pair_needed: "Please scan the QR code at the installation first. Or send me a photo — that works anywhere."
+  observe_closed: "I'm resting right now. The person looking after me will wake me soon."
+  observe_busy: "One moment… I'm still trying something."
+  looking: "I'm looking at you…"
+  photo_processing: "Let me look…"
+  photo_no_person: "I can't quite see a person in this photo. Maybe try one where your whole body is visible?"
+  memory_empty: "We haven't kept any memories yet."
+  memory_header: "Memories we kept:"
+  forget_done: "I've forgotten everything about you. It was nice to meet you."
+  stop_done: "Stopped."
+  stop_motion: "I asked the robot to stop moving. (This is a software stop — the operator has the physical emergency stop.)"
+  button_yes: "♡ Yes, that's us"
+  button_another: "↻ Try another painting"
+  button_keep: "✧ Keep this memory"
+  expired: "This moment has passed… make a new one with /observe or a photo."
+  simulated_note: "(simulated robot: {behavior})"
+  operator_only: "This command is for the installation operator."

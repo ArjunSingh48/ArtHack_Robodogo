@@ -1,0 +1,356 @@
+# Hand annotations for the curated collection (source of truth for interpretation).
+# Museum metadata is NOT stored here; `itu artworks build` fetches it live from the
+# museum APIs, verifies rights, and writes annotations.yaml.
+#
+# Vocabulary: see src/is_this_us/domain.py (HumanPosture, DogPosture, SpatialRelation,
+# Interaction, Reproducibility, RobotBehavior). Each entry was annotated by looking at
+# the museum image. Poems are original text written for this installation.
+notes:
+  met:435864:
+    human:
+      posture: standing
+      gestures:
+      - arms_holding
+      - extending_arm
+      confidence: 0.85
+    dog:
+      posture: held
+      relation: in_arms
+      interaction: holding
+      gaze_at_human: false
+      reproducible: approximate
+      robot_behavior: sit
+      confidence: 0.9
+    poem: She holds the small dog close and opens her other hand, as if asking for something.
+  met:828497:
+    human:
+      posture: unknown
+      gestures:
+      - arms_holding
+      confidence: 0.4
+    dog:
+      posture: held
+      relation: in_arms
+      interaction: embrace
+      gaze_at_human: false
+      reproducible: approximate
+      robot_behavior: sit
+      confidence: 0.9
+    poem: Two faces side by side, both looking out at whoever is looking at them.
+  met:436323:
+    human:
+      posture: unknown
+      gestures:
+      - arms_holding
+      confidence: 0.4
+    dog:
+      posture: held
+      relation: in_arms
+      interaction: holding
+      gaze_at_human: false
+      reproducible: approximate
+      robot_behavior: sit
+      confidence: 0.85
+    poem: Lifted up and tied with ribbon. I am not sure I would fit.
+  met:437173:
+    human:
+      posture: standing
+      gestures:
+      - extending_arm
+      confidence: 0.9
+    dog:
+      posture: standing
+      relation: beside
+      interaction: touching_head
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: stand
+      confidence: 0.95
+    poem: A hand rests on a head. Neither of them seems in a hurry.
+  met:437841:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.7
+    dog:
+      posture: lying
+      relation: at_feet
+      interaction: resting_together
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.8
+    poem: Everyone above is busy with something important. The dog stays low and near.
+  met:438815:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.8
+    dog:
+      posture: lying
+      relation: beside
+      interaction: resting_together
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.9
+    poem: A child sits on a large, patient dog. The dog lets the afternoon happen.
+  met:437939:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.7
+    dog:
+      posture: lying
+      relation: in_front
+      interaction: waiting
+      gaze_at_human: true
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.5
+    poem: By the fire, a little apart, watching the family as if learning it.
+  met:436252:
+    human:
+      posture: standing
+      gestures: []
+      confidence: 0.9
+    dog:
+      posture: leaning_against
+      relation: beside
+      interaction: gazing_up
+      gaze_at_human: true
+      reproducible: approximate
+      robot_behavior: stand
+      confidence: 0.9
+    poem: The greyhound leans in and looks up. He is looking somewhere else.
+  met:437890:
+    human:
+      posture: standing
+      gestures:
+      - extending_arm
+      confidence: 0.9
+    dog:
+      posture: standing
+      relation: beside
+      interaction: touching_head
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: stand
+      confidence: 0.85
+    poem: Standing shoulder to hip, the same height of quiet.
+  met:436217:
+    human:
+      posture: unknown
+      gestures:
+      - arms_holding
+      confidence: 0.4
+    dog:
+      posture: held
+      relation: in_arms
+      interaction: holding
+      gaze_at_human: false
+      reproducible: approximate
+      robot_behavior: sit
+      confidence: 0.9
+    poem: A small black dog, carried like a secret.
+  met:437966:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.85
+    dog:
+      posture: sitting
+      relation: beside
+      interaction: resting_together
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: sit
+      confidence: 0.85
+    poem: She sits. The collie sits. Somehow that is the whole story.
+  met:436853:
+    human:
+      posture: reclining
+      gestures: []
+      confidence: 0.6
+    dog:
+      posture: lying
+      relation: beside
+      interaction: gazing_up
+      gaze_at_human: true
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.85
+    poem: Lying close and looking up, the way you look at weather you trust.
+  met:437648:
+    human:
+      posture: standing
+      gestures: []
+      confidence: 0.9
+    dog:
+      posture: lying
+      relation: beside
+      interaction: waiting
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.75
+    poem: He poses for the painter. The dog simply waits for him to be done.
+  met:435738:
+    human:
+      posture: reclining
+      gestures: []
+      confidence: 0.8
+    dog:
+      posture: sitting
+      relation: beside
+      interaction: waiting
+      gaze_at_human: true
+      reproducible: 'yes'
+      robot_behavior: sit
+      confidence: 0.7
+    poem: Someone is asleep. The dog keeps watch, a little worried, a little curious.
+  met:437449:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.8
+    dog:
+      posture: jumping_up
+      relation: in_front
+      interaction: greeting
+      gaze_at_human: true
+      reproducible: approximate
+      robot_behavior: greet
+      confidence: 0.7
+    poem: The men talk. The dog rises up to be part of the conversation.
+  met:436077:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.85
+    dog:
+      posture: standing
+      relation: beside
+      interaction: gazing_up
+      gaze_at_human: true
+      reproducible: 'yes'
+      robot_behavior: stand
+      confidence: 0.8
+    poem: A slender dog at her side, turning its face toward her.
+  met:438617:
+    human:
+      posture: sitting
+      gestures:
+      - arms_holding
+      confidence: 0.75
+    dog:
+      posture: sitting
+      relation: beside
+      interaction: embrace
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: sit
+      confidence: 0.75
+    poem: The youngest brother keeps an arm around the dog while the others read the map.
+  met:436322:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.85
+    dog:
+      posture: lying
+      relation: beside
+      interaction: resting_together
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.85
+    poem: She reads a letter. The dog naps beside her and asks no questions.
+  met:437177:
+    human:
+      posture: sitting
+      gestures:
+      - arms_holding
+      confidence: 0.85
+    dog:
+      posture: held
+      relation: on_lap
+      interaction: holding
+      gaze_at_human: false
+      reproducible: approximate
+      robot_behavior: sit
+      confidence: 0.8
+    poem: One small dog on a lap, another in the grass. Two ways of belonging.
+  met:436808:
+    human:
+      posture: sitting
+      gestures:
+      - extending_arm
+      confidence: 0.85
+    dog:
+      posture: lying
+      relation: at_feet
+      interaction: resting_together
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.75
+    poem: A family reaches toward the baby. The dog stays at their feet, included anyway.
+  met:436586:
+    human:
+      posture: unknown
+      gestures:
+      - extending_arm
+      confidence: 0.5
+    dog:
+      posture: sitting
+      relation: in_front
+      interaction: offering
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: sit
+      confidence: 0.7
+    poem: She lifts a garland over the dog's head. The dog holds still to receive it.
+  met:436951:
+    human:
+      posture: standing
+      gestures: []
+      confidence: 0.8
+    dog:
+      posture: standing
+      relation: apart
+      interaction: accompanying
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: stand
+      confidence: 0.6
+    poem: The couple stands by the water. The dog stands a little away, still with them.
+  cma:169662:
+    human:
+      posture: sitting
+      gestures: []
+      confidence: 0.9
+    dog:
+      posture: lying
+      relation: at_feet
+      interaction: resting_together
+      gaze_at_human: false
+      reproducible: 'yes'
+      robot_behavior: lie_down
+      confidence: 0.8
+    poem: A very small dog curled at the hem of a very dark dress.
+  cma:156311:
+    human:
+      posture: standing
+      gestures:
+      - extending_arm
+      confidence: 0.85
+    dog:
+      posture: walking
+      relation: in_front
+      interaction: accompanying
+      gaze_at_human: false
+      reproducible: approximate
+      robot_behavior: stand
+      confidence: 0.85
+    poem: Going somewhere together. I am not allowed to walk toward you, so I will stand ready.
