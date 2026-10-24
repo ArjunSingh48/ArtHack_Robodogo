@@ -21,6 +21,7 @@ from .catalog import PerformanceCatalog, ShowArtifact
 # camera posture (HumanPosture value) → the round's coarse pose group
 POSE_GROUP = {"standing": "standing", "leaning_forward": "standing", "sitting": "sitting",
               "kneeling": "kneeling", "crouching": "kneeling", "reclining": "lying", "lying": "lying"}
+POSABLE = ("standing", "sitting", "kneeling", "lying")  # the person's pose in a round picture (not riding …)
 NEAR = {("sitting", "kneeling"), ("kneeling", "lying"), ("sitting", "lying"), ("kneeling", "standing")}
 BEHAVIOR_FOR_TAGS = (  # painted dog's tags → a supported robot pose (first match wins)
     ({"at_feet", "curled", "lying", "resting", "under_chair"}, "lie_down"),
@@ -100,7 +101,9 @@ class Pick:
 
 def candidates(catalog: PerformanceCatalog, era: str) -> list[ShowArtifact]:
     """Pictures of this era the robot may pick and send: open-access art with a local image."""
-    return [a for a in catalog.for_chapter(era) if a.kind == "art" and a.displayable and a.in_rounds]
+    return [a for a in catalog.for_chapter(era)
+            if a.kind == "art" and a.displayable and a.in_rounds
+            and a.subject == "human_and_dog" and a.human in POSABLE]  # a person AND a dog, in a pose one can take
 
 
 def _score(catalog: PerformanceCatalog, a: ShowArtifact, group, gestures: set[str],
