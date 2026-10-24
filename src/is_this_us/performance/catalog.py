@@ -158,10 +158,11 @@ class PerformanceCatalog:
             meme = self.meme_repo.get(key) if self.meme_repo else None
             if meme is None:
                 raise CatalogError("meme not found among approved memes")
-            img = self.meme_repo.local_image(meme)
+            # the projector may show presentation-use images (selected by the project owner); never sent anywhere
+            img = self.meme_repo.local_image(meme, presentation=True)
             return ShowArtifact(id=key, kind="meme", title=meme.name, artist=meme.attribution, date=meme.year,
                                 museum="Internet culture", page_url=str(meme.page_url),
-                                rights_status="reference only — image not reproduced",
+                                rights_status="shown for this presentation" if img else "reference only — image not reproduced",
                                 rights_statement=meme.image.rights.value, image_path=img,
                                 extra={"subject": meme.subject}, **common)
         if e.get("fetch"):
