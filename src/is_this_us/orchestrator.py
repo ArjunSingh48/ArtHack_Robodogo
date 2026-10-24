@@ -9,10 +9,11 @@ separated: the only thing that crosses into the robot is a `MotionPlan.behavior`
 a member of the closed `RobotBehavior` enum produced from curated annotations, and
 it always passes through `MotionGuard`.
 
-Two origins:
+Origins:
 * installation — frame from the configured camera; motion via the guarded robot
-  (real only if armed by an operator).
+  (real only if armed by an operator), with the primary image-message contract.
 * photo — a visitor's Telegram photo; motion is ALWAYS simulated, never real.
+* installation_experiment — explicit legacy dialogue/photo/card experiment.
 """
 
 from __future__ import annotations
@@ -22,11 +23,12 @@ import logging
 import random
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
 import numpy as np
 
 from .artworks.repository import ArtworkRepository
-from .dialogue.engine import DialogueEngine, Utterance
+from .dialogue.engine import DialogueEngine, EncounterText, Utterance
 from .domain import (
     ArchiveSource, Artwork, ExecutionResult, ExecutionStatus, HumanObservation, MatchResult, MotionPlan,
 )
@@ -85,6 +87,9 @@ class InteractionOutcome:
     utterance: Utterance
     speech: SpeechAudio | None
     artwork: Artwork | None  # the chosen scene: a painting (Artwork) or a Meme
+    recipient_chat_id: int
+    encounter: EncounterText | None = None
+    image_source: Path | str | None = None
     trace: list[State] = field(default_factory=list)
     delivery_status: str = "pending"
     archive: str = "art"
@@ -111,7 +116,7 @@ class InteractionOutcome:
         lines.append(f"match reason  {self.match.reason}")
         lines.append(f"motion plan   {self.plan.explanation} [{self.plan.fidelity}]")
         lines.append(f"execution     {self.result.status}: {self.result.detail}")
-        lines.append(f"dialogue      {self.utterance.spoken}")
+        lines.append(f"dialogue      {self.utterance.spoken or '(silent)'}")
         lines.append(f"voice         {self.speech.provider + (' (cached)' if self.speech.cached else '') if self.speech else 'text-only'}")
         lines.append(f"delivery      {self.delivery_status}")
         lines.append("states        " + " → ".join(self.trace))
@@ -168,7 +173,7 @@ class InteractionOrchestrator:
         return ArchiveSource(archive or self.storage.visitor_archive(chat_id, self.default_archive.value))
 
     async def observe_installation(self, chat_id: int, source: FrameSource,
-                                   archive: str | None = None) -> InteractionOutcome:
+                                   archive: str | None = None, *, experimental: bool = False) -> InteractionOutcome:
         if self.installation_lock.locked():
             raise BusyError()
         async with self.installation_lock:
@@ -183,7 +188,8 @@ class InteractionOrchestrator:
                 sm.go(State.INTERPRETING)
                 obs = await self.perceive(frame.image, frame.source)
                 del frame  # frames are never retained
-            return await self._respond(sm, chat_id, obs, origin="installation",
+            origin = "installation_experiment" if experimental else "installation"
+            return await self._respond(sm, chat_id, obs, origin=origin,
                                        archive=self.archive_for(chat_id, archive))
 
     async def observe_photo(self, chat_id: int, image_bytes: bytes, archive: str | None = None) -> InteractionOutcome:
@@ -203,12 +209,12 @@ class InteractionOrchestrator:
 
     async def another(self, chat_id: int, interaction_id: str) -> InteractionOutcome | None:
         row = self.storage.get_interaction(interaction_id, chat_id)
-        if row is None or row.expired:
+        if row is None or row.expired or row.origin == "installation":
             return None
         obs = HumanObservation.model_validate(row.observation)
         sm = StateMachine()
         sm.go(State.MATCHING)
-        if row.origin == "installation" and self.installation_lock.locked():
+        if row.origin.startswith("installation") and self.installation_lock.locked():
             raise BusyError()
         # stay in the same memory; a surprise keeps surprising
         return await self._respond(sm, chat_id, obs, origin=row.origin, exclude=row.shown_ids,
@@ -228,7 +234,11 @@ class InteractionOrchestrator:
         if not already_matching:
             sm.go(State.MATCHING)
         first_meme = not self.storage.has_seen_meme(chat_id)
-        match = self.matcher.match(obs, archive, exclude=exclude,
+        primary = origin == "installation"
+        unavailable = ([a.id for a in self.repo.all()
+                        if self.repo.local_image(a, presentation=True) is None and self.repo.remote_image(a) is None]
+                       if primary else [])
+        match = self.matcher.match(obs, archive, exclude=exclude + unavailable,
                                    recent=self.storage.recent_artworks(chat_id), rng=self.rng)
         artwork = match.chosen.artwork if match.chosen else None
 
@@ -245,12 +255,15 @@ class InteractionOrchestrator:
 
         sm.go(State.NARRATING)
         dialogue = DialogueEngine(lang)
-        utterance = dialogue.compose(seed=f"{chat_id}:{interaction_id}:{len(exclude)}", observation=obs,
-                                     artwork=artwork, plan=plan if artwork else None,
-                                     result=result if artwork else None, turn=turn, is_retry=is_retry,
-                                     first_meme=first_meme)
-        speech = await asyncio.to_thread(self.synth.synthesize, utterance.spoken, lang)
-        if speech and origin == "installation" and self.player and self.player.available:
+        seed = f"{chat_id}:{interaction_id}:{len(exclude)}"
+        encounter = dialogue.compose_encounter(seed=seed, artwork=artwork) if primary else None
+        utterance = (Utterance(lines=[], spoken=encounter.spoken or "") if primary else
+                     dialogue.compose(seed=seed, observation=obs, artwork=artwork,
+                                      plan=plan if artwork else None, result=result if artwork else None,
+                                      turn=turn, is_retry=is_retry, first_meme=first_meme))
+        speech = (await asyncio.to_thread(self.synth.synthesize, utterance.spoken, lang)
+                  if utterance.spoken else None)
+        if speech and origin.startswith("installation") and self.player and self.player.available:
             self.player.play(speech.audio_path)
 
         shown = exclude + ([artwork.id] if artwork else [])
@@ -265,6 +278,9 @@ class InteractionOrchestrator:
         outcome = InteractionOutcome(
             interaction_id=interaction_id, origin=origin, observation=obs, match=match, plan=plan, result=result,
             utterance=utterance, speech=speech, artwork=artwork, trace=sm.trace, archive=archive.value,
+            recipient_chat_id=chat_id, encounter=encounter,
+            image_source=(self.repo.local_image(artwork, presentation=primary) or self.repo.remote_image(artwork))
+            if artwork else None,
         )
         sm.go(State.DELIVERING)
         try:

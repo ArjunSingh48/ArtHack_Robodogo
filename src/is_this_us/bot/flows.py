@@ -21,6 +21,7 @@ from ..artworks.repository import YamlArtworkRepository
 from ..cards import render_diptych, render_memory_card
 from ..dialogue.engine import DialogueEngine, Texts
 from ..domain import Artwork, ExecutionStatus
+from ..image_message import ImageMessageError, image_caption
 from ..orchestrator import BusyError, InteractionOrchestrator, InteractionOutcome
 from ..storage import Storage
 from ..vision.frame_sources import FrameSource
@@ -39,6 +40,7 @@ class Reply:
     voice: Path | None = None
     buttons: list[list[tuple[str, str]]] = field(default_factory=list)  # rows of (label, callback_data)
     preview_url: str | None = None  # show a link preview (meme references) instead of an image
+    image_required: bool = False  # primary image messages must never fall back to text
 
 
 def pick_lang(language_code: str | None, default: str = "en") -> str:
@@ -49,6 +51,10 @@ def pick_lang(language_code: str | None, default: str = "en") -> str:
 def caption_for(outcome: InteractionOutcome, texts: Texts) -> str:
     a = outcome.artwork
     assert a is not None
+    if outcome.encounter is not None:
+        if outcome.encounter.caption is None:
+            raise ImageMessageError("no caption for the selected image")
+        return image_caption(a, outcome.encounter.caption)
     lines = outcome.utterance.lines
     body = [html.escape(lines[1])] + [html.escape(x) for x in lines[2:-1]]
     if getattr(a, "kind", "art") == "meme":
@@ -108,14 +114,26 @@ class VisitorFlows:
             return Image.open(BytesIO(r.content))
 
     def replies_for_outcome(self, chat_id: int, outcome: InteractionOutcome) -> list[Reply]:
+        row = self.storage.get_interaction(outcome.interaction_id, chat_id)
+        if (outcome.recipient_chat_id != chat_id or row is None or row.expired
+                or row.artwork_id != (outcome.artwork.id if outcome.artwork else None)):
+            raise ImageMessageError("recipient or interaction is no longer valid for delivery")
         texts = self.texts(chat_id)
+        if outcome.encounter is not None:
+            if outcome.artwork is None or outcome.result.status is ExecutionStatus.STOPPED:
+                return []
+            image = (self.orch.repo.local_image(outcome.artwork, presentation=True)
+                     or self.orch.repo.remote_image(outcome.artwork))
+            if image is None:
+                raise ImageMessageError("selected archive image is unavailable for presentation delivery")
+            return [Reply("photo", text=caption_for(outcome, texts), photo=image, image_required=True)]
         if outcome.artwork is None:
             return [Reply("text", text=html.escape(" ".join(outcome.utterance.lines)))]
         iid = outcome.interaction_id
         buttons = [[(texts.bot("button_yes"), f"{CB_YES}:{iid}")],
                    [(texts.bot("button_another"), f"{CB_ANOTHER}:{iid}"),
                     (texts.bot("button_keep"), f"{CB_KEEP}:{iid}")]]
-        if self.imitation_camera_factory is not None and outcome.origin == "installation":
+        if self.imitation_camera_factory is not None and outcome.origin == "installation_experiment":
             buttons.append([(texts.bot("button_photo"), f"{CB_PHOTO}:{iid}")])
         image = self.painting_source(outcome.artwork)
         caption = caption_for(outcome, texts)
@@ -137,7 +155,7 @@ class VisitorFlows:
         row = self.storage.get_interaction(iid, chat_id)
         if row is None or row.expired or not row.artwork_id:
             return [Reply("text", text=t.bot("expired"))]
-        if self.imitation_camera_factory is None or row.origin != "installation":
+        if self.imitation_camera_factory is None or row.origin != "installation_experiment":
             return [Reply("text", text=t.bot("photo_unavailable"))]
         scene = self.repo.get(row.artwork_id)
         cam = await asyncio.to_thread(self.imitation_camera_factory)
@@ -200,7 +218,7 @@ class VisitorFlows:
         if kind == CB_BEGIN:
             return [Reply("text", text=t.bot("begin"))]
         row = self.storage.get_interaction(iid, chat_id)  # scoped to this chat only
-        if row is None or row.expired or not row.artwork_id:
+        if row is None or row.expired or not row.artwork_id or row.origin == "installation":
             return [Reply("text", text=t.bot("expired"))]
         dialogue = DialogueEngine(t.lang)
         if kind == CB_PHOTO:

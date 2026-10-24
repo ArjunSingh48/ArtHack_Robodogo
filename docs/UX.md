@@ -9,9 +9,10 @@ The ordered implementation work is recorded in the
 [UX alignment plan](UX_ALIGNMENT_PLAN.md). The [demo script](DEMO_SCRIPT.md)
 describes this same encounter for rehearsal; it must not introduce extra visitor
 steps. Step 1 defines the experience only. Changes to dialogue, delivery, motion,
-and launchers belong to later steps of the plan. Step 2 now provides independent
-caption and optional speech outputs in the dialogue engine; existing flows have
-not yet been connected to that API.
+and launchers belong to later steps of the plan. Step 2 provides independent
+caption and optional speech outputs; step 3 connects those captions to the
+installation's image delivery. Automatic observation and the complete encounter
+sequence still need integration.
 
 ## Character and communication
 
@@ -153,8 +154,11 @@ Example layout (the bracketed values come from the archive metadata):
 
 The italic block contains real attribution, including required license/source
 information. Use Telegram-supported formatting and escape metadata correctly.
-Only send images allowed by the archive's existing rights policy; a reference
-to a meme is not permission to distribute its image.
+For this noncommercial presentation, use the familiar memes with their original
+creator/source credits. Licensing clearance is not a prerequisite for this
+prototype. Record actual image provenance and presentation use explicitly;
+do not describe these images as licensed or as original project recreations.
+Keep museum rights credits intact as well.
 
 No story paragraphs, pose analysis, match scores, voice notes, or feedback/action
 buttons are part of this image-message format. Do not automatically copy the
@@ -201,9 +205,9 @@ captions retain the exact approved wording above in all three locales.
 | --- | --- |
 | Local perception and matching | Existing pipeline supports local pose analysis and coarse relationship matching; live camera behavior still needs verification. |
 | Automatic observation | Stable-pose triggering, one-event-per-held-pose behavior, and reacquisition/reset rules still need implementation and verification. |
-| Telegram | Existing messages include longer dialogue and interaction buttons. A dedicated short caption plus italic-credit format is required. Live delivery remains to be verified. |
-| Meme images | Current meme annotations are reference-only. Image delivery needs eligible licensed or team-made assets and matching metadata; a source link or preview is not proof of the required image message. |
-| Character voice | Step 2 adds `DialogueEngine.compose_encounter` with independent approved captions and optional short speech, covered by local tests. Legacy dialogue remains available for experiments; primary delivery/pipeline wiring and speech frequency remain pending. Voice dependencies and live playback require setup/verification. |
+| Telegram | Step 3 prepares one archive photo with an approved caption and italic credit for installation encounters. Recipient checks and bounded delivery distinguish failure from unknown outcomes; console previews use the same caption. Live delivery remains to be verified. |
+| Meme images | The five familiar memes have local presentation assets and original creator/source provenance. The explicit presentation-use status follows the user's noncommercial presentation direction; it does not claim a license or a project recreation. |
+| Character voice | Step 2's independent captions and optional speech are used by the installation path. It currently stays silent; speech frequency and live playback remain to be decided/verified. Photo-upload and talk experiments retain legacy dialogue. |
 | Physical finale | Existing adapter settle times are not a dedicated 10-second final hold. Implement and verify an interruptible hold and its safe exit on the actual robot. |
 | Presentation and web | The dog + computer + beamer setup is confirmed. Existing show/projector components are available, but a presentation view following the main encounter still needs integration and rehearsal. Keep operator/debug tools separate from the audience view. |
 

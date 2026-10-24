@@ -12,12 +12,15 @@ for the agreed journey and implementation gaps, and [AGENTS.md](AGENTS.md) for c
 The broader modes documented below are existing capabilities and experiments;
 they are not all part of this primary experience.
 
-UX alignment step 2 adds `DialogueEngine.compose_encounter`: approved painting
-and meme captions plus independent optional good-boy speech, with English,
-Russian, and German support. It is silent unless speech is requested; encounter
-speech frequency remains undecided. Existing flows still use the legacy dialogue
-composer. Telegram delivery and automatic encounter wiring remain steps 3 and 5
-of the [alignment plan](docs/UX_ALIGNMENT_PLAN.md).
+UX alignment steps 2–3 separate captions from optional good-boy speech and use
+the short image-message format for installation encounters: one archive image,
+one approved caption, and italic attribution. The five familiar memes are
+included for this noncommercial presentation with original credits and source
+provenance. Installation encounters currently stay silent; speech frequency
+remains undecided. Photo-upload and talk experiments retain their legacy dialogue.
+Automatic stable-pose triggering and the full encounter sequence remain step 5
+of the [alignment plan](docs/UX_ALIGNMENT_PLAN.md). Real Telegram delivery still
+needs verification.
 The presentation view still needs to be connected to this main scenario; the
 existing historical show provides projector components that may be reused.
 

@@ -6,7 +6,9 @@ both with **equal sincerity**: the same matcher interface, the same safety path,
 the same memory card. The contrast between a Van Dyck greyhound and a dog drinking coffee in a burning
 room is the point, and the robot never winks at it.
 
-> "I found another kind of painting. Humans call it a meme."
+The primary presentation sends the selected meme image with `hehe or not hehe?`
+and italic attribution. The longer dialogue, memory cards, and consented photos
+described below remain experiments; see [UX.md](UX.md) for the primary encounter.
 
 ## How it fits the existing pipeline
 
@@ -73,22 +75,36 @@ Gesture weighs more than exact posture for memes (`MemeMatcher` weights in `matc
 **Adding a meme never touches robot-control code.** Drop a JSON file into `data/memes/annotations/`, run
 `itu memes validate`, restart the bot. A meme can only *name* an approved behavior; it cannot define motion.
 
-## Image rights policy
+## Image provenance and presentation use
 
-Famous meme images are copyrighted photographs or comics. Their owners are real people: Atsuko Sato
-photographed Kabosu (Doge); Balltze's owner photographed him (Cheems); KC Green drew "On Fire".
-**Being listed on Imgflip, Know Your Meme or a search engine is not permission to reproduce an image.**
+For this noncommercial presentation, the project owner selected the five familiar
+memes themselves. Their actual files are included under `data/memes/presentation/`
+with original creator/source attribution and download provenance. This selection
+is recorded as `presentation_use`, separately from a license or a team recreation.
 
 | `image.rights` | What the installation does |
 |---|---|
-| `reference_only` (default, all five curated memes) | Names, describes and credits the meme; links to the source with a Telegram link preview. **No image is stored or sent.** Memory cards show a typographic reference panel. |
+| `presentation_use` (the five curated memes) | Uses the recorded local image for the primary presentation encounter and its Telegram delivery. Requires source URL, source page, retrieval date, checksum, and a note recording the project owner's selection. |
+| `reference_only` | Experimental flows may name, describe and link the meme. No local image is stored or sent. Primary matching excludes it. |
 | `licensed` | Shows `local_file`. Requires a `license_note` recording the permission (who granted it, when, terms). |
 | `recreation` | Shows `local_file`, an original re-staging made by the team (e.g. the team's own dog photographed in the pose). Requires a `license_note`. |
 | `unknown` | Drafts only. Never loaded. |
 
-The schema enforces this: `reference_only` files cannot point to an image; `licensed`/`recreation`
-require both a file and a licence note; a test fails if any image file appears under `data/memes/`
-without that record.
+The schema keeps these statuses distinct. `reference_only` entries cannot point
+to an image. `licensed`, `recreation`, and `presentation_use` need a local file and
+their appropriate provenance note. Presentation files are exposed through
+`local_image(..., presentation=True)`; ordinary photo-upload/card experiments keep
+their previous reference behavior. Validation checks file decoding, Telegram photo
+dimensions/size, and recorded checksums. Tests also check that every shipped meme
+image belongs to an annotation.
+
+The actual files are the Kabosu photograph, a sitting Cheems cutout template,
+the captioned Side Eye Dog variant (“you think you can fool us?”), the October
+2018 Lapsha photograph from @loopsnoot, and the archived This Is Fine lead image.
+The latter retains its source's 300×168 resolution. Caption author information
+unavailable in the Side Eye source is recorded honestly. Each annotation's
+`image.source_url` identifies the exact downloaded file; `image.source_page`
+identifies the page used to establish its provenance. No image was AI-recreated.
 
 ## Discovery with Imgflip
 
@@ -125,8 +141,10 @@ planner falls back to `stand`, and the robot honestly says it couldn't quite man
 
 ## Imitation photo (diptych), with consent
 
-When `IMITATION_CAMERA_SOURCE` points to a camera that can see the robot (not the robot's own camera),
-installation moments get a **📷 Photograph the imitation** button. Pressing it asks for consent first;
+In the explicit experimental installation path
+(`observe_installation(..., experimental=True)`), when `IMITATION_CAMERA_SOURCE`
+points to a camera that can see the robot, moments get a **📷 Photograph the imitation**
+button. The primary encounter has no such button. Pressing it asks for consent first;
 only after **"Yes, one photo"** is a single frame captured. It is composed into a diptych —
 *the memory* (the painting, a licensed/recreated meme image, or the typographic reference panel) beside
 *the attempt* — and sent only to that visitor. The frame and the diptych exist only in memory.
@@ -134,7 +152,9 @@ Photos sent from elsewhere (photo mode) never get this button: the robot isn't t
 
 ## Dialogue
 
-Same character, same restraint (`dialogue/locales/*.yaml`, section `meme`):
+The primary encounter uses `compose_encounter` (`encounter` locale section): one
+`hehe or not hehe?` caption independent of optional short speech. Legacy
+experimental dialogue remains in the `meme` locale section:
 
 * first meme of a visit: "I found another kind of painting. Humans call it a meme."
 * "I think this dog understands something I don't." (used when a meme has no reflection)

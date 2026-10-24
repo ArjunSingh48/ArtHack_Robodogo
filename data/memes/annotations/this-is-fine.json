@@ -40,11 +40,16 @@
     "ru": "Вокруг него всё горит, а он держит свою чашку. Я бы хотел научиться такому спокойствию.",
     "de": "Um ihn herum brennt alles, und er hält seine Tasse. Diese Ruhe würde ich gern lernen."
   },
-  "notes": "The visitor's held forearms (a cup) and sitting summon this one. No fire, ever.",
+  "notes": "The visitor's held forearms (a cup) and sitting summon this one. No fire, ever. Presentation asset: the 300x168 archive lead image; source resolution retained.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
-    "rights": "reference_only",
-    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+    "rights": "presentation_use",
+    "local_file": "presentation/this-is-fine.jpeg",
+    "license_note": "Selected by the project owner for this noncommercial presentation. Original creator attribution retained; no license asserted.",
+    "source_url": "https://i.kym-cdn.com/entries/icons/original/000/018/012/this_is_fine.jpeg",
+    "source_page": "https://knowyourmeme.com/memes/this-is-fine",
+    "retrieved_on": "2026-10-24",
+    "sha256": "a899e6cd5d2be4dd502fa19684cc2fdcbf1d2826bc93de4f6a9420848eaf5c29"
   }
 }

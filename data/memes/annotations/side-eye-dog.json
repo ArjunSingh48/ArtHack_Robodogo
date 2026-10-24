@@ -8,7 +8,7 @@
   "subject": "an unnamed dog in a car",
   "year": "2015",
   "origin": "Posted to Reddit's r/aww in 2015 by /u/gooddboyy, suspecting a car ride was really a trip to the vet; widely used as the 'sus dog' from around 2021.",
-  "attribution": "Photo: Reddit user /u/gooddboyy (2015).",
+  "attribution": "Photo: Reddit user /u/gooddboyy (2015). Captioned variant archived by Know Your Meme; caption author unrecorded.",
   "sources": [
     {
       "label": "Know Your Meme — the Side-Eyeing Dog explained",
@@ -37,11 +37,16 @@
     "ru": "Он смотрит так, будто уже знает, куда едет машина.",
     "de": "Er schaut, als wüsste er schon, wohin das Auto fährt."
   },
-  "notes": "Annotated from the KYM description (narrowed eyes, one ear inside out); the body is barely visible. look_aside needs operator approval; otherwise the robot stands.",
+  "notes": "Annotated from the KYM description (narrowed eyes, one ear inside out); the body is barely visible. look_aside needs operator approval; otherwise the robot stands. Presentation asset: the \"you think you can fool us?\" variant from the source article, unmodified.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
-    "rights": "reference_only",
-    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+    "rights": "presentation_use",
+    "local_file": "presentation/side-eye-dog.jpg",
+    "license_note": "Selected by the project owner for this noncommercial presentation. Original creator attribution retained; no license asserted.",
+    "source_url": "https://i.kym-cdn.com/photos/images/original/002/418/793/063.jpg",
+    "source_page": "https://trending.knowyourmeme.com/editorials/guides/who-is-this-viral-dog-and-why-is-he-so-suspicious-the-side-eyeing-dog-and-sus-dog-meme-explained",
+    "retrieved_on": "2026-10-24",
+    "sha256": "0632d99a90922257061cc3be265515310d1938f9e144ffccbabc959588e21914"
   }
 }

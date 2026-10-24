@@ -109,7 +109,7 @@ class TalkTools:
         except ValueError:
             archive = "both"
         try:
-            out = await self.orch.observe_installation(self.chat_id, self.source, archive=archive)
+            out = await self.orch.observe_installation(self.chat_id, self.source, archive=archive, experimental=True)
         except BusyError:
             return {"found": False, "note": "You are still finishing the last pose. Ask them to wait a moment."}
         o = out.observation

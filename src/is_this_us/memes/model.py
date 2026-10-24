@@ -4,11 +4,10 @@ A meme is described by the same scene vocabulary as a painting (`human`, `dog`),
 flows through the same matcher, planner and safety guard. Its metadata is different:
 origin, attribution, cultural meaning, and — crucially — image rights.
 
-Image policy: most famous meme images are copyrighted photographs or comics. Being
-listed on Imgflip, Know Your Meme or anywhere else does NOT grant permission. By default
-a meme is `reference_only`: we describe it, credit it and link to it, but never store
-or send the image. An image is shown only when the annotation records `licensed` or
-`recreation` (an original re-staging made by the team) AND the file is present.
+Image provenance distinguishes licensed/recreated assets, references, and the
+project owner's selection of familiar memes for this noncommercial presentation.
+`presentation_use` records that selection without claiming a license. Such files
+are exposed only when the caller explicitly requests the presentation scope.
 """
 
 from __future__ import annotations
@@ -26,6 +25,7 @@ class ImageRights(StrEnum):
     LICENSED = "licensed"  # written permission / licence recorded in license_note
     RECREATION = "recreation"  # original work made for this installation
     UNKNOWN = "unknown"  # drafts from discovery tools — never displayed
+    PRESENTATION_USE = "presentation_use"  # project-owner selection for this noncommercial presentation
 
 
 DISPLAYABLE = {ImageRights.LICENSED, ImageRights.RECREATION}
@@ -33,15 +33,23 @@ DISPLAYABLE = {ImageRights.LICENSED, ImageRights.RECREATION}
 
 class MemeImage(BaseModel):
     rights: ImageRights = ImageRights.REFERENCE_ONLY
-    local_file: str | None = None  # relative to the memes data dir; only for DISPLAYABLE
+    local_file: str | None = None  # relative to the memes data dir
     license_note: str = ""
+    source_url: HttpUrl | None = None
+    source_page: HttpUrl | None = None
+    retrieved_on: str = ""
+    sha256: str = Field(default="", pattern=r"^(?:[0-9a-f]{64})?$")
 
     @model_validator(mode="after")
     def _policy(self):
-        if self.rights in DISPLAYABLE and not (self.local_file and self.license_note.strip()):
-            raise ValueError("licensed/recreation images need local_file and a license_note")
-        if self.rights not in DISPLAYABLE and self.local_file:
+        if self.rights in DISPLAYABLE | {ImageRights.PRESENTATION_USE} and not (self.local_file and self.license_note.strip()):
+            raise ValueError("licensed/recreation/presentation images need local_file and a license_note")
+        if self.rights not in DISPLAYABLE | {ImageRights.PRESENTATION_USE} and self.local_file:
             raise ValueError("reference_only/unknown memes must not ship an image file")
+        if self.rights is ImageRights.PRESENTATION_USE and not (
+            self.source_url and self.source_page and self.retrieved_on and len(self.sha256) == 64
+        ):
+            raise ValueError("presentation-use images need source URL/page, retrieval date, and SHA-256 provenance")
         return self
 
 
@@ -106,6 +114,10 @@ class Meme(BaseModel):
     @property
     def displayable(self) -> bool:
         return self.image.rights in DISPLAYABLE
+
+    @property
+    def presentation_displayable(self) -> bool:
+        return self.displayable or self.image.rights is ImageRights.PRESENTATION_USE
 
     def reflection_for(self, lang: str) -> str:
         return self.reflection.get(lang) or self.reflection.get("en", "")

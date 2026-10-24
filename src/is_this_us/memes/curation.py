@@ -16,10 +16,12 @@ returns the ~100 currently popular caption templates. It is a DISCOVERY aid only
 from __future__ import annotations
 
 import json
+import hashlib
 import re
 from pathlib import Path
 
 import httpx
+from PIL import Image
 
 from ..artworks.museum_clients import USER_AGENT
 from .model import Meme
@@ -94,6 +96,20 @@ def validate(data_dir: Path) -> list[str]:
     for m in repo.all():
         if m.image.rights.value == "unknown":
             problems.append(f"{m.id}: approved memes must have decided image rights (not 'unknown')")
+        image_path = repo.local_image(m, presentation=True)
+        if image_path:
+            try:
+                with Image.open(image_path) as image:
+                    image.load()
+                    width, height = image.size
+                    if width + height > 10000 or max(width, height) / min(width, height) > 20:
+                        problems.append(f"{m.id}: image dimensions exceed Telegram photo limits")
+                if image_path.stat().st_size > 10 * 1024 * 1024:
+                    problems.append(f"{m.id}: image exceeds Telegram's 10 MB photo limit")
+                if m.image.sha256 and hashlib.sha256(image_path.read_bytes()).hexdigest() != m.image.sha256:
+                    problems.append(f"{m.id}: image SHA-256 does not match recorded provenance")
+            except (OSError, ValueError) as exc:
+                problems.append(f"{m.id}: image cannot be decoded: {exc}")
         if m.dog.posture in NEVER_LITERAL and m.dog.reproducible is Reproducibility.YES:
             problems.append(f"{m.id}: dog posture '{m.dog.posture}' cannot be reproduced literally")
         if m.dog.reproducible is Reproducibility.NO and m.dog.robot_behavior is not RobotBehavior.STILLNESS:

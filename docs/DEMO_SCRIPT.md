@@ -67,9 +67,10 @@ Example caption under the selected painting:
 >
 > *[Artist] — [Title], [Date]. [Collection/source]. [Required rights credit].*
 
-Use actual archive attribution. Only select an image available for permitted
-delivery. The current five meme annotations are reference-only; the intended
-meme-image experience needs suitable assets and metadata before it can be shown.
+Use actual archive attribution. The familiar memes are part of this noncommercial
+presentation; use their images with original creator/source credits and recorded
+provenance. Licensing clearance is not a presentation prerequisite. Confirm the
+selected image is available for delivery during rehearsal.
 
 ## When something is unavailable
 

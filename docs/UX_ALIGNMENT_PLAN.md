@@ -7,12 +7,12 @@ background and does not override the agreed experience or this work order.
 
 ## Execution boundary
 
-The original request authorized **step 1 only**, using subagents, then stopping
-for review. The subsequent request authorizes **step 2**. Steps 3–6 remain planned
-and are not authorized for automatic continuation. Documentation changes do not
-establish that the runtime implements the new experience. The subsequent
-presentation clarification updates the intended setup and future work here;
-it does not authorize implementation of the remaining steps.
+Steps 1 and 2 were authorized and completed separately. The current request
+authorizes **step 3**, delegated to a subagent and reviewed in the main thread.
+Steps 4–6 remain planned. Documentation changes do not establish that the runtime
+implements the new experience. The presentation clarification defines the setup
+for later integration; the current meme direction permits familiar meme images
+in this noncommercial presentation with accurate credits and provenance.
 
 ## Confirmed decisions
 
@@ -64,17 +64,22 @@ and the supported locale/fallback behavior. Existing experiments remain usable.
 ### 3. Simplify Telegram delivery
 
 Files: `src/is_this_us/bot/flows.py`, `src/is_this_us/bot/app.py`,
-`src/is_this_us/notifier.py`, `tests/test_flows_e2e.py`; meme assets and
-`data/memes/annotations/*.json` as needed for legitimate image delivery.
+`src/is_this_us/notifier.py`, `src/is_this_us/image_message.py`,
+`tests/test_flows_e2e.py`, `tests/test_primary_delivery.py`; meme assets,
+`data/memes/annotations/*.json`, meme schema/repository/validation, and tests.
+Small orchestrator and talk-tool changes distinguish primary delivery from
+existing experimental flows; automatic observation remains in step 5.
 
 - Send one archive image, one short caption, and italic attribution in the primary
   flow. Remove its extra introductory messages, buttons, and voice notes.
 - Keep setup, recipient pairing, privacy, and operator controls separate.
 - Make console previews match Telegram output, escape metadata correctly, and
   report failed/ambiguous delivery accurately without replaying movement.
-- Resolve the meme asset gap: the five current annotations are reference-only.
-  Obtain suitable licensed/recreated assets and record their actual provenance;
-  do not merely relabel existing rights metadata.
+- Resolve the meme asset gap with the five familiar meme images for this
+  noncommercial presentation. Per the user's updated direction, licensing
+  clearance is not a blocker. Record source URLs, original creator credits, and
+  actual image provenance under an explicit presentation-use status; do not
+  claim a license was obtained or relabel the images as project recreations.
 
 Acceptance: message formatting and destination tests pass; no cross-recipient
 delivery or unintended extra messages. Separately verify real Telegram delivery.
@@ -152,18 +157,34 @@ separately. Preserve unrelated existing work.
   English, Russian, and German speech and English fallback are covered by tests.
   Silence is the default unless the caller requests speech; frequency remains an
   open integration decision. Legacy `compose` and experimental dialogue remain
-  available. Delivery and orchestrator wiring are deferred to steps 3 and 5.
+  available. Step 3 now connects captions to installation delivery; the complete
+  automatic encounter remains in step 5.
   Verification: 75 tests passed across dialogue, memes, flows, and speech. The
   broader regression run plus the localhost-permitted web rerun passed 169 tests;
   four talk/show SDK-schema tests remain blocked by the missing optional `openai`
   package. `git diff --check` passed. No visitor choice was added.
-- Steps 3–6: not started.
+- Step 3: implemented and reviewed — installation encounters send one archive
+  photo with an approved short caption and italic attribution, without an intro,
+  buttons, or voice note. Console previews use the same caption. Recipient checks
+  reject wrong, expired, or forgotten interactions; bounded delivery distinguishes
+  rejection from unknown outcomes, and retries never recapture or replay movement.
+  Concurrent/cancelled sends are covered. Photo-upload and explicit installation
+  experiments retain their existing dialogue and callbacks.
+  All five familiar memes now have local presentation assets with source URLs,
+  creator credits, retrieval dates, and checksums. This Is Fine retains the source
+  image's 300×168 resolution; projection quality should be reviewed in step 6.
+  Verification: 115 focused tests passed across dialogue, flows, primary delivery,
+  memes, privacy, speech, and matching; meme archive validation, added local
+  documentation links, and `git diff --check` passed. A broader run passed 123
+  tests; two talk tests were blocked by the missing optional `openai` package.
+  Installation speech remains silent pending the cadence decision. No visitor
+  choice was added. Live Telegram delivery remains unverified.
+- Steps 4–6: not started.
 - Presentation clarification: documentation now includes the dog + computer +
   beamer setup and a presentation flow based on the main encounter. Runtime
   integration remains planned in step 6; no visitor choice was added.
 
-Work stops after step 2 for review. No live services or robot hardware were used
-to verify this step.
+Step 3 does not include live Telegram sends or physical robot verification.
 
 Run tests alongside the code changes they verify. Step 1 needs document review and
 link/whitespace checks, not a new test suite or hardware/API calls.

@@ -10,7 +10,9 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter
+from aiogram.exceptions import (
+    TelegramAPIError, TelegramBadRequest, TelegramNetworkError, TelegramRetryAfter, TelegramServerError,
+)
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (
     BotCommand, BufferedInputFile, CallbackQuery, FSInputFile, InlineKeyboardButton,
@@ -20,6 +22,7 @@ from aiogram.types import (
 from ..artworks.repository import YamlArtworkRepository
 from ..config import Settings
 from ..motion.guard import MotionGuard
+from ..image_message import ImageMessageError
 from ..orchestrator import InteractionOrchestrator, InteractionOutcome
 from ..robot.base import RobotAdapter
 from ..speech.synthesizer import LocalSpeakerPlayer, make_synthesizer
@@ -59,7 +62,7 @@ def _photo_input(photo):
     return URLInputFile(str(photo), headers={"User-Agent": "is-this-us/0.2"})
 
 
-async def _send_one(bot: Bot, chat_id: int, r: Reply) -> None:
+async def _send_one(bot: Bot, chat_id: int, r: Reply) -> str:
     markup = _markup(r.buttons)
     if r.kind == "text":
         preview = (LinkPreviewOptions(url=r.preview_url, prefer_large_media=True, show_above_text=True)
@@ -68,28 +71,51 @@ async def _send_one(bot: Bot, chat_id: int, r: Reply) -> None:
     elif r.kind == "photo":
         try:
             await bot.send_photo(chat_id, _photo_input(r.photo), caption=r.text or None, reply_markup=markup)
-        except (TelegramBadRequest, TelegramNetworkError) as exc:
-            # e.g. museum URL unreachable from Telegram: never lose the moment — send the text
+        except TelegramBadRequest as exc:
+            if r.image_required:
+                raise
+            # Explicit rejection permits the legacy experiment's text fallback.
+            # A network error may follow a successful send: never duplicate it.
             log.warning("photo delivery failed (%s); falling back to text", exc)
             await bot.send_message(chat_id, r.text or "…", reply_markup=markup)
+            return "text fallback"
     elif r.kind == "voice" and r.voice:
         await bot.send_voice(chat_id, FSInputFile(r.voice))
+    else:
+        raise ValueError(f"invalid reply kind/content: {r.kind}")
+    return "sent"
 
 
-async def send_replies(bot: Bot, chat_id: int, replies: list[Reply]) -> str:
-    sent = 0
+async def send_replies(bot: Bot, chat_id: int, replies: list[Reply], *, timeout_s: float = 30.0) -> str:
+    """Bound delivery; retry explicit rate limits, never ambiguous network sends."""
+    sent, fallbacks = 0, 0
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_s
     for r in replies:
         for attempt in range(3):
             try:
-                await _send_one(bot, chat_id, r)
+                remaining = deadline - loop.time()
+                if remaining <= 0:
+                    return f"failed: delivery deadline reached; sent {sent}/{len(replies)} message(s)"
+                status = await asyncio.wait_for(_send_one(bot, chat_id, r), timeout=remaining)
                 sent += 1
+                fallbacks += status == "text fallback"
                 break
-            except TelegramRetryAfter as exc:  # rate limited: wait as Telegram asks
-                await asyncio.sleep(exc.retry_after + 0.5)
-            except TelegramNetworkError:
-                await asyncio.sleep(1.5 * (attempt + 1))
-        await asyncio.sleep(0.6)  # quiet pacing; silence is part of the piece
-    return f"sent {sent}/{len(replies)} message(s)"
+            except TelegramRetryAfter as exc:
+                delay = max(0, exc.retry_after) + 0.5
+                if attempt == 2 or delay >= deadline - loop.time():
+                    return f"failed: rate limited; sent {sent}/{len(replies)} message(s)"
+                await asyncio.sleep(delay)
+            except (TelegramNetworkError, TelegramServerError, TimeoutError) as exc:
+                log.warning("delivery outcome unknown; not retrying: %s", exc)
+                return f"unknown: delivery may have succeeded; not retried; confirmed {sent}/{len(replies)} message(s)"
+            except (TelegramAPIError, OSError, ValueError) as exc:
+                log.warning("delivery failed: %s", exc)
+                return f"failed: {exc}; sent {sent}/{len(replies)} message(s)"
+    result = f"sent {sent}/{len(replies)} message(s)"
+    if fallbacks:
+        result += f"; {fallbacks} image(s) not delivered (text fallback)"
+    return result
 
 
 class TelegramNotifier:
@@ -99,7 +125,26 @@ class TelegramNotifier:
 
     async def deliver(self, chat_id: int, outcome: InteractionOutcome) -> str:
         assert self.flows is not None
-        return await send_replies(self.bot, chat_id, self.flows.replies_for_outcome(chat_id, outcome))
+        try:
+            replies = self.flows.replies_for_outcome(chat_id, outcome)
+        except ImageMessageError as exc:
+            log.warning("image delivery rejected: %s", exc)
+            return f"failed: {exc}"
+        if outcome.encounter is None:
+            return await send_replies(self.bot, chat_id, replies)
+        if not replies:
+            return "not sent: stopped or no matched image"
+        # The completed outcome is also the retry handle: it holds the selected
+        # image and recipient. Delivery retries never invoke perception or motion.
+        if outcome.delivery_status.startswith(("sent ", "unknown:", "sending")):
+            return outcome.delivery_status
+        outcome.delivery_status = "sending"
+        try:
+            outcome.delivery_status = await send_replies(self.bot, chat_id, replies)
+        except asyncio.CancelledError:
+            outcome.delivery_status = "unknown: delivery cancelled; not retried"
+            raise
+        return outcome.delivery_status
 
 
 def build_router(flows: VisitorFlows, settings: Settings) -> Router:
@@ -126,7 +171,6 @@ def build_router(flows: VisitorFlows, settings: Settings) -> Router:
 
     @r.message(Command("observe"))
     async def observe(m: Message):
-        await send_replies(m.bot, m.chat.id, [Reply("text", text=f"<i>{flows.texts(m.chat.id).bot('looking')}</i>")])
         await send_replies(m.bot, m.chat.id, await flows.observe(m.chat.id))
 
     @r.message(Command("art", "meme", "surprise", "both"))

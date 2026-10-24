@@ -28,6 +28,10 @@ the direction and update the contract in the same change.
   do not automatically belong in the primary experience.
 - Keep spoken lines and Telegram captions separate. Preserve the approved tone
   and examples in `docs/UX.md`; do not expand image captions into explanations.
+- Use the familiar memes in this noncommercial presentation without making
+  licensing clearance a blocker. Keep original creator/source credits and image
+  provenance accurate; presentation use must not be labeled as a license or an
+  original recreation.
 
 ## Implementation and review
 

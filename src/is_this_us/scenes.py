@@ -41,9 +41,9 @@ class SceneLibrary:
             return self.memes.get(scene_id) if self.memes else None
         return self.art.get(scene_id)
 
-    def local_image(self, scene: Scene) -> Path | None:
+    def local_image(self, scene: Scene, *, presentation: bool = False) -> Path | None:
         if getattr(scene, "kind", "art") == "meme":
-            return self.memes.local_image(scene) if self.memes else None
+            return self.memes.local_image(scene, presentation=presentation) if self.memes else None
         return self.art.local_image(scene)
 
     def remote_image(self, scene: Scene) -> str | None:

@@ -45,7 +45,12 @@
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
-    "rights": "reference_only",
-    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+    "rights": "presentation_use",
+    "local_file": "presentation/doge.jpg",
+    "license_note": "Selected by the project owner for this noncommercial presentation. Original creator attribution retained; no license asserted.",
+    "source_url": "https://i.kym-cdn.com/photos/images/original/000/581/296/c09.jpg",
+    "source_page": "https://knowyourmeme.com/memes/doge",
+    "retrieved_on": "2026-10-24",
+    "sha256": "c09ac7872036741a0c93d8dcc23c30971b9d4df27f4e3fbdfbfd16e592cf1c11"
   }
 }

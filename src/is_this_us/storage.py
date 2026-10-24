@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS visitors (
 CREATE TABLE IF NOT EXISTS interactions (
     id TEXT PRIMARY KEY,
     chat_id INTEGER NOT NULL,
-    origin TEXT NOT NULL,              -- 'installation' | 'photo'
+    origin TEXT NOT NULL,              -- 'installation' | 'installation_experiment' | 'photo'
     posture TEXT NOT NULL,
     posture_confidence REAL NOT NULL,
     artwork_id TEXT,

@@ -8,7 +8,7 @@
   "subject": "a Borzoi (the most-used photos show Lapsha, @loopsnoot)",
   "year": "2016 (Vines), 2020 (memes)",
   "origin": "Viral Borzoi Vines in 2016; the long-nose image macro began on Instagram in October 2020, usually shot with a 0.5× wide-angle lens close to the snout.",
-  "attribution": "Photos: the @loopsnoot account (Lapsha) and many other Borzoi owners; format by Instagram meme pages.",
+  "attribution": "Photo: @loopsnoot, Lapsha, October 2018; archived by Know Your Meme.",
   "sources": [
     {
       "label": "Know Your Meme — Borzoi Long Nose Dog",
@@ -39,11 +39,16 @@
     "ru": "Столько носа, и так близко. Может, так и говорят «привет».",
     "de": "So viel Nase, so nah. Vielleicht sagt man so Hallo."
   },
-  "notes": "The wide-angle closeness is the point; the robot only lowers its nose slightly (peer, operator-approved), it never moves toward the visitor. Summoned by the lean itself; 'looking down' is too weak to require.",
+  "notes": "The wide-angle closeness is the point; the robot only lowers its nose slightly (peer, operator-approved), it never moves toward the visitor. Summoned by the lean itself; 'looking down' is too weak to require. Presentation asset: the October 13, 2018 Lapsha photograph identified in the source article; unmodified archive copy.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
-    "rights": "reference_only",
-    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+    "rights": "presentation_use",
+    "local_file": "presentation/long-nose-borzoi.png",
+    "license_note": "Selected by the project owner for this noncommercial presentation. Original creator attribution retained; no license asserted.",
+    "source_url": "https://i.kym-cdn.com/photos/images/original/002/224/586/3d4.png",
+    "source_page": "https://knowyourmeme.com/memes/borzoi-long-nose-dog",
+    "retrieved_on": "2026-10-24",
+    "sha256": "3d4c09a82123f6c080d817d767f5e024fc3377af60a15fa6df22ab810aa48c15"
   }
 }

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import random
+import shutil
 from pathlib import Path
 
 import httpx
@@ -49,20 +50,22 @@ def obs(posture, gestures=None, conf=0.85):
 
 # ------------------------------------------------------------------ repository & rights
 
-def test_curated_memes_load_and_are_reference_only(memes):
+def test_curated_memes_have_scoped_presentation_assets(memes):
     ids = {m.id for m in memes.all()}
     assert ids == {"meme:doge", "meme:cheems", "meme:this-is-fine", "meme:side-eye-dog", "meme:long-nose-borzoi"}
     for m in memes.all():
         assert m.kind == "meme" and m.curation_status == "approved"
         assert not m.displayable and memes.local_image(m) is None
+        assert m.image.rights.value == "presentation_use"
+        assert m.presentation_displayable and memes.local_image(m, presentation=True).is_file()
         assert m.sources and m.attribution and m.reflection.get("en")
     assert memes.errors == {}
     assert curation.validate(MEMES) == []
 
 
-def test_no_meme_image_files_are_shipped():
+def test_every_shipped_meme_image_has_provenance(memes):
     images = [p for p in MEMES.rglob("*") if p.suffix.lower() in {".jpg", ".jpeg", ".png", ".gif", ".webp"}]
-    assert images == []
+    assert set(images) == {memes.local_image(m, presentation=True) for m in memes.all()}
 
 
 def _meme_dict(**over):
@@ -78,6 +81,28 @@ def test_rights_policy_is_enforced_by_schema():
         Meme.model_validate(_meme_dict(image={"rights": "licensed", "local_file": "x.jpg", "license_note": ""}))
     with pytest.raises(ValidationError):  # behaviors come only from the approved vocabulary
         Meme.model_validate(_meme_dict(dog={**_meme_dict()["dog"], "robot_behavior": "backflip"}))
+    with pytest.raises(ValidationError):
+        Meme.model_validate(_meme_dict(image={"rights": "presentation_use", "local_file": "x.jpg",
+                                             "license_note": "Owner's selection"}))
+
+
+@pytest.mark.parametrize("damage", ["corrupt", "changed", "missing"])
+def test_archive_validation_checks_presentation_files(tmp_path, damage):
+    from PIL import Image
+
+    shutil.copytree(MEMES, tmp_path / "memes")
+    root = tmp_path / "memes"
+    repo = MemeRepository(root)
+    image = repo.local_image(repo.get("meme:cheems"), presentation=True)
+    if damage == "corrupt":
+        image.write_bytes(b"not an image")
+    elif damage == "changed":
+        Image.new("RGB", (30, 30)).save(image)
+    else:
+        image.unlink()
+    problems = curation.validate(root)
+    assert any({"corrupt": "cannot be decoded", "changed": "SHA-256", "missing": "missing"}[damage] in p
+               for p in problems)
 
 
 def test_adding_a_meme_is_just_a_json_file(tmp_path):
@@ -270,7 +295,7 @@ async def test_consented_imitation_photo(meme_flows, storage, tmp_path):
     flows, orch, notifier = meme_flows()
     flows.set_archive(7, "en", "meme")
     storage.pair(7, storage.create_pairing_token())
-    await flows.observe(7)
+    await orch.observe_installation(7, StaticSource(), experimental=True)
     (_, sent), = notifier.sent
     buttons = [d for row in sent[1].buttons for _, d in row]
     photo_btn = next(d for d in buttons if d.startswith(CB_PHOTO))
@@ -295,8 +320,37 @@ async def test_no_imitation_camera_means_no_button(meme_flows, storage):
     flows, orch, notifier = meme_flows(camera=False)
     storage.pair(9, storage.create_pairing_token())
     await flows.observe(9)
-    buttons = [d for row in notifier.sent[0][1][1].buttons for _, d in row]
+    buttons = [d for row in notifier.sent[0][1][0].buttons for _, d in row]
     assert not any(d.startswith(CB_PHOTO) for d in buttons)
+
+
+async def test_primary_meme_is_one_local_image_with_short_caption(meme_flows, storage):
+    flows, orch, notifier = meme_flows()
+    flows.set_archive(9, "en", "meme")
+    storage.pair(9, storage.create_pairing_token())
+    await flows.observe(9)
+    (recipient, replies), = notifier.sent
+    assert recipient == 9 and len(replies) == 1
+    reply = replies[0]
+    assert reply.kind == "photo" and reply.image_required
+    assert reply.photo.is_file() and "presentation" in reply.photo.parts
+    assert reply.text.startswith("hehe or not hehe?\n\n<i>") and reply.text.endswith("</i>")
+    assert "KC Green" in reply.text and "Image source" in reply.text
+    assert "license" not in reply.text and "noncommercial" not in reply.text
+    assert not reply.buttons and reply.voice is None and reply.preview_url is None
+
+
+async def test_primary_skips_reference_only_memes_without_motion(meme_flows, storage):
+    from is_this_us.memes.model import MemeImage
+
+    flows, orch, notifier = meme_flows()
+    for meme in orch.repo.memes.all():
+        meme.image = MemeImage(rights="reference_only")
+    flows.set_archive(9, "en", "meme")
+    storage.pair(9, storage.create_pairing_token())
+    await flows.observe(9)
+    assert notifier.sent == [(9, [])]
+    assert not orch.guard.robot.calls
 
 
 def test_operator_approves_and_revokes_actions(meme_flows):
@@ -333,7 +387,7 @@ async def test_send_replies_falls_back_and_retries():
     bot = FakeBot()
     status = await send_replies(bot, 1, [Reply("photo", text="caption", photo="https://example.invalid/x.jpg"),
                                          Reply("text", text="meme", preview_url="https://knowyourmeme.com/memes/cheems")])
-    assert status == "sent 2/2 message(s)"
+    assert status == "sent 2/2 message(s); 1 image(s) not delivered (text fallback)"
     assert bot.messages[0][0] == "caption"  # photo failed → text fallback
     assert bot.messages[1][1].url == "https://knowyourmeme.com/memes/cheems"
 
@@ -342,7 +396,9 @@ async def test_send_replies_falls_back_and_retries():
 
 def test_imgflip_discovery_writes_unloaded_drafts(tmp_path):
     (tmp_path / "annotations").mkdir()
-    (tmp_path / "annotations" / "this-is-fine.json").write_text((MEMES / "annotations" / "this-is-fine.json").read_text())
+    existing = json.loads((MEMES / "annotations" / "this-is-fine.json").read_text())
+    existing["image"] = {"rights": "reference_only"}
+    (tmp_path / "annotations" / "this-is-fine.json").write_text(json.dumps(existing))
 
     def handler(request):
         assert request.url.host == "api.imgflip.com"

@@ -9,7 +9,7 @@
   "subject": "Balltze, a Shiba Inu from Hong Kong",
   "year": "2017 (photo), 2019 (meme)",
   "origin": "A 2017 photo by his owner; first used as 'Cheems' on r/dogelore on 8 June 2019.",
-  "attribution": "Photo: Balltze's owner, Hong Kong. Subject: Balltze (died 2023).",
+  "attribution": "Original photo: Balltze's owner (@balltze), 2017. Cutout template archived by Know Your Meme.",
   "sources": [
     {
       "label": "Wikipedia — Cheems",
@@ -40,11 +40,16 @@
     "ru": "Он выглядит мягким и немного неуверенным. Мне знакомо это чувство.",
     "de": "Er wirkt weich und ein bisschen unsicher. Das Gefühl kenne ich."
   },
-  "notes": "Pose annotated from the widely used template: sitting upright, head turned slightly away.",
+  "notes": "Pose annotated from the widely used template: sitting upright, head turned slightly away. Presentation asset: the sitting-dog cutout under Template on the source page, not the original Instagram screenshot.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
-    "rights": "reference_only",
-    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+    "rights": "presentation_use",
+    "local_file": "presentation/cheems.jpg",
+    "license_note": "Selected by the project owner for this noncommercial presentation. Original creator attribution retained; no license asserted.",
+    "source_url": "https://i.kym-cdn.com/photos/images/original/001/658/936/411.jpg",
+    "source_page": "https://knowyourmeme.com/memes/cheems",
+    "retrieved_on": "2026-10-24",
+    "sha256": "4111cdebfe5880a7bb206aef976273f0f7a8b80ea3dd103a66b06e7ff0276d68"
   }
 }

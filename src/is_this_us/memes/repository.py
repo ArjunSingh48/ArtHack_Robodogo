@@ -43,7 +43,7 @@ class MemeRepository:
                 continue
             if meme.curation_status != "approved" and not self.include_drafts:
                 continue
-            if meme.displayable and not (self.data_dir / meme.image.local_file).exists():
+            if meme.presentation_displayable and not (self.data_dir / meme.image.local_file).is_file():
                 self.errors[path.name] = f"image file missing: {meme.image.local_file}"
                 continue
             self._items[meme.id] = meme
@@ -54,9 +54,10 @@ class MemeRepository:
     def get(self, meme_id: str) -> Meme | None:
         return self._items.get(meme_id)
 
-    def local_image(self, meme: Meme) -> Path | None:
-        """A path ONLY for licensed/recreation images. Reference-only memes have none."""
-        if not meme.displayable or not meme.image.local_file:
+    def local_image(self, meme: Meme, *, presentation: bool = False) -> Path | None:
+        """Return a local asset; presentation-use files require explicit scope."""
+        allowed = meme.presentation_displayable if presentation else meme.displayable
+        if not allowed or not meme.image.local_file:
             return None
         p = self.data_dir / meme.image.local_file
-        return p if p.exists() else None
+        return p if p.is_file() else None

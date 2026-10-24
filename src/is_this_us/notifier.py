@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
+
+from .domain import ExecutionStatus
+from .image_message import ImageMessageError, image_caption
 
 if TYPE_CHECKING:
     from .orchestrator import InteractionOutcome
@@ -21,6 +25,21 @@ class ConsoleNotifier:
         self.delivered: list[tuple[int, "InteractionOutcome"]] = []
 
     async def deliver(self, chat_id: int, outcome: "InteractionOutcome") -> str:
+        if outcome.recipient_chat_id != chat_id:
+            raise ImageMessageError("recipient does not own this interaction")
+        if outcome.encounter is not None:
+            if outcome.artwork is None:
+                return "not sent: no matched image"
+            if outcome.result.status is ExecutionStatus.STOPPED:
+                return "not sent: stopped"
+            if outcome.image_source is None or (isinstance(outcome.image_source, Path) and not outcome.image_source.is_file()):
+                raise ImageMessageError("selected archive image is unavailable for presentation delivery")
+            caption = image_caption(outcome.artwork, outcome.encounter.caption)
+            self.delivered.append((chat_id, outcome))
+            print(f"\n  PREVIEW ONLY → Telegram chat {chat_id}")
+            print(f"  image: {outcome.image_source}")
+            print(caption)
+            return "previewed image (not sent)"
         self.delivered.append((chat_id, outcome))
         print("\n" + "─" * 64)
         print(f"  → Telegram chat {chat_id}")
