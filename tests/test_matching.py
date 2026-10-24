@@ -25,8 +25,12 @@ def test_sitting_finds_dog_at_feet(mock_repo):
 
 
 def test_arms_holding_finds_dog_in_arms(mock_repo):
+    """Scoring vocabulary remains usable; held dogs are excluded from selection."""
     o = obs(HumanPosture.STANDING, gestures={HumanGesture.ARMS_HOLDING: 1.0}, proximity=Proximity.CLOSE)
-    assert deterministic.match(o, mock_repo.all()).chosen.artwork.id == "mock:held"
+    held = deterministic.score(o, mock_repo.get("mock:held"), set())
+    feet = deterministic.score(o, mock_repo.get("mock:feet"), set())
+    assert held.relationship > feet.relationship
+    assert "mock:held" not in {c.scene.id for c in deterministic.match(o, mock_repo.all()).ranked}
 
 
 def test_kneel_and_reach_finds_offering(mock_repo):
@@ -42,10 +46,9 @@ def test_far_standing_finds_dog_apart(mock_repo):
 def test_relationship_not_visual_similarity(mock_repo):
     """Same seated posture, but holding → a held dog beats the seated-human painting."""
     o = obs(HumanPosture.SITTING, gestures={HumanGesture.ARMS_HOLDING: 1.0}, proximity=Proximity.CLOSE)
-    ranked = deterministic.match(o, mock_repo.all()).ranked
-    held = next(c for c in ranked if c.artwork.id == "mock:held")
-    jump = next(c for c in ranked if c.artwork.id == "mock:jump")
-    assert held.scores.relationship > jump.scores.relationship
+    held = deterministic.score(o, mock_repo.get("mock:held"), set())
+    jump = deterministic.score(o, mock_repo.get("mock:jump"), set())
+    assert held.relationship > jump.relationship
 
 
 def test_exclude_and_novelty(mock_repo):
@@ -57,14 +60,17 @@ def test_exclude_and_novelty(mock_repo):
     assert feet.scores.novelty == 0.0
 
 
-def test_seeded_bounded_randomness_is_reproducible(repo):
+def test_seeded_bounded_randomness_is_reproducible(mock_repo):
     m = WeightedRelationshipMatcher()
     o = it.interpret([synthetic_person("sitting")])
-    a = [m.match(o, repo.all(), rng=random.Random(42)).chosen.artwork.id for _ in range(3)]
-    b = [m.match(o, repo.all(), rng=random.Random(42)).chosen.artwork.id for _ in range(3)]
+    # Controlled equal-scoring fixtures test randomness independently of curation.
+    scenes = [mock_repo.get("mock:feet").model_copy(update={"id": f"mock:tie-{i}"}) for i in range(5)]
+    a = [m.match(o, scenes, rng=random.Random(42)).chosen.artwork.id for _ in range(3)]
+    b = [m.match(o, scenes, rng=random.Random(42)).chosen.artwork.id for _ in range(3)]
     assert a == b
-    picks = {m.match(o, repo.all(), rng=random.Random(s)).chosen.artwork.id for s in range(30)}
+    picks = {m.match(o, scenes, rng=random.Random(s)).chosen.artwork.id for s in range(30)}
     assert 1 < len(picks) <= 3  # varies, but only among near-ties
+    assert picks <= {a.id for a in scenes[:m.settings.max_choices]}
 
 
 def test_unknown_low_score_is_no_match(mock_repo):

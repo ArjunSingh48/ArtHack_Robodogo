@@ -13,9 +13,11 @@ screen that refreshes the QR is better than print). Operator nearby, remote in h
    and says so. That failure is part of the work; don't apologise for it.
 5. **The question.** "Is this us?" — visitor answers: ♡ yes / ↻ another painting / ✧ keep.
 6. **The memory.** *Keep* sends a cream-and-lavender memory card with full credits.
-7. **Two memories.** Offer `/meme` or `/surprise`: "It also learned dogs from the internet." Sitting with a
-   cup in both hands usually summons *This Is Fine*; leaning in summons the *Long Nose Borzoi*. The robot
-   is exactly as earnest about a meme as about a Fragonard — let the contrast speak.
+7. **A cultural dog for the camera.** Visitor raises their phone to photograph the robot;
+   the intended branch selects a random reviewed meme pose, then names and credits it.
+   The visitor's posture does not select a particular meme. Automatic photography detection
+   is pending: rehearse the explicit event with `itu simulate --photographing --seed 7`.
+   In the present live app, merely raising a phone does not yet trigger this behavior.
 8. **The photo (optional).** If an imitation camera is installed, the visitor may press 📷 and agree to one
    photo; they receive a diptych: the memory beside the robot's attempt.
 9. **Talking (optional).** In talk mode the visitor just speaks: "Hello?" The dog answers shyly and offers its

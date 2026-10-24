@@ -21,9 +21,9 @@
   ],
   "cultural_meaning": "An impossibly long, gentle face pushed toward the camera — curiosity, elegance and absurdity at once.",
   "human": {
-    "posture": "leaning_forward",
+    "posture": "unknown",
     "gestures": [],
-    "confidence": 0.7
+    "confidence": 0.0
   },
   "dog": {
     "posture": "standing",
@@ -39,11 +39,20 @@
     "ru": "Столько носа, и так близко. Может, так и говорят «привет».",
     "de": "So viel Nase, so nah. Vielleicht sagt man so Hallo."
   },
-  "notes": "The wide-angle closeness is the point; the robot only lowers its nose slightly (peer, operator-approved), it never moves toward the visitor. Summoned by the lean itself; 'looking down' is too weak to require.",
+  "notes": "Reviewed for the photographing_robot branch using the existing source descriptions and annotations; this is not a fresh source-image or hardware validation. Select randomly after a confirmed photography event, without comparing the visitor posture to a depicted human. Use the bounded peer body pose; no approach, nose extension, or lens contact. Falls back to stand until operator-approved.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
     "rights": "reference_only",
     "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  },
+  "photo_pose": {
+    "status": "accepted",
+    "cue": "A long-nosed dog peering toward the lens.",
+    "approximation": "Use the bounded peer body pose; no approach, nose extension, or lens contact. Falls back to stand until operator-approved.",
+    "reason": "A small stationary nose-down body pose evokes peering; wide-angle distortion is not physically reproduced.",
+    "reviewer": "Codex (scenario and mapping review)",
+    "reviewed_on": "2026-10-24",
+    "review_basis": "existing_annotations"
   }
 }

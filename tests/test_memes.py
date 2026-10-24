@@ -34,8 +34,39 @@ MEMES = ROOT / "data" / "memes"
 
 
 @pytest.fixture
-def memes() -> MemeRepository:
-    return MemeRepository(MEMES)
+def memes(tmp_path) -> MemeRepository:
+    """Synthetic eligible scenes preserve meme pipeline tests, not real-image claims.
+
+    The production references remain unreviewed and cannot be matched. These
+    copies exercise future eligible meme scenes using the existing score vectors.
+    """
+    data_dir = tmp_path / "synthetic_memes"
+    annotations = data_dir / "annotations"
+    annotations.mkdir(parents=True)
+    for source in (MEMES / "annotations").glob("*.json"):
+        data = json.loads(source.read_text())
+        data.update(is_fixture=True, review=_synthetic_review())
+        # Deliberately invented person+dog scenes for the legacy relationship
+        # matcher tests. Production solo-dog memes have no depicted human.
+        posture, gestures = {
+            "doge": ("standing", ["turned_toward"]),
+            "cheems": ("sitting", []),
+            "this-is-fine": ("sitting", ["arms_holding"]),
+            "side-eye-dog": ("standing", ["turned_away"]),
+            "long-nose-borzoi": ("leaning_forward", ["looking_down"]),
+        }[source.stem]
+        data["human"] = {"posture": posture, "gestures": gestures, "confidence": 0.85}
+        (annotations / source.name).write_text(json.dumps(data))
+    return MemeRepository(data_dir)
+
+
+def _synthetic_review():
+    return {
+        "status": "accepted", "human_count": 1, "dog_count": 1, "dog_on_ground": True,
+        "reason": "Synthetic test scene with one person and one grounded dog; no real image was reviewed.",
+        "reviewer": "test fixture", "reviewed_on": "2026-10-24",
+        "image_reference": "https://example.invalid/synthetic-scene.jpg",
+    }
 
 
 @pytest.fixture
@@ -49,10 +80,12 @@ def obs(posture, gestures=None, conf=0.85):
 
 # ------------------------------------------------------------------ repository & rights
 
-def test_curated_memes_load_and_are_reference_only(memes):
-    ids = {m.id for m in memes.all()}
+def test_curated_memes_load_and_are_reference_only():
+    memes = MemeRepository(MEMES)
+    ids = {m.id for m in memes.all_records()}
     assert ids == {"meme:doge", "meme:cheems", "meme:this-is-fine", "meme:side-eye-dog", "meme:long-nose-borzoi"}
-    for m in memes.all():
+    assert memes.all() == [], "Unreviewed real memes must not enter the matching collection"
+    for m in memes.all_records():
         assert m.kind == "meme" and m.curation_status == "approved"
         assert not m.displayable and memes.local_image(m) is None
         assert m.sources and m.attribution and m.reflection.get("en")
@@ -88,6 +121,7 @@ def test_adding_a_meme_is_just_a_json_file(tmp_path):
 
     Image.new("RGB", (40, 30), (200, 180, 160)).save(tmp_path / "recreations" / "nap.jpg")
     meme = _meme_dict(id="meme:team-nap", name="Team Nap", curation_status="approved",
+                      is_fixture=True, review=_synthetic_review(),
                       dog={**_meme_dict()["dog"], "posture": "lying", "robot_behavior": "lie_down"},
                       image={"rights": "recreation", "local_file": "recreations/nap.jpg",
                              "license_note": "Original photo by the installation team, CC BY 4.0"})

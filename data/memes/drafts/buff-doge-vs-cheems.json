@@ -33,5 +33,14 @@
   "reflection": {},
   "curation_status": "draft",
   "discovered_via": "imgflip:247375501",
-  "notes": "DRAFT from Imgflip discovery. Listing on Imgflip is not permission to reproduce the image. Verify origin/attribution from primary sources, annotate, decide rights, then move to annotations/."
+  "notes": "DRAFT from Imgflip discovery. Listing on Imgflip is not permission to reproduce the image. Verify origin/attribution from primary sources, annotate, decide rights, then move to annotations/.",
+  "photo_pose": {
+    "status": "rejected",
+    "cue": "A two-dog strength comparison.",
+    "approximation": "No approved single-robot pose mapping.",
+    "reason": "Two contrasting dogs and altered anatomy do not map to one reviewed imitation; attribution and image rights remain unresolved in this draft.",
+    "reviewer": "Codex (scenario and mapping review)",
+    "reviewed_on": "2026-10-24",
+    "review_basis": "existing_annotations"
+  }
 }
