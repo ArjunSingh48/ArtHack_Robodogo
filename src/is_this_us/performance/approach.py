@@ -190,7 +190,8 @@ class Approacher:
             gx, gy = px + (gx - px) * f, py + (gy - py) * f
         return gx, gy
 
-    def approach(self, *, side: str = "left", posture: str = "sitting", should_stop=lambda: False) -> ApproachResult:
+    def approach(self, *, side: str = "left", posture: str = "sitting", facing: str = "",
+                 should_stop=lambda: False) -> ApproachResult:
         res = ApproachResult("error")
         ok, why = self.guard.walk_allowed()
         if not ok:
@@ -275,7 +276,7 @@ class Approacher:
                 dist = math.hypot(gx - x, gy - y)
                 if dist <= self.s.arrive_tolerance_m:
                     self._halt(res)
-                    self._face(res, person, should_stop)
+                    self._face(res, person, should_stop, facing)
                     res.status, res.detail = "arrived", "in front of the person (lying)" if lying else f"{side} of the person"
                     return res
                 heading = math.atan2(gy - y, gx - x)
@@ -303,10 +304,15 @@ class Approacher:
             log.info("approach: %s (%s), %.1f m, pose %s, person %s", res.status, res.detail, res.travelled_m,
                      tuple(round(v, 2) for v in res.robot_pose), res.person_at)
 
-    def _face(self, res: ApproachResult, person, should_stop) -> None:
+    # the painted dog's look, as the audience (behind the start, looking along +x) sees it → heading
+    FACING = {"away": 0.0, "viewer": math.pi, "left": math.pi / 2, "right": -math.pi / 2}
+
+    def _face(self, res: ApproachResult, person, should_stop, facing: str = "") -> None:
         """Turn on the spot to look at the person (or back to the starting direction)."""
         x, y, yaw = res.robot_pose
         target = math.atan2(person[1] - y, person[0] - x) if self.s.face == "person" else 0.0
+        if facing in self.FACING:  # like the dog in the picture
+            target = self.FACING[facing]
         self._turn(res, math.atan2(math.sin(target - yaw), math.cos(target - yaw)), should_stop)
 
     def _turn(self, res: ApproachResult, angle: float, should_stop) -> None:

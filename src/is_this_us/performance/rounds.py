@@ -72,6 +72,11 @@ def behavior_for(a: ShowArtifact | None, art_repo=None) -> str:
     return "stand"
 
 
+def facing_for(a: ShowArtifact | None) -> str:
+    """Which way the robot ends up looking, like the painted dog (as the audience sees it); default: the person."""
+    return (a.dog_facing if a is not None else "") or "person"
+
+
 def side_for(a: ShowArtifact | None, art_repo=None) -> str:
     """Where the robot goes next to the person (as the audience sees it)."""
     if a is None:

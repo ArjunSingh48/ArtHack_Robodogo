@@ -24,6 +24,10 @@
 #     priority          lower = preferred
 #     crop              optional [x0, y0, x1, y1] (0..1) of the figure, for the comparison read
 #     note              what the curator sees (shown in the composition's label)
+#   human / dog / dog_side / dog_facing   (round pictures) read off each picture: the main person's posture;
+#                       the robot pose that echoes the painted dog (sit | lie_down | stand | greet | stretch);
+#                       where the dog is next to the person and which way it looks, AS THE VIEWER SEES IT
+#                       (side: left | right | front; facing: viewer | left | right | person | away)
 #     robot_spot        where the dog is in the picture AS THE VIEWER SEES IT (left | right | front) +
 #                       a note — the operator places the robot there by hand before the person poses.
 #                       `behavior` = the pose it takes there (only with show motion on + armed).
@@ -40,6 +44,9 @@ artifacts:
     canine: certain
     description: A tiny gold pendant in the shape of a dog with a curled tail, from West Asia.
     pose_tags: [standing, tail_curled]
+    dog: stand
+    dog_side: front
+    dog_facing: left
   met:545395:
     fetch: true
     chapter: prehistory
@@ -47,6 +54,10 @@ artifacts:
     canine: certain
     description: A painted relief block from an Egyptian tomb (Middle Kingdom) showing a bowman and his dog.
     pose_tags: [standing, accompanying]
+    human: standing
+    dog: stand
+    dog_side: right
+    dog_facing: left
   met:329081:
     fetch: true
     chapter: prehistory
@@ -54,6 +65,10 @@ artifacts:
     canine: certain
     description: An early clay tablet recording barley rations, rolled with a seal showing a man, hunting dogs and boars.
     pose_tags: [hunting, running]
+    human: standing
+    dog: stretch
+    dog_side: left
+    dog_facing: right
   met:323707:
     fetch: true
     chapter: prehistory
@@ -61,6 +76,10 @@ artifacts:
     canine: certain
     description: A small Neo-Babylonian bronze of a man with a dog standing up beside him.
     pose_tags: [standing, beside, standing_up]
+    human: standing
+    dog: sit
+    dog_side: right
+    dog_facing: viewer
 
   # ---------------------------------------------------------------- 3 · the middle ages
   cma:169746:
@@ -70,6 +89,10 @@ artifacts:
     canine: certain
     description: A leaf from a French Book of Hours. Shepherds look up at angels; a dog is curled at their feet.
     pose_tags: [lying, at_feet, curled]
+    human: standing
+    dog: lie_down
+    dog_side: left
+    dog_facing: left
   met:467641:
     fetch: true
     chapter: middle_ages
@@ -77,6 +100,10 @@ artifacts:
     canine: certain
     description: From the Unicorn Tapestries. Richly dressed hunters return to a castle, their hounds around them.
     pose_tags: [walking, accompanying, hunting]
+    human: standing
+    dog: stand
+    dog_side: front
+    dog_facing: left
   met:464212:
     fetch: true
     chapter: middle_ages
@@ -84,6 +111,10 @@ artifacts:
     canine: certain
     description: An enamel medallion. A young servant blows a hunting horn; a hound runs beside him.
     pose_tags: [running, beside, hunting]
+    human: standing
+    dog: stretch
+    dog_side: left
+    dog_facing: person
   met:471826:
     fetch: true
     chapter: middle_ages
@@ -91,6 +122,10 @@ artifacts:
     canine: certain
     description: A Spanish wall painting, transferred to canvas. A rider and hounds running through trees.
     pose_tags: [running, hunting]
+    human: sitting
+    dog: stretch
+    dog_side: right
+    dog_facing: right
 
   # ---------------------------------------------------------------- 4 · paintings and portraits
   met:436252:
@@ -99,36 +134,60 @@ artifacts:
     canine: certain
     description: A full-length court portrait. A tall greyhound leans against the duke and looks up at him.
     pose_tags: [standing, leaning_against, gazing_up]
+    human: standing
+    dog: greet
+    dog_side: left
+    dog_facing: person
   met:438815:
     chapter: paintings
     subject: human_and_dog
     canine: certain
     description: A mother and her two children in their drawing room; a large dog lies on the carpet beneath them.
     pose_tags: [sitting, lying, family]
+    human: sitting
+    dog: lie_down
+    dog_side: left
+    dog_facing: right
   met:437177:
     chapter: paintings
     subject: human_and_dog
     canine: certain
     description: A couple outdoors. A small dog sits on his lap; another dog is in the grass.
     pose_tags: [sitting, on_lap]
+    human: sitting
+    dog: sit
+    dog_side: right
+    dog_facing: left
   met:437890:
     chapter: paintings
     subject: human_and_dog
     canine: certain
     description: A boy stands with his hand on the neck of a large greyhound.
     pose_tags: [standing, touching_head]
+    human: standing
+    dog: stand
+    dog_side: right
+    dog_facing: person
   met:436323:
     chapter: paintings
     subject: human_and_dog
     canine: certain
     description: A woman holds up a very small dog.
     pose_tags: [held, in_arms]
+    human: standing
+    dog: sit
+    dog_side: left
+    dog_facing: right
   met:437449:
     chapter: paintings
     subject: human_and_dog
     canine: certain
     description: Three men in conversation; a dog jumps up as if to join in.
     pose_tags: [jumping_up, greeting]
+    human: sitting
+    dog: greet
+    dog_side: left
+    dog_facing: person
   met:437966:
     chapter: paintings
     subject: human_and_dog
@@ -144,6 +203,10 @@ artifacts:
       priority: 1
       note: She sits, hands resting in her lap; the collie sits at her side.
       robot_spot: {side: left, note: "Close beside the chair, facing the camera; the robot sits.", behavior: sit}
+    human: sitting
+    dog: sit
+    dog_side: left
+    dog_facing: right
   met:437841:
     chapter: paintings
     subject: human_and_dog
@@ -160,6 +223,10 @@ artifacts:
       priority: 2
       note: She sits and rests her tilted head on her hand; the dog lies near her feet.
       robot_spot: {side: front, note: "Low, in front of the chair, a little to the left; the robot lies down.", behavior: lie_down}
+    human: sitting
+    dog: lie_down
+    dog_side: front
+    dog_facing: left
   met:437173:
     chapter: paintings
     subject: human_and_dog
@@ -175,6 +242,10 @@ artifacts:
       priority: 1
       note: He stands, one hand resting on the dog's head.
       robot_spot: {side: left, note: "Beside the person, within reach of their hand; the robot stands.", behavior: stand}
+    human: standing
+    dog: sit
+    dog_side: left
+    dog_facing: viewer
   met:435864:
     chapter: paintings
     subject: human_and_dog
@@ -190,6 +261,10 @@ artifacts:
       priority: 2
       note: She stands holding the small dog close, her other hand open.
       robot_spot: {side: right, note: "The painted dog is held — the robot cannot be. Put it close at the person's side; it sits.", behavior: sit}
+    human: standing
+    dog: sit
+    dog_side: front
+    dog_facing: viewer
 
   # ---------------------------------------------------------------- 5 · photography
   met:283102:

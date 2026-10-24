@@ -1277,7 +1277,7 @@ class StoryDirector:
             self._note(f"encounter error: {exc}")
             return "together" if self.composition else "alone"
 
-    async def _walk_to_person_at(self, side: str, posture: str, speak: bool = True) -> bool:
+    async def _walk_to_person_at(self, side: str, posture: str, speak: bool = True, facing: str = "") -> bool:
         self._set_state(ShowState.APPROACH, f"walking to the person's {side}")
         if self.sim_robot is not None:  # the simulated person takes the pose the camera read
             self.sim_robot.set_person_posture(posture)
@@ -1285,7 +1285,7 @@ class StoryDirector:
             await self.say_line("approach", "ask")
         if self.motion is not None:
             await asyncio.to_thread(self.motion.perform, "stand")  # walking starts from standing
-        res, cmd = await self._walk(self.approacher.approach, side=side, posture=posture)
+        res, cmd = await self._walk(self.approacher.approach, side=side, posture=posture, facing=facing)
         self.walk_log.append(f"approach: {getattr(res, 'status', 'interrupted')} {getattr(res, 'detail', '')}".strip())
         if cmd is Cmd.CANCEL:
             raise ShowCancelled()
@@ -1515,7 +1515,7 @@ class StoryDirector:
         """One era: any pose → the closest picture of this era → the robot remembers while it walks over and
         takes the painted dog's pose → the picture → hold + photo → beamer + Telegram → back to its place."""
         from .live_view import checks_for as _checks
-        from .rounds import MEME_BEHAVIOR, behavior_for, pick_for_round, pose_group, side_for
+        from .rounds import MEME_BEHAVIOR, behavior_for, facing_for, pick_for_round, pose_group, side_for
 
         era = cue.target
         camera = self._open_camera()  # the laptop camera: the photo of the two together
@@ -1562,7 +1562,7 @@ class StoryDirector:
                   "behavior": behavior, "side": side, "settled": False, "photo": False, "sent": []}
         self.rounds.append(record)
         self._clear_live()
-        work = self._round_robot(behavior, side, posture) if reading is not None else None
+        work = self._round_robot(behavior, side, posture, facing_for(art)) if reading is not None else None
         settled = await self._remember_while(era, art, work)
         record["settled"] = settled
         if art is not None:
@@ -1621,12 +1621,12 @@ class StoryDirector:
         cmd = await self._await_cmd({Cmd.NEXT, Cmd.SKIP}, timeout=self.photo_view_timeout_s)
         self._note("picture viewed — continuing" if cmd else "picture viewed (time limit) — continuing")
 
-    async def _round_robot(self, behavior: str, side: str, posture: str | None) -> bool:
+    async def _round_robot(self, behavior: str, side: str, posture: str | None, facing: str = "") -> bool:
         """Walk to the person (only with --walk) and take the pose. → True only if the robot reports it."""
         from ..domain import ExecutionStatus
 
         if self.approacher is not None:
-            arrived = await self._walk_to_person_at(side, posture or "sitting", speak=False)
+            arrived = await self._walk_to_person_at(side, posture or "sitting", speak=False, facing=facing)
             if not arrived:
                 self._note("could not reach the person — pose skipped")
                 return False

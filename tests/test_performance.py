@@ -1305,3 +1305,20 @@ def test_stability_tracker_needs_a_held_pose():
     assert not t.update(sit, 0.0) and not t.update(sit, 1.0) and t.update(sit, 2.1)
     assert not t.update(PoseReading(True, "ok", "center", "standing", None), 2.2)  # changed pose: restart
     assert not t.update(PoseReading(False), 2.3)
+
+
+@pytest.mark.parametrize("facing,heading", [("viewer", math.pi), ("left", math.pi / 2), ("right", -math.pi / 2)])
+def test_robot_ends_up_looking_like_the_painted_dog(facing, heading):
+    a, world, _, _ = _sim("left", (2.2, 0.4), "sitting")
+    assert a.approach(side="left", posture="sitting", facing=facing).arrived
+    err = math.atan2(math.sin(world.pose[2] - heading), math.cos(world.pose[2] - heading))
+    assert abs(err) < 0.15
+
+
+def test_every_round_picture_says_how_its_dog_is_placed(catalog):
+    from is_this_us.performance.rounds import candidates
+    from is_this_us.performance.script import ROUND_ERAS
+
+    for era in ROUND_ERAS:
+        for art in candidates(catalog, era):
+            assert art.dog and art.dog_side and art.dog_facing, art.id  # read off the picture, not guessed
