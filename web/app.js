@@ -175,7 +175,7 @@ function photo() {  // what the photo camera shows now, as an image URL (stays i
   g.drawImage(img, 0, 0);
   return c.toDataURL('image/jpeg', 0.9);
 }
-setInterval(() => { if (source) { if (source === 'camera') readNow(); drawCam(); } }, 200);
+setInterval(() => { if (source) { readNow(); drawCam(); } }, 200);  // the pose on the photo or the camera, always
 
 // ---------------------------------------------------------------- the simulated dog (SimWorld + Approacher, simplified)
 const dog = { x: 0, y: 0, yaw: 0, walking: false, action: '', body: 'standing' };
