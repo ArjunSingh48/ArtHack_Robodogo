@@ -18,6 +18,14 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] Talk mode: microphone sign visible ("your voice is sent to OpenAI to answer you; nothing is recorded here").
 - [ ] Talk mode with the real robot: `itu talk --robot go2 … --i-have-physical-estop`; the operator stays by the robot.
 
+## Performance mode (`itu show`)
+- [ ] Default is a **stationary** robot: no `--motion`. The story never needs the robot to move.
+- [ ] If motion cues are used: `SHOW_MOTION_ENABLED=true`, all gates above, `--motion --i-have-physical-estop`,
+      a second person with the remote. Cues are only `stand` (BalanceStand) through the guard.
+- [ ] The participant's spot is ≥ 1.5 m from the robot; nobody needs to touch or approach it.
+- [ ] Photo consent and send confirmation are given by a person, not by the software (§7 of docs/PERFORMANCE.md).
+- [ ] `/cancel` (or `q`) ends the performance and issues a software stop — still **not** an e-stop.
+
 ## During the show
 - [ ] Operator arms with `/arm` only when the area is clear and they are watching.
 - [ ] Visitors interact from the edge of the marked area; the robot never walks (no `Move` in the code).

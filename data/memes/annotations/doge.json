@@ -21,9 +21,11 @@
   ],
   "cultural_meaning": "A sideways glance with raised eyebrows, captioned with broken, wondering phrases ('such wow') — mock astonishment, affectionate and absurd.",
   "human": {
-    "posture": "unknown",
-    "gestures": [],
-    "confidence": 0.0
+    "posture": "standing",
+    "gestures": [
+      "turned_toward"
+    ],
+    "confidence": 0.6
   },
   "dog": {
     "posture": "sitting",
@@ -39,20 +41,11 @@
     "ru": "Такой долгий взгляд искоса. Кажется, эта собака понимает что-то, чего не понимаю я.",
     "de": "So ein langer Seitenblick. Ich glaube, dieser Hund versteht etwas, das ich nicht verstehe."
   },
-  "notes": "Reviewed for the photographing_robot branch using the existing source descriptions and annotations; this is not a fresh source-image or hardware validation. Select randomly after a confirmed photography event, without comparing the visitor posture to a depicted human. Sit; facial expression, eyebrows, and sofa are not reproduced.",
+  "notes": "Pose from the KYM interview: sitting on a couch, glaring sideways with raised eyebrows. Eyebrows cannot be performed; the robot sits.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
     "rights": "reference_only",
     "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
-  },
-  "photo_pose": {
-    "status": "accepted",
-    "cue": "A seated dog looking sideways toward the camera.",
-    "approximation": "Sit; facial expression, eyebrows, and sofa are not reproduced.",
-    "reason": "A single recognizable dog portrait can be evoked by a stationary seated pose; no human in the source is required.",
-    "reviewer": "Codex (scenario and mapping review)",
-    "reviewed_on": "2026-10-24",
-    "review_basis": "existing_annotations"
   }
 }

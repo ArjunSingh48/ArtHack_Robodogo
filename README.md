@@ -9,18 +9,16 @@ visitor's phone, and quietly asks: **"Is this us?"**
 
 The robot has two cultural memories, treated with equal sincerity:
 
-1. **Fine art** — a pilot of 5 approved paintings selected from 24 candidates (The Met, Cleveland Museum of Art; public domain / CC0).
-2. **Internet culture** — Doge, Cheems, This Is Fine, Side Eye Dog, and Long Nose Borzoi supply random, approximate poses when a visitor tries to photograph the robot.
-
-The artwork dataset requires exactly one visible human and one visible dog supported by
-the ground or floor, with clearly distinguishable bodies. The review found 5 accepted artworks, 18 rejected, and 1
-needing further review. See [Dataset curation](docs/DATASET_CURATION.md) for the
-criteria, audit, and rebuild workflow. Solo-dog memes use a separate photo-pose
-review; see [Meme behavior mapping](docs/MEMES.md). Photography-event routing and
-simulation work; automatic phone/camera intent detection is still pending.
+1. **Fine art** — 24 museum paintings of people and dogs (The Met, Cleveland Museum of Art; public domain / CC0).
+2. **Internet culture** — famous dog memes: Doge, Cheems, This Is Fine, Side Eye Dog, Long Nose Borzoi.
 
 Visitors can also simply **talk to the dog**: it answers out loud in their language, tells its story, and
 looks at them to find "us" (OpenAI Realtime speech-to-speech, see [`docs/TALK.md`](docs/TALK.md)).
+
+And there is a **performance** (`itu show`, see [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md)): in a world with
+no living dogs left, the robot narrates seven chapters of humanity's dog pictures — ancient objects, medieval
+manuscripts, paintings, early photographs, memes — then turns to a living person, asks them to take a pose
+from a painting, and (with consent) makes a new picture with them: **THEN / NOW / IS THIS US?**
 
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
@@ -30,8 +28,9 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 
 | | |
 |---|---|
+| [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | **the performance**: rehearsal, live show, Telegram controls, consent, **operator run sheet** |
+| [`docs/VOICE.md`](docs/VOICE.md) | OpenAI voice: one voice, narration cache, audition, GPT-Live conversation windows |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | pipeline, state machine, matching, risks |
-| [`docs/DATASET_CURATION.md`](docs/DATASET_CURATION.md) | visual acceptance rules, review instructions, approved pilot |
 | [`docs/TALK.md`](docs/TALK.md) | talk mode: live conversation, the dog's story, setup step by step, privacy |
 | [`docs/MEMES.md`](docs/MEMES.md) | meme memory: schema, rights policy, adding a meme, Imgflip discovery |
 | [`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md) | first session with a Go2, step by step |
@@ -45,14 +44,16 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 - Pose recognition with MediaPipe + transparent geometric rules: standing, sitting, crouching, kneeling,
   leaning forward, reclining, lying; gestures (holding, reaching, looking down, turned toward/away); distance.
 - Relationship matching across paintings, memes, both, or a surprise, on one comparable 0–1 scale.
-- Random meme imitation from an explicit photographing-robot event (synthetic rehearsal available; automatic intent detection pending).
 - A closed, operator-controlled movement vocabulary with a safety guard; a mock robot that simulates the
   exact SDK call sequences; a Go2 adapter (hardware-unverified).
 - The robot's character in English, Russian and German; a voice from the OpenAI Realtime API with caching, a word-for-word fidelity check and text fallback.
 - A Telegram bot: QR pairing, `/observe`, photo mode without the robot, `/art` `/meme` `/surprise`,
   ♡ / ↻ / ✧ buttons, memory gallery, memory cards, consented imitation photos, `/forget`, operator controls.
 - Talk mode: a live spoken conversation with the dog, which tells its own story.
-- Automated tests and GitHub Actions CI.
+- Performance mode: seven narrated chapters with 28 verified artifacts, guided/automatic control, pause/
+  resume/repeat/skip/cancel, guided pose with gentle hints, consented capture, THEN/NOW composition,
+  confirmed Telegram delivery, projector page, cached narration, optional GPT-Live conversation windows.
+- 205 tests (simulated — no robot, microphone, OpenAI or Telegram account involved), GitHub Actions CI.
 
 ## 1. Install
 
@@ -70,9 +71,8 @@ pytest             # everything should pass
 ## 2. First simulation (no Telegram, no robot)
 
 ```bash
-itu simulate --posture sitting --another --card card.jpg          # SYNTHETIC skeleton, reviewed relationship scenes
-itu simulate --posture sitting --gesture holding --archive meme   # ordinary archive request; falls back to eligible art
-itu simulate --photographing --seed 7 --another                   # explicit synthetic photography event → random meme poses
+itu simulate --posture sitting --another --card card.jpg          # SYNTHETIC skeleton, paintings + memes
+itu simulate --posture sitting --gesture holding --archive meme   # → This Is Fine
 itu simulate --posture kneeling --gesture extending --lang ru     # Russian
 itu simulate --image me.jpg                                       # your own photo (Mode A)
 itu simulate --webcam                                             # one webcam frame (Mode B)
@@ -99,10 +99,14 @@ Never commit `.env` (already in `.gitignore`).
 
 ```
 OPENAI_API_KEY=sk-…
-OPENAI_REALTIME_MODEL=gpt-realtime-2.1
-OPENAI_REALTIME_VOICE=marin        # or cedar; also alloy, ash, ballad, coral, echo, sage, shimmer, verse
+OPENAI_VOICE=marin                 # ONE voice for everything — choose with `itu voice audition`
+OPENAI_NARRATION_MODEL=gpt-realtime-2.1-mini   # performance narration (pre-generated, cached)
+OPENAI_REALTIME_MODEL=gpt-realtime-2.1         # free-play lines + talk mode
 LOCAL_AUDIO_PLAYBACK=true          # play on the laptop / a Bluetooth speaker
 ```
+
+The robot's voice is AI-generated (OpenAI); say so at the installation — the projector page shows it.
+Full details: [`docs/VOICE.md`](docs/VOICE.md).
 
 Each phrase opens a short Realtime session that is told to *read the text aloud exactly*, in the visitor's
 language, in a soft, shy voice. The model's own transcript is compared with the script; if it improvised,
@@ -123,7 +127,21 @@ The dog's story is in `data/persona/story.md` — edit it to change what it tell
 it can only "look and remember", which runs the same curated, guarded pipeline as everything else.
 Microphone audio is streamed to OpenAI during a conversation; put up the sign suggested in `docs/TALK.md`.
 
-## 6. The real robot
+## 6. The performance (`itu show`)
+
+```bash
+itu show validate                                    # script, lines, catalog
+itu show --dry-run --auto --fast 0.05                # whole show, unattended, no hardware/keys/Telegram
+itu show --dry-run --display web                     # rehearse with the projector page; you press Enter
+itu show voice pregenerate                           # needs OPENAI_API_KEY; then the show plays offline
+itu show --display web --source webcam               # the real thing (guided: you advance each chapter)
+itu show --display web --source webcam --telegram    # + operator controls /show /next /pause … in Telegram
+```
+
+The narration lives in [`data/performance/script.en.md`](data/performance/script.en.md) — edit the text, not the
+code. Run sheet, consent rules and every control: [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md).
+
+## 7. The real robot
 
 **In the lab, use the ZHAW bridge** ([zhaw-physical-ai/go2_main](https://github.com/zhaw-physical-ai/go2_main)):
 start `python -m go2_bridge` there, then set `ROBOT_MODEL=zhaw_bridge` and `CAMERA_SOURCE=zhaw_bridge` here
@@ -147,13 +165,10 @@ The robot moves only when `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOT
 operator has sent `/arm`. Photos sent to the bot never move the real robot. `/stop`, `s` and Ctrl+C are
 software stops — **not** an emergency stop.
 
-## 7. Curating
+## 8. Curating
 
 Paintings: `itu artworks search|draft|build|validate|cache|list` — museum metadata is fetched from the APIs,
-never typed by hand. `itu artworks build --offline` reuses the preserved museum metadata snapshot.
-Only scenes with an accepted visual eligibility review enter relationship matching.
-The photography branch draws from separately reviewed meme photo poses.
-Memes: one JSON file per meme in `data/memes/annotations/`; `itu memes discover|validate|list`.
+never typed by hand. Memes: one JSON file per meme in `data/memes/annotations/`; `itu memes discover|validate|list`.
 See [`docs/MEMES.md`](docs/MEMES.md).
 
 ## Repository layout
@@ -161,6 +176,7 @@ See [`docs/MEMES.md`](docs/MEMES.md).
 ```
 data/artworks/      curation_notes.yaml · annotations.yaml (generated) · images/ (public domain / CC0)
 data/persona/       story.md — the dog's own story (edit freely)
+data/performance/   script.en.md (narration) · lines.en.yaml · catalog.yaml · records.yaml + images/ (generated, PD/CC0)
 data/memes/         annotations/*.json (one per meme) · drafts/ (never loaded) · recreations/ (authorised images only)
 docs/               architecture, memes, hardware, safety, compatibility, demo, troubleshooting
 src/is_this_us/
@@ -174,12 +190,14 @@ src/is_this_us/
   dialogue/         engine + locales (en, ru, de)
   speech/           OpenAI Realtime voice, cache, FFmpeg, local speaker
   talk/             live conversation: persona, tools, audio, Realtime session
+  performance/      StoryDirector · script · catalog · voice cache · stage (terminal/web) · pose guide ·
+                    composer · delivery · conversation windows (GPT-Live) · motion cues · CLI
   bot/              flows (network-free logic) · app (aiogram 3)
   orchestrator.py   state machine
   storage.py        SQLite: pairing, sessions, memories, archive choice, /forget
   cards.py          memory cards and diptychs
   cli.py, hardware_cli.py
-tests/              automated tests and synthetic fixtures
+tests/              205 tests
 ```
 
 ## Privacy
@@ -188,6 +206,10 @@ No face recognition or identification. Camera frames and visitor photos are proc
 stored. The database keeps only coarse labels (posture, scene id, behavior), which expire after
 `SESSION_TTL_MINUTES`. Imitation photos are taken only after explicit consent, sent only to that visitor,
 and never written to disk. `/forget` deletes everything immediately. No visitor ever sees another's moments.
+
+Performance photos: taken only after the participant agrees **and** the operator confirms; sent only after a
+second, separate confirmation, to one configured private chat; kept in `data/runtime/performance/` (git-ignored)
+and deleted after `SHOW_PHOTO_RETENTION_MINUTES`, on cancel, or with `itu show purge`.
 
 ## Licence
 

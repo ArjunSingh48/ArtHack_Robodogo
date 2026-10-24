@@ -63,6 +63,27 @@ EDU feature over Ethernet. The sport-state topic name has varied across models/f
 * An invalid key closes the WebSocket with code 3000, reason `invalid_request_error.invalid_api_key`
   (observed); the synthesizer treats it as a credential failure and turns the voice off.
 
+## OpenAI narration and GPT-Live (verified 2026-10-24 in the installed SDK, openai 3.37.0)
+
+* `gpt-realtime-2.1-mini` is in the SDK's Realtime model list (used for performance narration).
+* GPT-Live: `AsyncOpenAI().live.connect()` (no model in the URL) → `connection.session.start(session={"model":
+  "gpt-live-1", "instructions": …, "audio": {"format": {"type": "audio/pcm", "rate": 24000}, "output":
+  {"voice": …}}})` → wait for `session.started`. Input: `session.input_audio.append(audio=b64)`,
+  `.mute()` / `.unmute()` (acknowledged by `session.input_audio.muted/unmuted`). Output:
+  `session.output_audio.delta`, `session.output_transcript.delta` (no "done" event). End:
+  `session.close()` → `session.closed`. Voice and audio format are immutable after start.
+* GPT-Live voices include all ten Realtime voices (plus beacon, bossa, cinder, delta, gleam, meridian,
+  quartz, ripple, shida, stone, tempo, vesper, willow, which Realtime does not have) — so one voice from
+  the Realtime list works for both.
+* Access to `gpt-live-1` for a given organisation was **not** verifiable without a key.
+
+## Museum records for the performance
+
+13 extra objects for the early chapters (`data/performance/records.yaml`), fetched through the same
+clients: Met objects with `isPublicDomain=true`, Cleveland objects with `share_license_status=CC0`.
+The Met's search: departments 3 (Ancient West Asian), 10 (Egyptian), 7/17 (Cloisters/Medieval),
+19 (Photographs) — many photographs there are **not** public domain and were rejected.
+
 ## Imgflip
 
 `GET https://api.imgflip.com/get_memes` — public, no key, returns ~100 currently popular templates

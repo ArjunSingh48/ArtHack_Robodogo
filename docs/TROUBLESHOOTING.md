@@ -24,4 +24,15 @@
 | Meme shown without picture | By design: reference-only memes are linked and credited, not reproduced (docs/MEMES.md). |
 | Robot stands instead of side-eye / peer | `look_aside` / `peer` not approved yet: test, then `/approve`. |
 | No 📷 button | `IMITATION_CAMERA_SOURCE` empty, or the moment came from a photo (robot not present). |
+| `itu show validate` reports a problem | Fix the named file (`data/performance/…`); unknown `@show` ids must be in `catalog.yaml`. |
+| Show text only, no voice | Clips not generated: `itu show voice status` / `pregenerate` (needs `OPENAI_API_KEY`). No audio player found: install ffmpeg (ffplay). |
+| Show voice changed after editing a line | Expected: that cue is regenerated; run `itu show voice pregenerate` before the show and `prune` after. |
+| Projector page blank | Open the URL printed at start; firewall; `SHOW_WEB_HOST=0.0.0.0` to reach it from another machine (private network only). |
+| "does nothing while …" in Telegram | The command doesn't apply in the current state (e.g. `/send` during narration). `/status` shows the state. |
+| "earlier performance — ignored" | A button from a previous run was pressed; use the newest prompt. |
+| Pose hints keep saying "step back" | Whole body must be in frame for sitting/standing; move the camera back or higher. |
+| Left/right hints are reversed | The camera image is mirrored: `SHOW_CAMERA_MIRRORED=true`. |
+| Never asks for the photo | It waits for "ready" (`ready` / `/capture`): no automatic capture by design. |
+| Picture not sent | Needs `SHOW_TELEGRAM_CHAT_ID`, `--telegram`, and the separate `/send` confirmation. |
+| "GPT-Live … unavailable" in logs | No access to `OPENAI_LIVE_MODEL` for this key; the Realtime push-to-talk fallback is used. |
 | `itu memes discover` fails | Imgflip API unreachable or changed; add memes by hand (JSON). |

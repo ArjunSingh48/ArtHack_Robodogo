@@ -1,135 +1,77 @@
 # Meme Memory — the robot discovers internet culture
 
-The robot has two ways to remember cultural dogs. A visitor's body pose invites a
-human–dog relationship from an artwork. A visitor photographing the robot invites
-it to pose as a randomly chosen meme dog. Solo dogs, cropped portraits, and drawn
-dogs belong in this second branch; they do not need a depicted human or a dog
-standing on the ground in the source image.
+The robot knows dogs through two cultural sources. Museum paintings show people and dogs over five
+centuries; memes show dogs looking back at the camera, at the scroll, at us. The installation treats
+both with **equal sincerity**: the same matcher interface, the same safety path, the same quiet voice,
+the same memory card. The contrast between a Van Dyck greyhound and a dog drinking coffee in a burning
+room is the point, and the robot never winks at it.
 
-## Two branches
+> "I found another kind of painting. Humans call it a meme."
 
-```mermaid
-flowchart TD
-    O[Visitor observation] --> Q{Confirmed photographing-robot event?}
-    Q -->|Installation event| M[Reviewed meme photo-pose pool]
-    M --> R[Random choice; prefer references not recently shown]
-    Q -->|Ordinary pose or uncertain intent| A[Reviewed human–dog artwork matching]
-    R --> P[Curated robot behavior]
-    A --> P
-    P --> G[Existing motion planner and guard]
-    G --> D[Pose, then name and credit the cultural reference]
+## How it fits the existing pipeline
+
+```
+SceneLibrary ─┬─ YamlArtworkRepository  (paintings, data/artworks)
+              └─ MemeRepository         (memes, data/memes/annotations/*.json)
+
+SceneMatcher(source) ─┬─ art      → WeightedRelationshipMatcher
+                      ├─ meme     → MemeMatcher (same interface, its own reading)
+                      ├─ both     → both rankings merged on the same 0–1 scale
+                      └─ surprise → one archive chosen at random, wider near-tie pool
 ```
 
-Artwork matching still requires exactly one visible human, one visible dog, and
-confirmed ground contact. Its `review` and the meme's `photo_pose` review are
-separate. A photo-pose approval never makes a solo-dog meme eligible for ordinary
-relationship matching (`art`, `meme`, `both`, or `surprise`).
+Both scene types expose the same surface: `id`, `kind`, `title`, `human: HumanAnnotation`,
+`dog: DogAnnotation`. Everything downstream (planner, guard, robot, dialogue, Telegram, cards) works
+on that surface, while each keeps its own metadata.
 
-For a photography event, selection is uniform among eligible memes not recently
-shown to this visitor. Once all have been seen, reuse is allowed. The visitor's
-posture, gestures, and clothing do not rank the memes. Explicit retry excludes
-previous choices in that interaction; if the pool is exhausted or empty, remain
-still. The photo branch does not silently substitute a painting. Ordinary `/meme`
-requests still use the existing artwork fallback when there are no eligible
-human–dog meme scenes.
+### Why a separate MemeMatcher
 
-## Trigger contract and implementation status
+Paintings are mostly *dog-and-person* scenes. Memes are mostly *dog-and-camera* scenes: the visitor
+stands where the camera stood. So `MemeMatcher` reads the visitor's body as an invitation to a **look**:
 
-`HumanObservation.intent = "photographing_robot"` is an explicit event, handled
-only for `origin="installation"`. It takes precedence over the ordinary archive
-choice for that interaction. The orchestrator calls
-`SceneMatcher.match_photo_opportunity`, then the same motion planner, guard,
-dialogue, and delivery path as other scenes. Retries retain the recorded event.
-An uploaded Telegram photograph is a different input and never triggers this
-branch or real robot motion.
+| Visitor | Invites | Example |
+|---|---|---|
+| sitting, forearms together (a cup) | `enduring` | This Is Fine |
+| leaning forward | `peering` | Long Nose Borzoi |
+| turned away | `regarding` (side-eye) | Side Eye Dog |
+| standing, turned toward | `regarding` / `posing` | Doge |
+| sitting, calm | `posing` | Cheems |
 
-**Implemented:** the separate dataset review, action mappings, random selector,
-installation-event routing, persisted intent, and a synthetic rehearsal command:
-
-```bash
-itu simulate --photographing --seed 7 --another
-itu memes list
-itu memes validate
-```
-
-**Still to implement:** automatic visual detection of a phone/camera being aimed
-at the robot. The current MediaPipe interpreter only estimates body posture and
-never emits photography intent. Raised hands, a phone held for reading, a cup,
-or a single ambiguous frame are insufficient evidence. The future detector
-should combine device visibility, aim toward the robot, and a sustained capture
-stance; uncertain evidence stays in the ordinary branch. Emit one event when a
-photography attempt begins, then require the device to lower/intent to clear
-before rearming. Existing motion cooldown still applies. Detector thresholds,
-temporal confirmation, and the rearm latch need on-site validation; the selector
-itself is not a continuous-frame detector.
-
-The event does not mean a photo was actually captured. It does not operate the
-visitor's camera, store their image, or grant consent for the installation's
-optional imitation-photo capture.
-
-## Meme folder review and behavior mapping — 2026-10-24
-
-This is a scenario/mapping review of the **existing annotations and source
-descriptions**, not a fresh visual inspection of remote meme images or a hardware
-validation. Each record says `review_basis: "existing_annotations"`. All five
-curated references qualify for approximate photo poses; all remain
-`reference_only`. The draft remains excluded.
-
-| Meme | Camera-facing cue | Requested behavior | Approximation and fallback |
-|---|---|---|---|
-| Doge | Seated, knowing look toward the lens | `sit` | Seated attitude; no eyebrows, facial recreation, or sofa. |
-| Cheems | Compact, calm seated portrait | `sit` | No body-shape or face imitation. |
-| This Is Fine | Calm amid absurd surroundings | `sit` | Robot sits on the floor; no chair, cup, smoke, or fire. |
-| Side Eye Dog | Sideways glance | `look_aside` | Small body yaw; no independent eye movement. Defaults to `stand` until approved. |
-| Long Nose Borzoi | Peering toward the lens | `peer` | Small body pitch; no approach or nose extension. Defaults to `stand` until approved. |
-| Buff Doge vs. Cheems (draft) | Two contrasting dogs | excluded | No reviewed single-robot mapping; draft attribution/rights incomplete. |
-
-All five mappings are marked `dog.reproducible: "approximate"`. Three currently
-share `sit`; random reference selection will not always produce visibly different
-motion. The references and commentary carry part of the distinction. More
-expressive movement requires separate reviewed behavior work.
+Gesture weighs more than exact posture for memes (`MemeMatcher` weights in `matching/matcher.py`).
 
 ## Annotation schema (one JSON file per meme)
 
-`dog.robot_behavior` remains the sole action mapping. `photo_pose` records why the
-cultural reference is suitable and what the robot can approximate:
-
 ```json
 {
-  "human": {"posture": "unknown", "gestures": [], "confidence": 0.0},
-  "dog": {
-    "posture": "sitting", "relation": "facing_viewer", "interaction": "posing",
-    "gaze_at_human": false, "reproducible": "approximate",
-    "robot_behavior": "sit", "confidence": 0.8
-  },
-  "photo_pose": {
-    "status": "accepted",
-    "cue": "A compact seated dog facing the camera.",
-    "approximation": "Sit; body shape and facial expression are not reproduced.",
-    "reason": "A stationary seated cultural reference suits a photo opportunity.",
-    "reviewer": "Curator name or review process",
-    "reviewed_on": "2026-10-24",
-    "review_basis": "existing_annotations"
-  }
+  "id": "meme:this-is-fine",
+  "name": "This Is Fine",
+  "also_known_as": ["On Fire"],
+  "subject": "a cartoon dog in a hat",
+  "year": "2013",
+  "origin": "One factual sentence from a primary source.",
+  "attribution": "Comic: KC Green, 'On Fire' (Gunshow, 2013).",
+  "sources": [{"label": "NPR — …", "url": "https://…"}],
+  "cultural_meaning": "What the meme means to the people who use it.",
+  "human": {"posture": "sitting", "gestures": ["arms_holding"], "confidence": 0.85},
+  "dog": {"posture": "sitting", "relation": "facing_viewer", "interaction": "enduring",
+          "gaze_at_human": false, "reproducible": "yes", "robot_behavior": "sit", "confidence": 0.9},
+  "image": {"rights": "reference_only", "license_note": "Copyrighted image; not stored or sent."},
+  "reflection": {"en": "…", "ru": "…", "de": "…"},
+  "curation_status": "approved",
+  "discovered_via": "manual",
+  "notes": "Curator notes."
 }
 ```
 
-This fragment supplements the existing identity, source, attribution, image-rights,
-reflection, and `curation_status` fields. `photo_pose.status` is `accepted`,
-`rejected`, or `needs_review`; missing reviews are ineligible. `review_basis` can
-also be `visual_review` after actually inspecting the source. An accepted mapping
-requires an approved catalog record, decided image rights, and a reproducible or
-approximate action. Unknown-rights drafts and `reproducible: "no"` are excluded.
+* `human` — the visitor body that *summons* this meme (vocabulary: `HumanPosture`, `HumanGesture`).
+* `dog` — the dog's posture, relation (`facing_viewer` for camera scenes), interaction (`regarding`,
+  `posing`, `enduring`, `peering`, or any painting interaction), and the **permitted robot action**.
+* `robot_behavior` must be a member of the existing vocabulary:
+  `stillness, stand, sit, lie_down, stretch, greet, look_aside, peer`. Nothing else validates.
+* `reflection` — the robot's own sincere sentence about this meme, per language.
 
-`human` now describes a depicted human if there is one. For these solo-dog memes,
-unknown/zero means **no human pose annotation**, not a fictional visitor pose.
-Photo selection ignores this field. The old `MemeMatcher` remains available for
-separately reviewed human–dog scenes; its posture/gesture scoring does not select
-photo-opportunity memes.
-
-**Adding a meme never touches robot-control code.** Complete its catalog and
-photo-pose review, choose an existing behavior, decide image rights, and run
-`itu memes validate`. Review approval cannot enable operator-gated movements.
+**Adding a meme never touches robot-control code.** Drop a JSON file into `data/memes/annotations/`, run
+`itu memes validate`, restart the bot. A meme can only *name* an approved behavior; it cannot define motion.
 
 ## Image rights policy
 
@@ -162,10 +104,9 @@ dog-related templates not already curated, and writes a draft with `image.rights
 On 2026-10-24 that included "This Is Fine" and "Buff Doge vs. Cheems", but not Side Eye Dog or the Borzoi,
 so curators also add memes by hand.
 
-To approve a draft: verify origin and attribution; annotate the dog and any depicted human;
-choose an existing behavior; complete `photo_pose` with evidence and approximation limits;
-decide image rights; write reflections; set `curation_status: "approved"`; move the file into
-`annotations/`; run `itu memes validate`. A catalog approval alone does not enable selection.
+To approve a draft: verify origin and attribution from primary sources; fill `human`/`dog`; choose a
+behavior; decide image rights; write reflections; set `curation_status: "approved"`; move the file into
+`annotations/`; run `itu memes validate`.
 
 ## Robot actions for memes
 

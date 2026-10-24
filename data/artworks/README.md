@@ -2,34 +2,13 @@
 
 | File | What it is |
 |---|---|
-| `curation_notes.yaml` | Visual eligibility reviews and scene annotations for all 24 candidates. Edit this. |
-| `museum_metadata.yaml` | Preserved museum metadata for all 24 candidates, including original rights-verification dates. Used by offline builds. |
-| `annotations.yaml` | **Generated**, accepted scenes only. Do not edit by hand. |
+| `curation_notes.yaml` | Hand annotations: human posture, dog posture, relation, interaction, robot feasibility, original poem. Edit this. |
+| `annotations.yaml` | **Generated** by `itu artworks build` from the notes + live museum API metadata. Do not edit by hand. |
 | `images/` | Cached web-size images (`itu artworks cache`) so the installation works offline. |
-
-The pilot collection requires exactly one visible human and one visible dog,
-with the dog supported by the ground or floor and both bodies clearly distinguishable.
-Overlap that obscures their separate poses is a reason for exclusion. The full review procedure and
-delegation instructions are in [Dataset curation](../../docs/DATASET_CURATION.md).
-Missing, rejected, or unresolved reviews are excluded from matching.
-
-To rebuild from the preserved metadata without network access:
-
-```bash
-itu artworks build --offline
-itu artworks validate
-itu artworks list
-```
-
-`itu artworks build` (without `--offline`) fetches museum metadata and verifies
-rights live. Offline builds retain the snapshot's original verification dates;
-they do not reverify rights. Build errors leave the previous generated file
-intact. All candidate notes, source metadata, and existing images are retained.
 
 ## Rights
 
-The preserved records state when rights were checked against the museum API
-(`rights.verified_on`):
+Every artwork's rights were checked against the museum API at build time (`rights.verified_on`):
 
 * **The Metropolitan Museum of Art** — objects with `isPublicDomain: true`, released under the
   Met Open Access policy (CC0). <https://www.metmuseum.org/about-the-met/policies-and-documents/open-access>

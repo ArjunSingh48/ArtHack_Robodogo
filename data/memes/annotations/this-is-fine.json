@@ -20,16 +20,18 @@
   ],
   "cultural_meaning": "Calm denial in the middle of a disaster: sitting at a table with a coffee mug, smiling, while the room burns.",
   "human": {
-    "posture": "unknown",
-    "gestures": [],
-    "confidence": 0.0
+    "posture": "sitting",
+    "gestures": [
+      "arms_holding"
+    ],
+    "confidence": 0.85
   },
   "dog": {
     "posture": "sitting",
     "relation": "facing_viewer",
     "interaction": "enduring",
     "gaze_at_human": false,
-    "reproducible": "approximate",
+    "reproducible": "yes",
     "robot_behavior": "sit",
     "confidence": 0.9
   },
@@ -38,20 +40,11 @@
     "ru": "Вокруг него всё горит, а он держит свою чашку. Я бы хотел научиться такому спокойствию.",
     "de": "Um ihn herum brennt alles, und er hält seine Tasse. Diese Ruhe würde ich gern lernen."
   },
-  "notes": "Reviewed for the photographing_robot branch using the existing source descriptions and annotations; this is not a fresh source-image or hardware validation. Select randomly after a confirmed photography event, without comparing the visitor posture to a depicted human. Sit on the floor; no chair, cup, props, smoke, or fire is reproduced.",
+  "notes": "The visitor's held forearms (a cup) and sitting summon this one. No fire, ever.",
   "curation_status": "approved",
   "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
   "image": {
     "rights": "reference_only",
     "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
-  },
-  "photo_pose": {
-    "status": "accepted",
-    "cue": "A dog sitting calmly amid chaos in a comic.",
-    "approximation": "Sit on the floor; no chair, cup, props, smoke, or fire is reproduced.",
-    "reason": "The calm seated attitude is a cultural reference, not a literal reconstruction of the comic.",
-    "reviewer": "Codex (scenario and mapping review)",
-    "reviewed_on": "2026-10-24",
-    "review_basis": "existing_annotations"
   }
 }

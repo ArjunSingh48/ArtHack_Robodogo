@@ -6,6 +6,9 @@ pose with its body, and asks: *"Is this us?"*
 
 It uses the **OpenAI Realtime API** (speech-to-speech) with `gpt-realtime-2.1` and the `marin` voice by default.
 
+> In the performance (`itu show`), short conversation windows use GPT-Live with push-to-talk instead —
+> see `docs/VOICE.md`. Talk mode below is the free-play version and uses the same primary voice (`OPENAI_VOICE`).
+
 ## Who the dog is
 
 The character is defined in two places:
@@ -32,21 +35,13 @@ The voice model **cannot move the robot**. It has four tools:
 No tool has a parameter that chooses a movement. The model decides *when* to look; the curated annotations decide
 *how* the body moves; the guard decides *whether* it may (operator arming, cooldown, battery, stop latch, approvals).
 
-Recall and selection are separate: `recall_memories` can list the five curated
-solo-dog memes as cultural references and reports their relationship/photo-pose
-eligibility. Recalling a meme does not make it eligible for human–dog pose matching.
-Ordinary `look_and_remember` observations use the approved relationship collection;
-an explicit photographing-robot event uses the random meme photo-pose branch.
-The voice tool cannot assert that event, and automatic photography detection is
-still pending. See [MEMES.md](MEMES.md).
-
 ## Setup, step by step
 
 1. **OpenAI key.** Get one at https://platform.openai.com/api-keys (billing must be enabled). In `.env`:
    ```
    OPENAI_API_KEY=sk-...
    OPENAI_REALTIME_MODEL=gpt-realtime-2.1
-   OPENAI_REALTIME_VOICE=marin
+   OPENAI_VOICE=marin
    ```
 2. **Install the talk extras** (microphone/speaker support):
    ```bash
@@ -66,9 +61,8 @@ still pending. See [MEMES.md](MEMES.md).
    itu talk --no-camera           # just talk
    itu talk --lang ru             # fallback language (the dog follows the visitor anyway)
    ```
-   Press Enter to start a conversation. Say hello. Ask about its story. Then sit down
-   and say "look at me" — it should select an eligible human–dog artwork. Holding a
-   cup does not trigger a meme or establish photography intent.
+   Press Enter to start a conversation. Say hello. Ask about its story. Then sit down with a cup in both
+   hands and say "look at me" — it should find *This Is Fine*.
 5. **With the real robot** (after `docs/HARDWARE_SETUP.md` and `docs/SAFETY_CHECKLIST.md`):
    ```bash
    itu talk --robot go2 --source unitree --i-have-physical-estop

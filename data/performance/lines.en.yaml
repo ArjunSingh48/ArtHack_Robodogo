@@ -1,0 +1,54 @@
+# Short, dynamic things the robot says during the interactive part of `itu show`.
+# Kept separate from the narration script: these are chosen at runtime from what the
+# camera pipeline actually observed. Several variants = the robot picks one.
+# Keep them SHORT. No continuous chatter: the code waits several seconds between hints.
+
+pose:
+  waiting: ["Take your time.", "There's no hurry."]
+  not_visible: ["I can't see you yet… could you come in front of me?"]
+  partly_visible: ["I can only see part of you. Maybe one small step back?"]
+  too_close: ["You are very close. Maybe one small step back?"]
+  move_left: ["A little to your left…"]
+  move_right: ["A little to your right…"]
+  sit: ["Maybe… sitting down?", "Could you try sitting?"]
+  stand: ["Maybe standing up?"]
+  tilt_head: ["Perhaps tilt your head?"]
+  hand_out: ["Maybe let one hand rest at your side… where the dog would be."]
+  hands_in_lap: ["Maybe let your hands rest in your lap."]
+  arms_holding: ["Maybe hold your arms as if something small were in them."]
+  got_it: ["Oh! I think we've got it."]
+  ready_prompt: ["Tell me when you are ready."]
+  manual: ["I can't see your pose very well today. That's all right. Tell me when you are ready."]
+
+consent:
+  ask: ["May I take a photograph of us? Only if you want to."]
+  explain: ["It would go to the exhibition's private chat. Not anywhere public."]
+  thanks: ["Thank you."]
+  declined: ["That's all right. We can keep it as a memory instead."]
+  capture: ["Hold still… just for a moment."]
+  failed: ["Oh. My eyes didn't work just now. That's all right."]
+
+compare:
+  # chosen from comparison results; never numbers, never about the person's body or looks
+  shared: ["Oh… I think that's it."]
+  differ: ["But wait. We are not exactly the same."]
+  okay: ["Maybe that's okay."]
+  understand: ["We are not exactly the same. But I think we understand each other."]
+
+delivery:
+  ask_send: ["Should I send our picture to the exhibition chat?"]
+  sent: ["I sent it."]
+  not_sent: ["I'll keep it here, just for now. Then I'll let it go."]
+  failed: ["It didn't go through. That's all right. It still happened."]
+  caption: |-
+    I found an old picture.
+    And then we made a new one.
+    I think I am beginning to understand.
+    — Your robot dog 🐾
+
+decline:
+  ok: ["That's all right. Maybe another time."]
+
+conversation:
+  opening: ["You can ask me something, if you like."]
+  closing: ["Let's look at the next pictures."]
