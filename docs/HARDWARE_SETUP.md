@@ -43,9 +43,13 @@ its normal/sport mode in the Unitree app.
 ```bash
 itu robot-test --sequence --i-have-physical-estop
 ```
-Runs stand → sit → stand → lie_down → stand → greet → stretch → stand, waiting for Enter before each
-step (`q` to quit, Ctrl+C = software stop). It prints a results table with real durations — use it
-to tune the settle times in `src/is_this_us/robot/base.py`. A single behavior:
+Runs stand → sit → stand → lie_down → stand → greet → stretch → stand → look_aside → peer, waiting for
+Enter before each step (`q` to quit, Ctrl+C = software stop). It prints a results table with real
+durations — use it to tune the settle times in `src/is_this_us/robot/base.py`.
+
+For `look_aside` and `peer`, note which way the body moved: the `Euler` sign conventions are unverified.
+`peer` should lower the nose; if it raises it, flip `PEER_PITCH` in `robot/base.py`. Only then approve
+them for the show in Telegram (`/approve look_aside`, `/approve peer`). A single behavior:
 `itu robot-test sit --i-have-physical-estop`.
 
 ## 5. Camera + matching only (robot stays still)

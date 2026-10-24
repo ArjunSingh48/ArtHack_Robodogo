@@ -1,0 +1,37 @@
+{
+  "id": "meme:buff-doge-vs-cheems",
+  "name": "Buff Doge vs. Cheems",
+  "subject": "TODO: who/what is depicted",
+  "year": "TODO",
+  "origin": "TODO: one factual sentence from a primary source",
+  "attribution": "TODO: photographer / artist / original poster",
+  "sources": [
+    {
+      "label": "Imgflip template (discovery only)",
+      "url": "https://imgflip.com/meme/247375501"
+    }
+  ],
+  "cultural_meaning": "TODO",
+  "human": {
+    "posture": "unknown",
+    "gestures": [],
+    "confidence": 0.3
+  },
+  "dog": {
+    "posture": "sitting",
+    "relation": "facing_viewer",
+    "interaction": "posing",
+    "gaze_at_human": false,
+    "reproducible": "no",
+    "robot_behavior": "stillness",
+    "confidence": 0.3
+  },
+  "image": {
+    "rights": "unknown",
+    "license_note": "Not cleared. Do not store or send this image."
+  },
+  "reflection": {},
+  "curation_status": "draft",
+  "discovered_via": "imgflip:247375501",
+  "notes": "DRAFT from Imgflip discovery. Listing on Imgflip is not permission to reproduce the image. Verify origin/attribution from primary sources, annotate, decide rights, then move to annotations/."
+}

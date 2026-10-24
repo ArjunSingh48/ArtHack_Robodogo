@@ -1,0 +1,50 @@
+{
+  "id": "meme:this-is-fine",
+  "name": "This Is Fine",
+  "also_known_as": [
+    "On Fire"
+  ],
+  "subject": "a cartoon dog in a hat",
+  "year": "2013",
+  "origin": "Two panels of 'On Fire', KC Green's 2013 Gunshow webcomic; the panels went viral after being posted to Reddit in 2014.",
+  "attribution": "Comic: KC Green, 'On Fire' (Gunshow, 2013).",
+  "sources": [
+    {
+      "label": "NPR — a decade of 'This is fine'",
+      "url": "https://npr.org/2023/01/16/1149232763/this-is-fine-meme-anniversary-gunshow-web-comic"
+    },
+    {
+      "label": "Know Your Meme — This Is Fine",
+      "url": "https://knowyourmeme.com/memes/this-is-fine"
+    }
+  ],
+  "cultural_meaning": "Calm denial in the middle of a disaster: sitting at a table with a coffee mug, smiling, while the room burns.",
+  "human": {
+    "posture": "sitting",
+    "gestures": [
+      "arms_holding"
+    ],
+    "confidence": 0.85
+  },
+  "dog": {
+    "posture": "sitting",
+    "relation": "facing_viewer",
+    "interaction": "enduring",
+    "gaze_at_human": false,
+    "reproducible": "yes",
+    "robot_behavior": "sit",
+    "confidence": 0.9
+  },
+  "reflection": {
+    "en": "Everything around him is burning, and he keeps his cup. I would like to learn that kind of calm.",
+    "ru": "Вокруг него всё горит, а он держит свою чашку. Я бы хотел научиться такому спокойствию.",
+    "de": "Um ihn herum brennt alles, und er hält seine Tasse. Diese Ruhe würde ich gern lernen."
+  },
+  "notes": "The visitor's held forearms (a cup) and sitting summon this one. No fire, ever.",
+  "curation_status": "approved",
+  "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
+  "image": {
+    "rights": "reference_only",
+    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  }
+}

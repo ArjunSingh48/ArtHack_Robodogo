@@ -12,7 +12,7 @@ import threading
 import time
 
 from ..domain import ExecutionResult, ExecutionStatus, RobotBehavior
-from .base import BodyState, RobotStatus, steps_for
+from .base import BodyState, RobotStatus, check_args, steps_for
 
 log = logging.getLogger(__name__)
 
@@ -45,11 +45,12 @@ class MockRobotAdapter:
         if not steps:
             return ExecutionResult(behavior=behavior, status=ExecutionStatus.SIMULATED,
                                    detail=f"already {self.body}; nothing to do")
-        for call, settle, new_body in steps:
+        for call, settle, new_body, args in steps:
             if self._stop.is_set() or should_stop():
                 return ExecutionResult(behavior=behavior, status=ExecutionStatus.STOPPED,
                                        detail=f"stopped before {call}", duration_s=time.monotonic() - start)
-            self.calls.append(call)
+            check_args(call, args)
+            self.calls.append(f"{call}{args}" if args else call)
             if call in self.fail_on:
                 return ExecutionResult(behavior=behavior, status=ExecutionStatus.FAILED,
                                        detail=f"simulated SDK error in {call} (code 3104)",
@@ -64,7 +65,7 @@ class MockRobotAdapter:
             self.body = new_body
             self.battery = max(0.0, self.battery - 0.05)
         return ExecutionResult(behavior=behavior, status=ExecutionStatus.SIMULATED,
-                               detail=" → ".join(c for c, _, _ in steps), duration_s=time.monotonic() - start)
+                               detail=" → ".join(st.call for st in steps), duration_s=time.monotonic() - start)
 
     def stop(self) -> None:
         self._stop.set()

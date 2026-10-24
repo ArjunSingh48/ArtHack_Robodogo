@@ -23,8 +23,8 @@ class FakeSport:
 
     def __getattr__(self, name):
         if name[0].isupper():
-            def call():
-                self.calls.append(name)
+            def call(*args):
+                self.calls.append(f"{name}{args}" if args else name)
                 return self.codes.get(name, 0)
             return call
         raise AttributeError(name)
@@ -119,10 +119,9 @@ def test_execute_uses_only_planned_calls_and_tracks_body(fake_sdk, monkeypatch):
     from is_this_us.robot import base
     from is_this_us.robot.unitree_go2 import UnitreeGo2Adapter
 
-    monkeypatch.setattr(base, "_TO_STANDING", {k: [(c, 0.01, b) for c, _, b in v] for k, v in base._TO_STANDING.items()})
     orig = base.steps_for
     monkeypatch.setattr("is_this_us.robot.unitree_go2.steps_for",
-                        lambda beh, body: [(c, 0.01, b) for c, _, b in orig(beh, body)])
+                        lambda beh, body: [st._replace(settle=0.01) for st in orig(beh, body)])
     sport, _ = fake_sdk
     a = UnitreeGo2Adapter()
     a.connect()
@@ -136,3 +135,22 @@ def test_execute_uses_only_planned_calls_and_tracks_body(fake_sdk, monkeypatch):
 
     a.stop()
     assert sport.calls[-1] == "StopMove"
+
+
+def test_euler_pose_is_bounded_and_resets(fake_sdk, monkeypatch):
+    from is_this_us.robot import base
+    from is_this_us.robot.unitree_go2 import UnitreeGo2Adapter
+
+    orig = base.steps_for
+    monkeypatch.setattr("is_this_us.robot.unitree_go2.steps_for",
+                        lambda beh, body: [st._replace(settle=0.01) for st in orig(beh, body)])
+    sport, _ = fake_sdk
+    a = UnitreeGo2Adapter()
+    a.connect()
+    a.body = BodyState.STANDING
+    assert a.execute(RobotBehavior.LOOK_ASIDE).status is ExecutionStatus.SUCCESS
+    assert sport.calls == ["BalanceStand", "Euler(0.0, 0.0, 0.25)", "Euler(0.0, 0.0, 0.0)"]
+    with pytest.raises(PermissionError):
+        a._call("Euler", (0.0, 0.0, 0.6))
+    with pytest.raises(PermissionError):
+        a._call("Sit", (1.0,))

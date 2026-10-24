@@ -1,0 +1,51 @@
+{
+  "id": "meme:doge",
+  "name": "Doge",
+  "also_known_as": [
+    "Kabosu",
+    "such wow"
+  ],
+  "subject": "Kabosu, a Shiba Inu",
+  "year": "2010",
+  "origin": "Photographed by her owner Atsuko Sato, sitting on a couch at home, for Sato's blog in 2010; it became a meme in late 2013.",
+  "attribution": "Photo: Atsuko Sato. Subject: Kabosu (died 2024).",
+  "sources": [
+    {
+      "label": "Wikipedia — Doge (meme)",
+      "url": "https://en.wikipedia.org/wiki/Doge_meme"
+    },
+    {
+      "label": "Know Your Meme — interview with Atsuko Sato",
+      "url": "https://knowyourmeme.com/editorials/interviews/chatting-with-atsuko-sato-the-owner-of-the-internets-favorite-shiba-inu-and-meme-doge"
+    }
+  ],
+  "cultural_meaning": "A sideways glance with raised eyebrows, captioned with broken, wondering phrases ('such wow') — mock astonishment, affectionate and absurd.",
+  "human": {
+    "posture": "standing",
+    "gestures": [
+      "turned_toward"
+    ],
+    "confidence": 0.6
+  },
+  "dog": {
+    "posture": "sitting",
+    "relation": "facing_viewer",
+    "interaction": "regarding",
+    "gaze_at_human": true,
+    "reproducible": "approximate",
+    "robot_behavior": "sit",
+    "confidence": 0.8
+  },
+  "reflection": {
+    "en": "Such a long sideways look. I think this dog understands something I don't.",
+    "ru": "Такой долгий взгляд искоса. Кажется, эта собака понимает что-то, чего не понимаю я.",
+    "de": "So ein langer Seitenblick. Ich glaube, dieser Hund versteht etwas, das ich nicht verstehe."
+  },
+  "notes": "Pose from the KYM interview: sitting on a couch, glaring sideways with raised eyebrows. Eyebrows cannot be performed; the robot sits.",
+  "curation_status": "approved",
+  "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
+  "image": {
+    "rights": "reference_only",
+    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  }
+}

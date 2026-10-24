@@ -48,8 +48,11 @@ def test_curated_archive_is_safe(repo):
 @pytest.mark.parametrize("behavior", list(RobotBehavior))
 @pytest.mark.parametrize("body", list(BodyState))
 def test_steps_only_use_approved_sdk_calls(behavior, body):
-    for call, settle, _ in steps_for(behavior, body):
-        assert call in ALLOWED_SDK_CALLS and settle > 0
+    from is_this_us.robot.base import check_args
+
+    for st in steps_for(behavior, body):
+        assert st.call in ALLOWED_SDK_CALLS and st.settle > 0
+        check_args(st.call, st.args)  # raises if out of envelope
 
 
 def test_step_sequences_respect_body_state():

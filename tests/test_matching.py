@@ -70,7 +70,7 @@ def test_seeded_bounded_randomness_is_reproducible(repo):
 def test_unknown_low_score_is_no_match(mock_repo):
     strict = WeightedRelationshipMatcher(MatchSettings(min_score=0.99))
     r = strict.match(obs(HumanPosture.SITTING), mock_repo.all())
-    assert not r.found and "no painting" in r.reason
+    assert not r.found and "relates closely" in r.reason
 
 
 def test_nobody_is_no_match(repo):

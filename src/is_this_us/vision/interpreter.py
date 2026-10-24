@@ -169,7 +169,9 @@ class GeometricSceneInterpreter:
             hip_mid = (xy[L_HIP] + xy[R_HIP]) / 2
             arm_vs_torso = _angle(xy[w_i], xy[s_i], xy[s_i] + (hip_mid - (xy[L_SHOULDER] + xy[R_SHOULDER]) / 2))
             away_from_body = _ramp(arm_vs_torso, 25, 50)
-            ext = max(ext, straight * reach * away_from_body)
+            # ...and against gravity: arms hanging down while leaning are not "extended"
+            away_from_vertical = _ramp(_from_vertical(xy[w_i] - xy[s_i]), 25, 50)
+            ext = max(ext, straight * reach * min(away_from_body, away_from_vertical))
         if ext > 0:
             g[HumanGesture.EXTENDING_ARM] = round(ext, 2)
 

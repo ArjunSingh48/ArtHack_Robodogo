@@ -1,0 +1,50 @@
+{
+  "id": "meme:cheems",
+  "name": "Cheems",
+  "also_known_as": [
+    "Balltze",
+    "Ball Ball",
+    "cheemsburbger"
+  ],
+  "subject": "Balltze, a Shiba Inu from Hong Kong",
+  "year": "2017 (photo), 2019 (meme)",
+  "origin": "A 2017 photo by his owner; first used as 'Cheems' on r/dogelore on 8 June 2019.",
+  "attribution": "Photo: Balltze's owner, Hong Kong. Subject: Balltze (died 2023).",
+  "sources": [
+    {
+      "label": "Wikipedia — Cheems",
+      "url": "https://en.wikipedia.org/wiki/Cheems"
+    },
+    {
+      "label": "Know Your Meme — Cheems",
+      "url": "https://knowyourmeme.com/memes/cheems"
+    }
+  ],
+  "cultural_meaning": "A round, smiling, slightly unsure dog who mispronounces words ('cheemsburbger'); later the soft counterpart to Swole Doge — gentleness and vulnerability as comedy.",
+  "human": {
+    "posture": "sitting",
+    "gestures": [],
+    "confidence": 0.7
+  },
+  "dog": {
+    "posture": "sitting",
+    "relation": "facing_viewer",
+    "interaction": "posing",
+    "gaze_at_human": false,
+    "reproducible": "yes",
+    "robot_behavior": "sit",
+    "confidence": 0.8
+  },
+  "reflection": {
+    "en": "He looks soft and a little unsure. I know that feeling.",
+    "ru": "Он выглядит мягким и немного неуверенным. Мне знакомо это чувство.",
+    "de": "Er wirkt weich und ein bisschen unsicher. Das Gefühl kenne ich."
+  },
+  "notes": "Pose annotated from the widely used template: sitting upright, head turned slightly away.",
+  "curation_status": "approved",
+  "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
+  "image": {
+    "rights": "reference_only",
+    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  }
+}

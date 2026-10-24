@@ -28,9 +28,10 @@ import numpy as np
 from .artworks.repository import ArtworkRepository
 from .dialogue.engine import DialogueEngine, Utterance
 from .domain import (
-    Artwork, ExecutionResult, ExecutionStatus, HumanObservation, MatchResult, MotionPlan,
+    ArchiveSource, Artwork, ExecutionResult, ExecutionStatus, HumanObservation, MatchResult, MotionPlan,
 )
-from .matching.matcher import WeightedRelationshipMatcher
+from .matching.matcher import MemeMatcher, SceneMatcher, WeightedRelationshipMatcher
+from .scenes import SceneLibrary
 from .motion.guard import MotionGuard
 from .motion.planner import SafeMotionPlanner
 from .notifier import Notifier
@@ -83,13 +84,18 @@ class InteractionOutcome:
     result: ExecutionResult
     utterance: Utterance
     speech: SpeechAudio | None
-    artwork: Artwork | None
+    artwork: Artwork | None  # the chosen scene: a painting (Artwork) or a Meme
     trace: list[State] = field(default_factory=list)
     delivery_status: str = "pending"
+    archive: str = "art"
+
+    @property
+    def scene(self):
+        return self.artwork
 
     def debug_lines(self) -> list[str]:
         o, lines = self.observation, []
-        lines.append(f"interaction   {self.interaction_id} ({self.origin})")
+        lines.append(f"interaction   {self.interaction_id} ({self.origin}, archive={self.archive})")
         lines.append(f"posture       {o.posture} (conf {o.posture_confidence:.2f}); people={o.people_detected}; "
                      f"landmarks {o.landmark_confidence:.2f}; proximity {o.proximity}")
         if o.gestures:
@@ -101,7 +107,7 @@ class InteractionOutcome:
             mark = "→" if self.match.chosen and c.artwork.id == self.match.chosen.artwork.id else " "
             lines.append(f"{mark} match {i + 1}    {s.total:.3f}  {c.artwork.id:12} post={s.posture:.2f} rel={s.relationship:.2f} "
                          f"gest={s.gesture:.2f} feas={s.feasibility:.2f} conf={s.confidence:.2f} nov={s.novelty:.0f}  "
-                         f"{c.artwork.title[:40]}")
+                         f"[{c.artwork.kind}] {c.artwork.title[:36]}")
         lines.append(f"match reason  {self.match.reason}")
         lines.append(f"motion plan   {self.plan.explanation} [{self.plan.fidelity}]")
         lines.append(f"execution     {self.result.status}: {self.result.detail}")
@@ -126,19 +132,22 @@ class StateMachine:
 
 
 class InteractionOrchestrator:
-    def __init__(self, *, repo: ArtworkRepository, estimator: PoseEstimator | None, storage: Storage,
+    def __init__(self, *, repo: ArtworkRepository | SceneLibrary, estimator: PoseEstimator | None, storage: Storage,
                  guard: MotionGuard, notifier: Notifier, synthesizer: SpeechSynthesizer | None = None,
                  interpreter: GeometricSceneInterpreter | None = None,
-                 matcher: WeightedRelationshipMatcher | None = None, planner: SafeMotionPlanner | None = None,
-                 player: LocalSpeakerPlayer | None = None, default_lang: str = "en", seed: int | None = None):
-        self.repo = repo
+                 matcher: WeightedRelationshipMatcher | None = None, meme_matcher: MemeMatcher | None = None,
+                 planner: SafeMotionPlanner | None = None, player: LocalSpeakerPlayer | None = None,
+                 default_lang: str = "en", default_archive: str = "both", seed: int | None = None):
+        # `repo` may be a plain painting repository (v0.2 API) or a SceneLibrary with memes.
+        self.repo = repo if isinstance(repo, SceneLibrary) else SceneLibrary(repo)
+        self.default_archive = ArchiveSource(default_archive)
         self.estimator = estimator
         self.storage = storage
         self.guard = guard
         self.notifier = notifier
         self.synth = synthesizer or NullSynthesizer()
         self.interpreter = interpreter or GeometricSceneInterpreter()
-        self.matcher = matcher or WeightedRelationshipMatcher()
+        self.matcher = SceneMatcher(self.repo, art=matcher, meme=meme_matcher)
         self.planner = planner or SafeMotionPlanner()
         self.player = player
         self.default_lang = default_lang
@@ -155,7 +164,11 @@ class InteractionOrchestrator:
         return self.interpreter.interpret(people, source=source)
 
     # ------------------------------------------------------------------ entry points
-    async def observe_installation(self, chat_id: int, source: FrameSource) -> InteractionOutcome:
+    def archive_for(self, chat_id: int, archive: str | None = None) -> ArchiveSource:
+        return ArchiveSource(archive or self.storage.visitor_archive(chat_id, self.default_archive.value))
+
+    async def observe_installation(self, chat_id: int, source: FrameSource,
+                                   archive: str | None = None) -> InteractionOutcome:
         if self.installation_lock.locked():
             raise BusyError()
         async with self.installation_lock:
@@ -170,21 +183,23 @@ class InteractionOrchestrator:
                 sm.go(State.INTERPRETING)
                 obs = await self.perceive(frame.image, frame.source)
                 del frame  # frames are never retained
-            return await self._respond(sm, chat_id, obs, origin="installation")
+            return await self._respond(sm, chat_id, obs, origin="installation",
+                                       archive=self.archive_for(chat_id, archive))
 
-    async def observe_photo(self, chat_id: int, image_bytes: bytes) -> InteractionOutcome:
+    async def observe_photo(self, chat_id: int, image_bytes: bytes, archive: str | None = None) -> InteractionOutcome:
         sm = StateMachine()
         sm.go(State.INTERPRETING)
         rgb = await asyncio.to_thread(decode_image_bytes, image_bytes)
         obs = await self.perceive(rgb, "telegram_photo")
         del rgb, image_bytes  # visitor photos are processed in memory only
-        return await self._respond(sm, chat_id, obs, origin="photo")
+        return await self._respond(sm, chat_id, obs, origin="photo", archive=self.archive_for(chat_id, archive))
 
-    async def observe_given(self, chat_id: int, obs: HumanObservation, origin: str = "photo") -> InteractionOutcome:
+    async def observe_given(self, chat_id: int, obs: HumanObservation, origin: str = "photo",
+                            archive: str | None = None) -> InteractionOutcome:
         """Run the pipeline from an already-interpreted observation (tests, fixtures)."""
         sm = StateMachine()
         sm.go(State.INTERPRETING)
-        return await self._respond(sm, chat_id, obs, origin=origin)
+        return await self._respond(sm, chat_id, obs, origin=origin, archive=self.archive_for(chat_id, archive))
 
     async def another(self, chat_id: int, interaction_id: str) -> InteractionOutcome | None:
         row = self.storage.get_interaction(interaction_id, chat_id)
@@ -195,13 +210,16 @@ class InteractionOrchestrator:
         sm.go(State.MATCHING)
         if row.origin == "installation" and self.installation_lock.locked():
             raise BusyError()
+        # stay in the same memory; a surprise keeps surprising
         return await self._respond(sm, chat_id, obs, origin=row.origin, exclude=row.shown_ids,
-                                   interaction_id=interaction_id, is_retry=True, already_matching=True)
+                                   interaction_id=interaction_id, is_retry=True, already_matching=True,
+                                   archive=ArchiveSource(row.archive))
 
     # ------------------------------------------------------------------ core
     async def _respond(self, sm: StateMachine, chat_id: int, obs: HumanObservation, *, origin: str,
                        exclude: list[str] | None = None, interaction_id: str | None = None,
-                       is_retry: bool = False, already_matching: bool = False) -> InteractionOutcome:
+                       is_retry: bool = False, already_matching: bool = False,
+                       archive: ArchiveSource = ArchiveSource.ART) -> InteractionOutcome:
         lang = self.storage.visitor_lang(chat_id, self.default_lang)
         turn = self.storage.count_interactions(chat_id)
         interaction_id = interaction_id or self.storage.new_interaction_id()
@@ -209,7 +227,8 @@ class InteractionOrchestrator:
 
         if not already_matching:
             sm.go(State.MATCHING)
-        match = self.matcher.match(obs, self.repo.all(), exclude=exclude,
+        first_meme = not self.storage.has_seen_meme(chat_id)
+        match = self.matcher.match(obs, archive, exclude=exclude,
                                    recent=self.storage.recent_artworks(chat_id), rng=self.rng)
         artwork = match.chosen.artwork if match.chosen else None
 
@@ -228,7 +247,8 @@ class InteractionOrchestrator:
         dialogue = DialogueEngine(lang)
         utterance = dialogue.compose(seed=f"{chat_id}:{interaction_id}:{len(exclude)}", observation=obs,
                                      artwork=artwork, plan=plan if artwork else None,
-                                     result=result if artwork else None, turn=turn, is_retry=is_retry)
+                                     result=result if artwork else None, turn=turn, is_retry=is_retry,
+                                     first_meme=first_meme)
         speech = await asyncio.to_thread(self.synth.synthesize, utterance.spoken, lang)
         if speech and origin == "installation" and self.player and self.player.available:
             self.player.play(speech.mp3_path)
@@ -240,10 +260,11 @@ class InteractionOrchestrator:
             shown_ids=shown, behavior=plan.behavior.value, status=result.status.value,
             observation=obs.model_dump(mode="json", include={"posture", "posture_confidence", "gestures",
                                                               "proximity", "people_detected", "landmark_confidence"}),
+            archive=archive.value,
         )
         outcome = InteractionOutcome(
             interaction_id=interaction_id, origin=origin, observation=obs, match=match, plan=plan, result=result,
-            utterance=utterance, speech=speech, artwork=artwork, trace=sm.trace,
+            utterance=utterance, speech=speech, artwork=artwork, trace=sm.trace, archive=archive.value,
         )
         sm.go(State.DELIVERING)
         try:

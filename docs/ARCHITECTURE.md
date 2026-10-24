@@ -13,6 +13,9 @@ FrameSource ──► PoseEstimator ──► SceneInterpreter ──► Artwork
                                                      (templates)        (ElevenLabs, cached)
 ```
 
+Since v0.3 the matcher searches a `SceneLibrary` holding two memories — paintings and memes — through
+`SceneMatcher` (`art | meme | both | surprise`). See [MEMES.md](MEMES.md).
+
 `InteractionOrchestrator` (src/is_this_us/orchestrator.py) runs a small explicit state machine:
 
 ```
@@ -24,7 +27,8 @@ Illegal transitions raise. Every interaction records its trace for the debug log
 ## Separation of art and motion
 
 The only value that crosses from the artistic side into the robot is `MotionPlan.behavior`, a member of
-the closed `RobotBehavior` enum (`stillness, stand, sit, lie_down, stretch, greet`). It is derived from
+the closed `RobotBehavior` enum (`stillness, stand, sit, lie_down, stretch, greet, look_aside, peer`).
+`look_aside` and `peer` are small bounded `Euler` body poses, off until an operator approves them. It is derived from
 the **curated, human-reviewed** `DogAnnotation.robot_behavior` of a painting — never from text, never
 from a language model. Each behavior expands to a fixed sequence of official SportClient calls
 (`robot/base.py::steps_for`), and the Go2 adapter refuses anything outside `ALLOWED_SDK_CALLS`.
@@ -61,7 +65,8 @@ Selection uses bounded randomness among near-ties (`tie_margin`, softmax `temper
 | 3 Vision & matching | done — MediaPipe, geometric rules, 24 real curated artworks, weighted matcher |
 | 4 Personality & voice | done — EN/RU/DE templates, ElevenLabs with cache + fallback, OGG voice notes |
 | 5 Real Unitree | adapter written against official SDK, **hardware-unverified** |
-| 6 Exhibition | partly — QR pairing, memories, cleanup, operator controls; consented diptych not yet |
+| 6 Exhibition | QR pairing, memories, cleanup, operator controls, consented imitation diptych |
+| Meme memory (v0.3) | 5 curated memes (reference-only), MemeMatcher, /art /meme /surprise, Imgflip discovery |
 
 ## Biggest risks
 
@@ -79,3 +84,6 @@ Selection uses bounded randomness among near-ties (`tie_margin`, softmax `temper
 6. **Annotation subjectivity.** Interpreting relationships in paintings is a curatorial act. Keep
    annotations reviewed and versioned; low `confidence` lowers a painting's weight.
 7. **Voice costs/limits.** ElevenLabs quotas: lines are cached, but new phrasing costs credits.
+8. **Meme rights.** Meme images are copyrighted; the installation shows them only with a recorded licence
+   or as team-made recreations. A link preview of the source page is the default way visitors see a meme.
+9. **Euler pose signs.** `look_aside` / `peer` angle signs are unverified; check direction before approving.

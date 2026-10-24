@@ -57,13 +57,29 @@ robot:
   response_another:
     - "Maybe I remembered the wrong dog. Let me try again."
 
+meme:
+  opening_first:
+    - "I found another kind of painting. Humans call it a meme."
+  opening:
+    - "Wait… I've seen this one too. Not in a museum."
+    - "Oh… this one is from the internet. I studied it very seriously."
+  found: "{name}."
+  fallback_reflection:
+    - "I think this dog understands something I don't."
+  attempt:
+    - "I have been practicing this expression."
+    - "Let me try the face… with my whole body."
+  question: "Did I do the meme correctly?"
+
 bot:
   intro: "Hello.\n\nI have seen many dogs in paintings.\nI'm trying to understand how to be one.\n\nWould you like to make a memory with me?"
   start_button: "♡ Start"
   privacy_short: "A camera near me sees your body's posture. Images stay on this computer and are not kept. /privacy"
   begin: "Thank you.\n\nIf you are at the installation, scan the QR code next to me — or send me a photo of yourself sitting, standing, kneeling… and I'll look for us."
-  help: "<b>Is This Us?</b>\n\nA robot dog is learning how to be a dog from old paintings.\nYou make a gesture. A painting becomes a memory. The robot tries to answer with its body.\n\n/pair — join the installation (or scan the QR code)\n/observe — ask the robot to look at you\nSend a photo — try it without the robot\n/memory — paintings you kept\n/privacy — what happens to your data\n/forget — delete everything about you\n/stop — stop the current moment"
-  privacy: "<b>Privacy</b>\n\n• The camera is used only to estimate body posture (joint positions). No face recognition, no identification.\n• Camera frames and photos you send are processed in memory on this computer and are not stored.\n• Only the robot's short sentence is sent to the voice service (ElevenLabs). Never images or body data.\n• Saved memories contain only the painting and the time. Sessions expire automatically.\n• /forget deletes all your data immediately."
+  help: "<b>Is This Us?</b>\n\nA robot dog is learning how to be a dog from old paintings.\nYou make a gesture. A painting becomes a memory. The robot tries to answer with its body.\n\n/pair — join the installation (or scan the QR code)\n/observe — ask the robot to look at you\nSend a photo — try it without the robot\n/art · /meme · /surprise — which memory to search
+/memory — scenes you kept\n/privacy — what happens to your data\n/forget — delete everything about you\n/stop — stop the current moment"
+  privacy: "<b>Privacy</b>\n\n• The camera is used only to estimate body posture (joint positions). No face recognition, no identification.\n• Camera frames and photos you send are processed in memory on this computer and are not stored.\n• Only the robot's short sentence is sent to the voice service (ElevenLabs). Never images or body data.\n• Saved memories contain only the painting and the time. Sessions expire automatically.\n• A photo of the robot's imitation is taken only after you agree, is sent only to you, and is not stored.
+• /forget deletes all your data immediately."
   pair_ok: "We are connected now. When you're ready, stand, sit or kneel near me and press /observe."
   pair_invalid: "This code has expired… Please scan the QR code at the installation again."
   pair_needed: "Please scan the QR code at the installation first. Or send me a photo — that works anywhere."
@@ -83,3 +99,15 @@ bot:
   expired: "This moment has passed… make a new one with /observe or a photo."
   simulated_note: "(simulated robot: {behavior})"
   operator_only: "This command is for the installation operator."
+  archive_art: "Paintings, then. I'll remember slowly."
+  archive_meme: "Memes, then. Humans made these very fast. I'm still learning them."
+  archive_both: "Paintings and memes. I'll look in both memories."
+  archive_surprise: "I won't tell you which memory I'll choose."
+  button_photo: "📷 Photograph the imitation"
+  consent_ask: "May I take one photo of the robot trying? If you stand nearby you may be in it.\nIt is sent only to you and is not stored."
+  consent_yes: "Yes, one photo"
+  consent_no: "No, thank you"
+  consent_declined: "Of course. Only the memory stays."
+  photo_unavailable: "There is no camera watching me here, so I can't take that picture."
+  reference_only: "image not reproduced — see source"
+  meme_reference: "Reference"

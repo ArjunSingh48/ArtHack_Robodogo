@@ -91,7 +91,10 @@ class DialogueEngine:
 
     def compose(self, *, seed: str, observation: HumanObservation, artwork: Artwork | None,
                 plan: MotionPlan | None = None, result: ExecutionResult | None = None,
-                turn: int = 0, is_retry: bool = False) -> Utterance:
+                turn: int = 0, is_retry: bool = False, first_meme: bool = False) -> Utterance:
+        if artwork is not None and getattr(artwork, "kind", "art") == "meme":
+            return self._compose_meme(seed=seed, observation=observation, meme=artwork, plan=plan,
+                                      result=result, is_retry=is_retry, first_meme=first_meme)
         if artwork is None:
             key = "nobody" if observation.people_detected == 0 else "no_match"
             line = _pick(self.r(key), f"{seed}:{key}")
@@ -121,6 +124,33 @@ class DialogueEngine:
         question = self.r("question")
         spoken = self.join_spoken([lines[0], lines[1], lines[-1] if len(lines) > 2 else "", question])
         return Utterance(lines=lines + [question], spoken=spoken, outcome_key=outcome)
+
+    def m(self, key: str):
+        return self.texts.get("meme", key)
+
+    def _compose_meme(self, *, seed, observation, meme, plan, result, is_retry, first_meme) -> Utterance:
+        """Memes get exactly the same sincerity as paintings — only the vocabulary changes."""
+        if is_retry:
+            opening = _pick(self.r("response_another"), f"{seed}:retry")
+        elif first_meme:
+            opening = _pick(self.m("opening_first"), f"{seed}:mfirst")
+        else:
+            opening = _pick(self.m("opening"), f"{seed}:mopen")
+        reflection = meme.reflection_for(self.texts.lang) or _pick(self.m("fallback_reflection"), f"{seed}:mref")
+        found = f"{self.m('found').format(name=meme.name)} {reflection}"
+        if observation.posture_confidence < 0.45:
+            found = f"{_pick(self.r('hesitant_prefix'), f'{seed}:hes')} {found[0].lower()}{found[1:]}"
+        lines = [opening, found]
+        outcome = ""
+        if plan is not None and result is not None:
+            outcome = self.outcome_key(plan, result)
+            if outcome in ("success", "partial"):
+                lines.append(_pick(self.m("attempt"), f"{seed}:mtry"))
+            lines.append(_pick(self.r("outcome")[outcome], f"{seed}:{outcome}"))
+        meme_q, question = self.m("question"), self.r("question")
+        lines += [meme_q, question]
+        spoken = self.join_spoken([opening, found, lines[-3] if len(lines) > 4 else "", meme_q, question])
+        return Utterance(lines=lines, spoken=spoken, outcome_key=outcome)
 
     @staticmethod
     def join_spoken(parts: list[str]) -> str:

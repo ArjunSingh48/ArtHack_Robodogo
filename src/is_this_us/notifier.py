@@ -27,7 +27,7 @@ class ConsoleNotifier:
         for line in outcome.utterance.lines[:-1]:
             print(f"    {line}")
         if outcome.artwork:
-            print(f"\n    [painting: {outcome.artwork.title}]")
+            print(f"\n    [{'meme' if outcome.artwork.kind == 'meme' else 'painting'}: {outcome.artwork.title}]")
             for cl in outcome.artwork.credit_line().splitlines():
                 print(f"    {cl}")
         print(f"\n    {outcome.utterance.lines[-1]} 🥺")

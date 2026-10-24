@@ -24,7 +24,7 @@ import threading
 import time
 
 from ..domain import ExecutionResult, ExecutionStatus, RobotBehavior
-from .base import ALLOWED_SDK_CALLS, BodyState, RobotStatus, steps_for
+from .base import ALLOWED_SDK_CALLS, BodyState, RobotStatus, check_args, steps_for
 
 log = logging.getLogger(__name__)
 
@@ -117,11 +117,12 @@ class UnitreeGo2Adapter:
         )
 
     # ------------------------------------------------------------------ motion
-    def _call(self, name: str) -> int:
+    def _call(self, name: str, args: tuple[float, ...] = ()) -> int:
         if name not in ALLOWED_SDK_CALLS:
             raise PermissionError(f"SDK call {name!r} is not in the approved vocabulary")
+        check_args(name, args)
         fn = getattr(self._sport, name)
-        code = fn()
+        code = fn(*args)
         return int(code) if code is not None else 0
 
     def execute(self, behavior: RobotBehavior, should_stop=lambda: False) -> ExecutionResult:
@@ -131,11 +132,11 @@ class UnitreeGo2Adapter:
         start = time.monotonic()
         steps = steps_for(behavior, self.body)
         done = []
-        for call, settle, new_body in steps:
+        for call, settle, new_body, args in steps:
             if self._stop.is_set() or should_stop():
                 return ExecutionResult(behavior=behavior, status=ExecutionStatus.STOPPED,
                                        detail=f"stopped before {call}", duration_s=time.monotonic() - start)
-            code = self._call(call)
+            code = self._call(call, args)
             if code != 0:
                 self.body = BodyState.UNKNOWN
                 return ExecutionResult(behavior=behavior, status=ExecutionStatus.FAILED,

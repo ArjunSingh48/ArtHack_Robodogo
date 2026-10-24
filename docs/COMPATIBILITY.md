@@ -13,6 +13,8 @@ Verified **in source code**, not on hardware:
 | Greeting | `Hello()` (1016) | yes |
 | Stretch | `Stretch()` (1017) | yes |
 | Software stop | `StopMove()` | yes |
+| Body orientation | `Euler(roll, pitch, yaw)` (radians) | yes — fixed small poses, ±0.3 rad cap, operator-approved |
+| Mode (read-only) | `MotionSwitcherClient.CheckMode()` | yes, in `robot-check`; `SelectMode` never called |
 | Walking | `Move(vx, vy, vyaw)` | **no** — no autonomous translation toward visitors |
 | Flips, jumps, pounce, dance, free gaits | `FrontFlip`, `FrontJump`, … | **never** |
 | Front camera | `go2.video.video_client.VideoClient.GetImageSample()` → JPEG bytes | yes (Mode C) |
@@ -36,6 +38,11 @@ EDU feature over Ethernet. The sport-state topic name has varied across models/f
 * **Cleveland Museum of Art**: `openaccess-api.clevelandart.org/api/artworks/` with `cc0=1`,
   `has_image=1`; per-record `share_license_status == "CC0"` is checked again on fetch.
 * **Rijksmuseum**: not yet integrated (optional stage).
+
+## Imgflip
+
+`GET https://api.imgflip.com/get_memes` — public, no key, returns ~100 currently popular templates
+(`id, name, url, width, height, box_count`). Used for discovery only; it grants no reproduction rights.
 
 ## Python packages (PyPI, 2026-10-24)
 

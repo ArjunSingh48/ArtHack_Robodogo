@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import StrEnum
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, HttpUrl
 
@@ -78,6 +79,7 @@ class SpatialRelation(StrEnum):
     IN_FRONT = "in_front"
     BEHIND = "behind"
     APART = "apart"
+    FACING_VIEWER = "facing_viewer"  # memes: the visitor stands where the camera stood
 
 
 class Interaction(StrEnum):
@@ -90,6 +92,11 @@ class Interaction(StrEnum):
     ACCOMPANYING = "accompanying"
     OFFERING = "offering"
     GREETING = "greeting"
+    # internet-culture relationships (equally sincere)
+    REGARDING = "regarding"  # a sideways, knowing look at the viewer
+    POSING = "posing"  # presenting itself to the camera
+    ENDURING = "enduring"  # calm while everything goes wrong
+    PEERING = "peering"  # nose first, curious, very close
 
 
 class Reproducibility(StrEnum):
@@ -107,6 +114,8 @@ class RobotBehavior(StrEnum):
     LIE_DOWN = "lie_down"
     STRETCH = "stretch"
     GREET = "greet"
+    LOOK_ASIDE = "look_aside"  # small body yaw while standing (SportClient.Euler), operator-approved
+    PEER = "peer"  # small nose-down body pitch while standing (SportClient.Euler), operator-approved
 
 
 class Rights(BaseModel):
@@ -132,6 +141,7 @@ class HumanAnnotation(BaseModel):
 
 
 class Artwork(BaseModel):
+    kind: Literal["art"] = "art"
     id: str  # "<museum>:<object id>"
     museum: str
     museum_object_id: str
@@ -163,9 +173,23 @@ class ScoreBreakdown(BaseModel):
     total: float
 
 
+class ArchiveSource(StrEnum):
+    ART = "art"
+    MEME = "meme"
+    BOTH = "both"
+    SURPRISE = "surprise"
+
+
 class MatchCandidate(BaseModel):
-    artwork: Artwork
+    """A scored scene. `scene` is an Artwork or a Meme — both expose
+    `id`, `kind`, `title`, `human: HumanAnnotation`, `dog: DogAnnotation`."""
+
+    scene: Any
     scores: ScoreBreakdown
+
+    @property
+    def artwork(self):  # backwards-compatible name
+        return self.scene
 
 
 class MatchResult(BaseModel):

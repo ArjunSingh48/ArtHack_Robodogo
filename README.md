@@ -2,177 +2,152 @@
 
 [![tests](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
-*An interactive installation in which a Unitree robot dog learns how to be a dog from historical
-paintings of humans and dogs. Python · MediaPipe · aiogram 3 · ElevenLabs · Unitree SDK2.
-Developer docs are in English in [`docs/`](docs/); the setup guide below is in Russian.*
+An interactive installation in which a Unitree robot dog tries to learn how to be a dog from
+humanity's pictures of dogs. A visitor takes a posture; the robot remembers a scene with a similar
+**human–dog relationship**, tries to become that dog with its own body, sends the picture to the
+visitor's phone, and quietly asks: **"Is this us?"**
 
-Интерактивная инсталляция: робот-собака Unitree учится быть собакой по историческим картинам с людьми и собаками.
-Человек делает жест → робот вспоминает картину с похожими *отношениями* человека и собаки → пробует повторить позу
-собаки своим телом → присылает картину в Telegram и тихо спрашивает: **«Is this us?»**
+The robot has two cultural memories, treated with equal sincerity:
+
+1. **Fine art** — 24 museum paintings of people and dogs (The Met, Cleveland Museum of Art; public domain / CC0).
+2. **Internet culture** — famous dog memes: Doge, Cheems, This Is Fine, Side Eye Dog, Long Nose Borzoi.
 
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
-Документация для разработчиков (на английском): [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
-[`COMPATIBILITY`](docs/COMPATIBILITY.md), [`HARDWARE_SETUP`](docs/HARDWARE_SETUP.md),
-[`SAFETY_CHECKLIST`](docs/SAFETY_CHECKLIST.md), [`DEMO_SCRIPT`](docs/DEMO_SCRIPT.md),
-[`TROUBLESHOOTING`](docs/TROUBLESHOOTING.md).
+Python · MediaPipe · aiogram 3 · ElevenLabs · Unitree SDK2 · SQLite · Pillow
 
----
+## Documentation
 
-## Что уже работает (без робота)
+| | |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | pipeline, state machine, matching, risks |
+| [`docs/MEMES.md`](docs/MEMES.md) | meme memory: schema, rights policy, adding a meme, Imgflip discovery |
+| [`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md) | first session with a Go2, step by step |
+| [`docs/SAFETY_CHECKLIST.md`](docs/SAFETY_CHECKLIST.md) | **read before any motion near people** |
+| [`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md) | verified SDK / API facts |
+| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | how a visit unfolds in the gallery |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | common problems |
 
-- 24 настоящие картины (The Met — public domain, Cleveland Museum of Art — CC0), метаданные и права проверены через музейные API, каждая картина размечена вручную: поза человека, поза собаки, пространственное отношение, тип взаимодействия, выполнимость для робота, короткое стихотворение.
-- Распознавание позы через MediaPipe (фото, видео, вебкамера, камера Go2) + прозрачные геометрические правила: стоит / сидит / на корточках / на коленях / наклон / полулёжа / лежит, жесты «держит», «тянет руку», «смотрит вниз», «повернулся к роботу», расстояние.
-- Движок сопоставления **отношений**, а не визуального сходства, с настраиваемыми весами и ограниченной случайностью.
-- Безопасный планировщик движений → mock-робот (или Go2 после подтверждения модели).
-- Характер робота: детерминированные шаблоны на EN / RU / DE.
-- Голос ElevenLabs с кэшем, OGG-голосовыми для Telegram и тихим откатом в текст.
-- Telegram-бот: QR-сопряжение, `/observe`, фото-режим без робота, кнопки ♡ / ↻ / ✧, галерея воспоминаний, карточки-воспоминания, `/forget`, команды оператора.
-- 99 тестов (включая адаптер Go2 против имитации SDK), CI на GitHub Actions.
+## What works today (no robot required)
 
----
+- Pose recognition with MediaPipe + transparent geometric rules: standing, sitting, crouching, kneeling,
+  leaning forward, reclining, lying; gestures (holding, reaching, looking down, turned toward/away); distance.
+- Relationship matching across paintings, memes, both, or a surprise, on one comparable 0–1 scale.
+- A closed, operator-controlled movement vocabulary with a safety guard; a mock robot that simulates the
+  exact SDK call sequences; a Go2 adapter (hardware-unverified).
+- The robot's character in English, Russian and German; ElevenLabs voice with caching and text fallback.
+- A Telegram bot: QR pairing, `/observe`, photo mode without the robot, `/art` `/meme` `/surprise`,
+  ♡ / ↻ / ✧ buttons, memory gallery, memory cards, consented imitation photos, `/forget`, operator controls.
+- 129 tests, GitHub Actions CI.
 
-## 1. Установка
+## 1. Install
 
-Нужны Python 3.11–3.14 и FFmpeg (для голосовых сообщений).
+Python 3.11–3.14 and FFmpeg (for voice notes: `brew install ffmpeg` / `sudo apt install ffmpeg`).
 
 ```bash
-cd is-this-us
-python3 -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
+git clone <this repo> is-this-us && cd is-this-us
+python3 -m venv .venv && source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[vision,voice,dev]"
-
-cp .env.example .env               # потом заполни токены (см. ниже)
-itu setup                          # скачает модель позы, закэширует картины, создаст базу
-pytest                             # все тесты должны пройти
+cp .env.example .env
+itu setup          # downloads the pose model, checks artworks, creates the database
+pytest             # everything should pass
 ```
 
-FFmpeg: macOS — `brew install ffmpeg`, Ubuntu — `sudo apt install ffmpeg`.
-
-## 2. Первая симуляция в консоли (без Telegram, без робота)
+## 2. First simulation (no Telegram, no robot)
 
 ```bash
-# синтетический скелет (не реальный человек) — сидит
-itu simulate --posture sitting --another --card card.jpg
-
-# на коленях и тянет руку, по-русски
-itu simulate --posture kneeling --gesture extending --lang ru
-
-# твоё фото (режим A) или один кадр с вебкамеры (режим B)
-itu simulate --image me_sitting.jpg
-itu simulate --webcam
-
-# живое окно отладки: точки скелета, поза, жесты; ПРОБЕЛ — взаимодействие, Q — выход
-itu webcam
+itu simulate --posture sitting --another --card card.jpg          # SYNTHETIC skeleton, paintings + memes
+itu simulate --posture sitting --gesture holding --archive meme   # → This Is Fine
+itu simulate --posture kneeling --gesture extending --lang ru     # Russian
+itu simulate --image me.jpg                                       # your own photo (Mode A)
+itu simulate --webcam                                             # one webcam frame (Mode B)
+itu webcam                                                        # live debug window (SPACE / Q)
 ```
 
-В выводе видно всё, что требует отладка: распознанная поза и уверенность, уверенность ориентиров,
-топ-3 картин с разбивкой баллов, выбранное поведение робота, статус выполнения, диалог, статус доставки
-и путь по состояниям.
+The debug output shows detected posture and confidence, landmark confidence, the top three scenes with
+score breakdowns, the chosen robot behavior, execution status, dialogue, delivery status and state trace.
 
-## 3. Создание Telegram-бота через BotFather
+## 3. Create the Telegram bot (BotFather)
 
-1. В Telegram открой **@BotFather** → `/newbot`.
-2. Имя: `Is This Us? — A Dog's Memory`. Username: например `IsThisUsDogBot` (должен заканчиваться на `bot`).
-3. BotFather пришлёт токен вида `123456:ABC...` → вставь в `.env`:
-   ```
-   TELEGRAM_BOT_TOKEN=123456:ABC...
-   TELEGRAM_BOT_USERNAME=IsThisUsDogBot
-   ```
-4. Узнай свой числовой Telegram ID (например, у **@userinfobot**) и впиши как оператора:
-   ```
-   TELEGRAM_OPERATOR_IDS=123456789
-   ```
-   Можно несколько через запятую. Только эти аккаунты могут `/arm`, `/disarm`, `/qr`, `/status`, `/open`, `/close`.
-5. По желанию в BotFather: `/setdescription`, `/setuserpic` (например, фрагмент одной из картин), `/setabouttext`.
-   Список команд бот выставит сам при запуске.
-6. Запуск:
-   ```bash
-   itu bot
-   ```
-7. С телефона: открой бота → *Start*. Отправь своё фото (сидя, стоя, на коленях…) — придёт картина,
-   симулированная поза робота, кнопки ♡ / ↻ / ✧. *Keep* сохраняет карточку в `/memory`.
-8. Режим инсталляции: оператор пишет боту `/qr` → QR-код (deep link `?start=pair_…`, живёт
-   `PAIRING_TOKEN_TTL_MINUTES`). Посетитель сканирует → сопряжён → `/observe` снимает кадр с
-   `CAMERA_SOURCE` и запускает весь цикл. QR можно также сделать командой `itu qr --out qr.png`.
+1. In Telegram, open **@BotFather** → `/newbot`. Name: `Is This Us? — A Dog's Memory`; username e.g. `IsThisUsDogBot`.
+2. Put the token in `.env`: `TELEGRAM_BOT_TOKEN=…` and `TELEGRAM_BOT_USERNAME=IsThisUsDogBot`.
+3. Get your numeric Telegram ID (e.g. from **@userinfobot**) → `TELEGRAM_OPERATOR_IDS=123456789` (comma-separated).
+4. Run `itu bot`. On your phone: open the bot → *Start* → send a photo of yourself sitting, standing, kneeling…
+5. At the installation, an operator sends `/qr`; visitors scan it to pair, then use `/observe`.
 
-Токен никогда не коммить: `.env` уже в `.gitignore`.
+**Visitor commands:** `/start` `/help` `/pair` `/observe` `/art` `/meme` `/surprise` `/memory` `/privacy` `/forget` `/stop`
+**Operator commands:** `/arm` `/disarm` `/status` `/qr` `/open` `/close` `/approve <behavior>` `/revoke <behavior>` `/actions`
 
-## 4. Голос ElevenLabs (по желанию)
+Never commit `.env` (already in `.gitignore`).
+
+## 4. Voice (optional)
 
 ```
-ELEVENLABS_API_KEY=...
-ELEVENLABS_VOICE_ID=...            # выбери мягкий, тихий голос в Voice Library
+ELEVENLABS_API_KEY=…
+ELEVENLABS_VOICE_ID=…              # choose a soft, quiet voice
 ELEVENLABS_MODEL_ID=eleven_multilingual_v2
-LOCAL_AUDIO_PLAYBACK=true          # проигрывать на динамике ноутбука / Bluetooth-колонке
+LOCAL_AUDIO_PLAYBACK=true          # play on the laptop / a Bluetooth speaker
 ```
 
-В ElevenLabs уходит **только текст реплики** — никаких изображений и данных о позе. Аудио кэшируется
-в `data/runtime/audio_cache`. Без ключа или при ошибке API всё продолжает работать текстом.
+Only the sentence to be spoken is sent to ElevenLabs — never images or body data. Without a key, or when
+the API fails, everything continues as text.
 
-## 5. Настоящий робот
-
-Пошагово (на английском, с командами) — [`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md), и обязательно
-[`docs/SAFETY_CHECKLIST.md`](docs/SAFETY_CHECKLIST.md). Коротко:
+## 5. The real robot
 
 ```bash
-pip install -e ../unitree_sdk2_python                       # официальный SDK (один раз)
-itu robot-check --save-frame test_frame.jpg                 # только чтение, без движения
-itu robot-test --sequence --i-have-physical-estop           # каждое движение по Enter
-itu live --source unitree --no-motion                       # камера + картины, робот стоит
-itu live --source unitree --i-have-physical-estop --lang ru # всё целиком, в терминале
+pip install -e ../unitree_sdk2_python                          # official SDK, once (see HARDWARE_SETUP)
+itu robot-check --save-frame test_frame.jpg                    # read-only, no motion
+itu robot-test --sequence --i-have-physical-estop              # each movement on Enter
+itu live --source unitree --no-motion                          # camera + matching, robot still
+itu live --source unitree --i-have-physical-estop --archive both
 ```
 
-Адаптер Go2 написан по исходникам официального SDK: только Sit, RiseSit, StandUp, StandDown,
-BalanceStand, Hello, Stretch, StopMove — никакой ходьбы и трюков. Пока он не проверен на твоём роботе,
-он помечен **HARDWARE-UNVERIFIED**. Python SDK обычно работает с **Go2 EDU** по Ethernet.
+The Go2 adapter uses only official high-level calls (StandUp, StandDown, BalanceStand, Sit, RiseSit, Hello,
+Stretch, StopMove, and small bounded `Euler` body poses) — no walking, no tricks. It is
+**HARDWARE-UNVERIFIED** until it has run on your unit; SDK access is expected on Go2 EDU.
 
-В Telegram-режиме робот двигается, только если одновременно: `APP_MODE=installation`, `ROBOT_MODEL=go2`,
-`ROBOT_MOTION_ENABLED=true` **и** оператор отправил `/arm`. Фото из Telegram никогда не двигают
-настоящего робота. `/stop`, `s` и Ctrl+C — программная остановка, **не** аварийная кнопка.
+The robot moves only when `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOTION_ENABLED=true` **and** an
+operator has sent `/arm`. Photos sent to the bot never move the real robot. `/stop`, `s` and Ctrl+C are
+software stops — **not** an emergency stop.
 
-## 6. Пополнение архива картин
+## 6. Curating
 
-```bash
-itu artworks search "dog portrait" --museum met     # кандидаты (только public domain / CC0)
-itu artworks draft met:436217                       # заготовка разметки
-# → допиши разметку в data/artworks/curation_notes.yaml
-itu artworks build                                  # подтянет метаданные из API и проверит права
-itu artworks validate
-itu artworks cache
-itu artworks list
-```
+Paintings: `itu artworks search|draft|build|validate|cache|list` — museum metadata is fetched from the APIs,
+never typed by hand. Memes: one JSON file per meme in `data/memes/annotations/`; `itu memes discover|validate|list`.
+See [`docs/MEMES.md`](docs/MEMES.md).
 
-Метаданные музеев не пишутся руками — только через `build`, чтобы не было выдуманных данных.
-
-## Структура
+## Repository layout
 
 ```
-is-this-us/
-├── data/artworks/        curation_notes.yaml (ручная разметка) · annotations.yaml (сгенерировано) · images/ (кэш)
-├── docs/                 архитектура, совместимость, железо, безопасность, сценарий, неполадки
-├── models/               модель MediaPipe (скачивается `itu setup`)
-├── src/is_this_us/
-│   ├── vision/           frame_sources · pose (MediaPipe) · interpreter (правила) · synthetic (тестовые скелеты)
-│   ├── artworks/         museum_clients (Met v1.1, Cleveland) · repository · curation
-│   ├── matching/         matcher — сопоставление отношений
-│   ├── motion/           planner (картина → разрешённое поведение) · guard (безопасность)
-│   ├── robot/            base (последовательности SDK) · mock · unitree_go2
-│   ├── dialogue/         engine + locales/en, ru, de
-│   ├── speech/           ElevenLabs, кэш, FFmpeg, локальный динамик
-│   ├── bot/              flows (логика без сети) · app (aiogram 3)
-│   ├── orchestrator.py   машина состояний
-│   ├── storage.py        SQLite: сопряжение, сессии, воспоминания, /forget
-│   ├── cards.py          карточки-воспоминания (Pillow)
-│   ├── hardware_cli.py   robot-check · robot-test · live
-│   └── cli.py            команда `itu`
-├── .github/workflows/    CI: тесты на Python 3.11–3.13
-└── tests/                99 тестов
+data/artworks/      curation_notes.yaml · annotations.yaml (generated) · images/ (public domain / CC0)
+data/memes/         annotations/*.json (one per meme) · drafts/ (never loaded) · recreations/ (authorised images only)
+docs/               architecture, memes, hardware, safety, compatibility, demo, troubleshooting
+src/is_this_us/
+  vision/           frame sources · MediaPipe pose · geometric interpreter · synthetic skeletons
+  artworks/         museum clients (Met v1.1, Cleveland) · repository · curation
+  memes/            schema · repository · curation (Imgflip discovery)
+  scenes.py         SceneLibrary: one interface over both memories
+  matching/         relationship matcher · MemeMatcher · SceneMatcher (art | meme | both | surprise)
+  motion/           planner (scene → approved behavior) · guard (safety)
+  robot/            step sequences · mock · Go2 adapter · shared DDS init
+  dialogue/         engine + locales (en, ru, de)
+  speech/           ElevenLabs, cache, FFmpeg, local speaker
+  bot/              flows (network-free logic) · app (aiogram 3)
+  orchestrator.py   state machine
+  storage.py        SQLite: pairing, sessions, memories, archive choice, /forget
+  cards.py          memory cards and diptychs
+  cli.py, hardware_cli.py
+tests/              129 tests
 ```
 
-## Приватность
+## Privacy
 
-Без распознавания лиц и идентификации. Кадры и фото обрабатываются в памяти и не сохраняются.
-В базе — только грубые метки (поза, id картины, поведение), они истекают через `SESSION_TTL_MINUTES`.
-Сохранённые воспоминания содержат только картину и время. `/forget` удаляет всё сразу.
-Один посетитель никогда не видит моменты другого.
+No face recognition or identification. Camera frames and visitor photos are processed in memory and not
+stored. The database keeps only coarse labels (posture, scene id, behavior), which expire after
+`SESSION_TTL_MINUTES`. Imitation photos are taken only after explicit consent, sent only to that visitor,
+and never written to disk. `/forget` deletes everything immediately. No visitor ever sees another's moments.
+
+## Licence
+
+Code: MIT. Paintings: public domain / CC0 (see `data/artworks/README.md`). Memes: **not included** — they are
+referenced and credited only, unless a licence or a team-made recreation is recorded (see `docs/MEMES.md`).

@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS visitors (
     chat_id INTEGER PRIMARY KEY,
     lang TEXT NOT NULL DEFAULT 'en',
     paired_until TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    archive TEXT
 );
 CREATE TABLE IF NOT EXISTS interactions (
     id TEXT PRIMARY KEY,
@@ -41,7 +42,8 @@ CREATE TABLE IF NOT EXISTS interactions (
     status TEXT,
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    observation_json TEXT NOT NULL DEFAULT '{}'
+    observation_json TEXT NOT NULL DEFAULT '{}',
+    archive TEXT NOT NULL DEFAULT 'art'
 );
 CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -78,6 +80,7 @@ class InteractionRow:
     created_at: str
     expires_at: str
     observation: dict
+    archive: str = "art"
 
     @property
     def expired(self) -> bool:
@@ -92,9 +95,19 @@ class Storage:
         self._db = sqlite3.connect(self.path, check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        self._migrate()
         self._lock = threading.Lock()
         self.pairing_ttl = timedelta(minutes=pairing_ttl_min)
         self.session_ttl = timedelta(minutes=session_ttl_min)
+
+    def _migrate(self) -> None:
+        """Add columns introduced after v0.2 to existing databases."""
+        for table, col, decl in (("visitors", "archive", "TEXT"),
+                                 ("interactions", "archive", "TEXT NOT NULL DEFAULT 'art'")):
+            cols = {r[1] for r in self._db.execute(f"PRAGMA table_info({table})")}
+            if col not in cols:
+                self._db.execute(f"ALTER TABLE {table} ADD COLUMN {col} {decl}")
+        self._db.commit()
 
     def _exec(self, sql: str, args: tuple = ()) -> sqlite3.Cursor:
         with self._lock:
@@ -136,18 +149,29 @@ class Storage:
         row = self._exec("SELECT lang FROM visitors WHERE chat_id=?", (chat_id,)).fetchone()
         return row["lang"] if row else default
 
+    def set_visitor_archive(self, chat_id: int, archive: str) -> None:
+        self.touch_visitor(chat_id, self.visitor_lang(chat_id))
+        self._exec("UPDATE visitors SET archive=? WHERE chat_id=?", (archive, chat_id))
+
+    def visitor_archive(self, chat_id: int, default: str = "both") -> str:
+        row = self._exec("SELECT archive FROM visitors WHERE chat_id=?", (chat_id,)).fetchone()
+        return (row["archive"] if row and row["archive"] else default)
+
     # ------------------------------------------------------------------ interactions
     def new_interaction_id(self) -> str:
         return secrets.token_hex(4)
 
     def save_interaction(self, *, interaction_id: str, chat_id: int, origin: str, posture: str,
                          posture_confidence: float, artwork_id: str | None, shown_ids: list[str],
-                         behavior: str | None, status: str | None, observation: dict) -> None:
+                         behavior: str | None, status: str | None, observation: dict,
+                         archive: str = "art") -> None:
         now = _now()
         self._exec(
-            "INSERT OR REPLACE INTO interactions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO interactions (id, chat_id, origin, posture, posture_confidence, artwork_id, "
+            "shown_ids, behavior, status, created_at, expires_at, observation_json, archive) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (interaction_id, chat_id, origin, posture, posture_confidence, artwork_id, json.dumps(shown_ids),
-             behavior, status, _iso(now), _iso(now + self.session_ttl), json.dumps(observation)),
+             behavior, status, _iso(now), _iso(now + self.session_ttl), json.dumps(observation), archive),
         )
 
     def get_interaction(self, interaction_id: str, chat_id: int) -> InteractionRow | None:
@@ -160,8 +184,12 @@ class Storage:
             posture_confidence=row["posture_confidence"], artwork_id=row["artwork_id"],
             shown_ids=json.loads(row["shown_ids"]), behavior=row["behavior"], status=row["status"],
             created_at=row["created_at"], expires_at=row["expires_at"],
-            observation=json.loads(row["observation_json"]),
+            observation=json.loads(row["observation_json"]), archive=row["archive"] or "art",
         )
+
+    def has_seen_meme(self, chat_id: int) -> bool:
+        return self._exec("SELECT 1 FROM interactions WHERE chat_id=? AND artwork_id LIKE 'meme:%' LIMIT 1",
+                          (chat_id,)).fetchone() is not None
 
     def count_interactions(self, chat_id: int) -> int:
         return self._exec("SELECT COUNT(*) FROM interactions WHERE chat_id=?", (chat_id,)).fetchone()[0]

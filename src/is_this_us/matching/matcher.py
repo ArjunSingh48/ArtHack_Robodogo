@@ -22,7 +22,7 @@ from collections.abc import Callable, Iterable
 from pydantic import BaseModel
 
 from ..domain import (
-    Artwork, HumanGesture, HumanObservation, HumanPosture, Interaction, MatchCandidate,
+    HumanGesture, HumanObservation, HumanPosture, Interaction, MatchCandidate,
     MatchResult, Proximity, Reproducibility, ScoreBreakdown, SpatialRelation,
 )
 
@@ -122,20 +122,26 @@ def posture_similarity(observed: HumanPosture, painted: HumanPosture) -> float:
     return max(0.0, 1.0 - d / 2.0) * 0.85
 
 
-def relationship_score(obs: HumanObservation, art: Artwork) -> float:
+def relationship_score(obs: HumanObservation, art, posture_invites=None, gesture_invites=None,
+                       proximity_invites=None) -> float:
+    posture_invites = POSTURE_INVITES if posture_invites is None else posture_invites
+    gesture_invites = GESTURE_INVITES if gesture_invites is None else gesture_invites
+    proximity_invites = PROXIMITY_INVITES if proximity_invites is None else proximity_invites
     rel, inter = art.dog.relation, art.dog.interaction
-    invites: dict = dict(POSTURE_INVITES.get(obs.posture, {}))
+    invites: dict = dict(posture_invites.get(obs.posture, {}))
     for g, strength in obs.gestures.items():
-        for k, v in GESTURE_INVITES.get(g, {}).items():
+        for k, v in gesture_invites.get(g, {}).items():
             invites[k] = max(invites.get(k, 0.0), v * strength)
     rel_s = invites.get(rel, 0.25)
     inter_s = invites.get(inter, 0.25)
-    prox = PROXIMITY_INVITES.get(obs.proximity, {}).get(rel, 0.5) if obs.proximity is not Proximity.UNKNOWN else 0.5
+    prox = proximity_invites.get(obs.proximity, {}).get(rel, 0.5) if obs.proximity is not Proximity.UNKNOWN else 0.5
     return 0.4 * rel_s + 0.4 * inter_s + 0.2 * prox
 
 
-def gesture_score(obs: HumanObservation, art: Artwork) -> float:
-    relevant = {HumanGesture.ARMS_HOLDING, HumanGesture.EXTENDING_ARM, HumanGesture.LOOKING_DOWN}
+ART_GESTURES = frozenset({HumanGesture.ARMS_HOLDING, HumanGesture.EXTENDING_ARM, HumanGesture.LOOKING_DOWN})
+
+
+def gesture_score(obs: HumanObservation, art, relevant=ART_GESTURES) -> float:
     seen = {g: s for g, s in obs.gestures.items() if g in relevant and s >= 0.3}
     painted = set(art.human.gestures) & relevant
     if not seen and not painted:
@@ -143,23 +149,28 @@ def gesture_score(obs: HumanObservation, art: Artwork) -> float:
     if not seen or not painted:
         return 0.3
     hits = sum(seen.get(g, 0.0) for g in painted)
-    return min(1.0, hits / max(len(painted), len(seen)))
+    return max(0.15, min(1.0, hits / max(len(painted), len(seen))))  # a different gesture is weak, not zero
 
 
 class WeightedRelationshipMatcher:
-    """Implements the ArtworkMatcher role."""
+    """Implements the ArtworkMatcher role. Works on any scene with `id`, `human`, `dog`."""
+
+    posture_invites = POSTURE_INVITES
+    gesture_invites = GESTURE_INVITES
+    proximity_invites = PROXIMITY_INVITES
+    relevant_gestures = ART_GESTURES
 
     def __init__(self, settings: MatchSettings | None = None,
-                 visual_scorer: Callable[[HumanObservation, Artwork], float] | None = None):
+                 visual_scorer: Callable[[HumanObservation, object], float] | None = None):
         self.settings = settings or MatchSettings()
         self.visual_scorer = visual_scorer
 
-    def score(self, obs: HumanObservation, art: Artwork, recent: set[str]) -> ScoreBreakdown:
+    def score(self, obs: HumanObservation, art, recent: set[str]) -> ScoreBreakdown:
         w = self.settings.weights
         c = obs.posture_confidence
         posture = c * posture_similarity(obs.posture, art.human.posture) + (1 - c) * 0.45
-        relationship = relationship_score(obs, art)
-        gesture = gesture_score(obs, art)
+        relationship = relationship_score(obs, art, self.posture_invites, self.gesture_invites, self.proximity_invites)
+        gesture = gesture_score(obs, art, self.relevant_gestures)
         feasibility = FEASIBILITY[art.dog.reproducible]
         confidence = 0.6 * art.dog.confidence + 0.4 * art.human.confidence
         novelty = 0.0 if art.id in recent else 1.0
@@ -174,24 +185,117 @@ class WeightedRelationshipMatcher:
             total=round(total / norm, 4),
         )
 
-    def match(self, obs: HumanObservation, artworks: Iterable[Artwork], *, exclude: Iterable[str] = (),
-              recent: Iterable[str] = (), rng: random.Random | None = None) -> MatchResult:
-        rng = rng or random.Random()
+    def rank(self, obs: HumanObservation, scenes: Iterable, *, exclude: Iterable[str] = (),
+             recent: Iterable[str] = ()) -> list[MatchCandidate]:
         excluded, recent_set = set(exclude), set(recent)
-        ranked = sorted(
-            (MatchCandidate(artwork=a, scores=self.score(obs, a, recent_set))
-             for a in artworks if a.id not in excluded),
-            key=lambda c: c.scores.total, reverse=True,
-        )
-        if obs.posture is HumanPosture.UNKNOWN and obs.posture_confidence == 0 and not obs.gestures:
-            return MatchResult(chosen=None, ranked=ranked, reason="nobody clearly visible")
-        if not ranked or ranked[0].scores.total < self.settings.min_score:
-            return MatchResult(chosen=None, ranked=ranked, reason="no painting relates closely enough")
+        return sorted((MatchCandidate(scene=a, scores=self.score(obs, a, recent_set))
+                       for a in scenes if a.id not in excluded),
+                      key=lambda c: c.scores.total, reverse=True)
 
+    def choose(self, obs: HumanObservation, ranked: list[MatchCandidate], rng: random.Random,
+               temperature: float | None = None, reason_prefix: str = "") -> MatchResult:
+        if obs.posture is HumanPosture.UNKNOWN and obs.posture_confidence == 0 and not obs.gestures:
+            return MatchResult(chosen=None, ranked=ranked, reason=reason_prefix + "nobody clearly visible")
+        if not ranked or ranked[0].scores.total < self.settings.min_score:
+            return MatchResult(chosen=None, ranked=ranked, reason=reason_prefix + "no scene relates closely enough")
         best = ranked[0].scores.total
-        pool = [c for c in ranked[: self.settings.max_choices] if best - c.scores.total <= self.settings.tie_margin]
-        t = max(self.settings.temperature, 1e-6)
+        margin = self.settings.tie_margin if temperature is None else max(self.settings.tie_margin, 0.12)
+        pool = [c for c in ranked[: self.settings.max_choices] if best - c.scores.total <= margin]
+        t = max(temperature if temperature is not None else self.settings.temperature, 1e-6)
         weights = [math.exp((c.scores.total - best) / t) for c in pool]
         chosen = rng.choices(pool, weights=weights, k=1)[0]
-        reason = f"chose from {len(pool)} near-tie(s); best={best:.3f}"
-        return MatchResult(chosen=chosen, ranked=ranked, reason=reason)
+        return MatchResult(chosen=chosen, ranked=ranked,
+                           reason=f"{reason_prefix}chose from {len(pool)} near-tie(s); best={best:.3f}")
+
+    def match(self, obs: HumanObservation, artworks: Iterable, *, exclude: Iterable[str] = (),
+              recent: Iterable[str] = (), rng: random.Random | None = None) -> MatchResult:
+        ranked = self.rank(obs, artworks, exclude=exclude, recent=recent)
+        return self.choose(obs, ranked, rng or random.Random())
+
+
+# ---------------------------------------------------------------------------- memes
+# Memes are mostly dog-and-camera, not dog-and-human: the visitor stands where the
+# camera (the viewer) stood. So memes read the visitor's body as an invitation to a
+# *look*: sideways regard, posing, enduring calm, nose-first peering.
+
+def _merge(base: dict, extra: dict) -> dict:
+    out = {k: dict(v) for k, v in base.items()}
+    for k, v in extra.items():
+        out.setdefault(k, {}).update(v)
+    return out
+
+
+MEME_POSTURE_INVITES = _merge(POSTURE_INVITES, {
+    HumanPosture.STANDING: {SpatialRelation.FACING_VIEWER: 0.8, Interaction.REGARDING: 0.7, Interaction.POSING: 0.6},
+    HumanPosture.SITTING: {SpatialRelation.FACING_VIEWER: 0.8, Interaction.ENDURING: 0.9, Interaction.POSING: 0.8},
+    HumanPosture.CROUCHING: {SpatialRelation.FACING_VIEWER: 0.9, Interaction.POSING: 0.8, Interaction.PEERING: 0.7},
+    HumanPosture.KNEELING: {SpatialRelation.FACING_VIEWER: 0.9, Interaction.POSING: 0.7, Interaction.PEERING: 0.7},
+    HumanPosture.LEANING_FORWARD: {SpatialRelation.FACING_VIEWER: 1.0, Interaction.PEERING: 1.0, Interaction.REGARDING: 0.5},
+    HumanPosture.RECLINING: {SpatialRelation.FACING_VIEWER: 0.6, Interaction.ENDURING: 0.8},
+    HumanPosture.LYING: {SpatialRelation.FACING_VIEWER: 0.5, Interaction.ENDURING: 0.7},
+})
+MEME_GESTURE_INVITES = _merge(GESTURE_INVITES, {
+    HumanGesture.ARMS_HOLDING: {Interaction.ENDURING: 1.0},  # holding a cup while the room burns
+    HumanGesture.TURNED_AWAY: {Interaction.REGARDING: 1.0, SpatialRelation.FACING_VIEWER: 0.6},
+    HumanGesture.TURNED_TOWARD: {Interaction.POSING: 0.9, SpatialRelation.FACING_VIEWER: 1.0, Interaction.REGARDING: 0.6},
+    HumanGesture.LOOKING_DOWN: {Interaction.PEERING: 1.0},
+    HumanGesture.EXTENDING_ARM: {Interaction.PEERING: 0.6},
+})
+MEME_PROXIMITY_INVITES = _merge(PROXIMITY_INVITES, {
+    Proximity.CLOSE: {SpatialRelation.FACING_VIEWER: 1.0},
+    Proximity.MEDIUM: {SpatialRelation.FACING_VIEWER: 0.8},
+    Proximity.FAR: {SpatialRelation.FACING_VIEWER: 0.5},
+})
+MEME_GESTURES = ART_GESTURES | {HumanGesture.TURNED_AWAY}
+
+
+class MemeMatcher(WeightedRelationshipMatcher):
+    """Same interface, its own reading of internet relationships. Gesture matters more
+    (memes are about a look), exact posture a little less."""
+
+    posture_invites = MEME_POSTURE_INVITES
+    gesture_invites = MEME_GESTURE_INVITES
+    proximity_invites = MEME_PROXIMITY_INVITES
+    relevant_gestures = MEME_GESTURES
+
+    def __init__(self, settings: MatchSettings | None = None, **kw):
+        super().__init__(settings or MatchSettings(weights=MatchWeights(
+            posture=0.22, relationship=0.33, gesture=0.20, feasibility=0.10, confidence=0.10, novelty=0.05)), **kw)
+
+
+class SceneMatcher:
+    """Searches paintings, memes, both, or — for /surprise — one archive chosen at random.
+
+    Both archives are scored on the same 0..1 scale, so in BOTH mode a meme and a
+    painting compete with equal sincerity.
+    """
+
+    def __init__(self, library, art: WeightedRelationshipMatcher | None = None, meme: MemeMatcher | None = None):
+        self.library = library
+        self.art = art or WeightedRelationshipMatcher()
+        self.meme = meme or MemeMatcher()
+
+    def match(self, obs: HumanObservation, source, *, exclude: Iterable[str] = (), recent: Iterable[str] = (),
+              rng: random.Random | None = None) -> MatchResult:
+        from ..domain import ArchiveSource
+
+        rng = rng or random.Random()
+        source = ArchiveSource(source)
+        available = self.library.archives()
+        prefix, temperature = "", None
+        if source is ArchiveSource.SURPRISE:
+            source = rng.choice(available) if available else ArchiveSource.ART
+            prefix, temperature = f"surprise→{source}: ", 0.08
+        if source is ArchiveSource.MEME and ArchiveSource.MEME not in available:
+            source, prefix = ArchiveSource.ART, prefix + "no memes loaded→art: "
+        if source is ArchiveSource.ART:
+            ranked = self.art.rank(obs, self.library.all("art"), exclude=exclude, recent=recent)
+            return self.art.choose(obs, ranked, rng, temperature, prefix)
+        if source is ArchiveSource.MEME:
+            ranked = self.meme.rank(obs, self.library.all("meme"), exclude=exclude, recent=recent)
+            return self.meme.choose(obs, ranked, rng, temperature, prefix)
+        ranked = sorted(
+            self.art.rank(obs, self.library.all("art"), exclude=exclude, recent=recent)
+            + self.meme.rank(obs, self.library.all("meme"), exclude=exclude, recent=recent),
+            key=lambda c: c.scores.total, reverse=True)
+        return self.art.choose(obs, ranked, rng, temperature, prefix + "both: ")

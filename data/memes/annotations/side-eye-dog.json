@@ -1,0 +1,47 @@
+{
+  "id": "meme:side-eye-dog",
+  "name": "Side Eye Dog",
+  "also_known_as": [
+    "Side Eyeing Dog",
+    "sus dog"
+  ],
+  "subject": "an unnamed dog in a car",
+  "year": "2015",
+  "origin": "Posted to Reddit's r/aww in 2015 by /u/gooddboyy, suspecting a car ride was really a trip to the vet; widely used as the 'sus dog' from around 2021.",
+  "attribution": "Photo: Reddit user /u/gooddboyy (2015).",
+  "sources": [
+    {
+      "label": "Know Your Meme — the Side-Eyeing Dog explained",
+      "url": "https://trending.knowyourmeme.com/editorials/guides/who-is-this-viral-dog-and-why-is-he-so-suspicious-the-side-eyeing-dog-and-sus-dog-meme-explained"
+    }
+  ],
+  "cultural_meaning": "Narrowed, sideways suspicion — the look of someone who knows what you are not saying.",
+  "human": {
+    "posture": "standing",
+    "gestures": [
+      "turned_away"
+    ],
+    "confidence": 0.6
+  },
+  "dog": {
+    "posture": "sitting",
+    "relation": "facing_viewer",
+    "interaction": "regarding",
+    "gaze_at_human": true,
+    "reproducible": "approximate",
+    "robot_behavior": "look_aside",
+    "confidence": 0.5
+  },
+  "reflection": {
+    "en": "He looks at you as if he already knows where the car is going.",
+    "ru": "Он смотрит так, будто уже знает, куда едет машина.",
+    "de": "Er schaut, als wüsste er schon, wohin das Auto fährt."
+  },
+  "notes": "Annotated from the KYM description (narrowed eyes, one ear inside out); the body is barely visible. look_aside needs operator approval; otherwise the robot stands.",
+  "curation_status": "approved",
+  "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
+  "image": {
+    "rights": "reference_only",
+    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  }
+}

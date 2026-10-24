@@ -16,19 +16,31 @@ FALLBACK: dict[RobotBehavior, RobotBehavior] = {
     RobotBehavior.GREET: RobotBehavior.STAND,
     RobotBehavior.STRETCH: RobotBehavior.STAND,
     RobotBehavior.STAND: RobotBehavior.STILLNESS,
+    RobotBehavior.LOOK_ASIDE: RobotBehavior.STAND,
+    RobotBehavior.PEER: RobotBehavior.STAND,
     RobotBehavior.STILLNESS: RobotBehavior.STILLNESS,
 }
 
-DEFAULT_ALLOWED = frozenset(RobotBehavior)
+# Body-orientation poses are hardware-unverified: off until an operator approves them.
+REQUIRES_APPROVAL = frozenset({RobotBehavior.LOOK_ASIDE, RobotBehavior.PEER})
+DEFAULT_ALLOWED = frozenset(RobotBehavior) - REQUIRES_APPROVAL
 
 
 class SafeMotionPlanner:
     """Implements the MotionPlanner role."""
 
     def __init__(self, allowed: frozenset[RobotBehavior] = DEFAULT_ALLOWED):
-        self.allowed = frozenset(allowed) | {RobotBehavior.STILLNESS}
+        self.allowed = set(allowed) | {RobotBehavior.STILLNESS}
 
-    def plan(self, artwork: Artwork | None) -> MotionPlan:
+    def approve(self, behavior: RobotBehavior) -> None:
+        self.allowed.add(behavior)
+
+    def revoke(self, behavior: RobotBehavior) -> None:
+        if behavior is not RobotBehavior.STILLNESS:
+            self.allowed.discard(behavior)
+
+    def plan(self, artwork: "Artwork | object | None") -> MotionPlan:
+        """Accepts any scene (painting or meme) with a curated `dog` annotation."""
         if artwork is None:
             return MotionPlan(requested=RobotBehavior.STILLNESS, behavior=RobotBehavior.STILLNESS,
                               fidelity=Reproducibility.NO, explanation="no painting chosen; remain still")

@@ -17,3 +17,8 @@
 | Met `/v1/search` message | Retired 2026-10-01; this project uses `/v1.1/search`. |
 | `unitree_sdk2py` import error | Install from GitHub (HARDWARE_SETUP.md). Not needed for simulation. |
 | Painting images slow | `itu artworks cache` stores them locally; bot then sends local files. |
+| Meme never chosen | Visitor archive is `art` (`/meme` or `/both`), or `itu memes validate` reports a problem. |
+| Meme shown without picture | By design: reference-only memes are linked and credited, not reproduced (docs/MEMES.md). |
+| Robot stands instead of side-eye / peer | `look_aside` / `peer` not approved yet: test, then `/approve`. |
+| No 📷 button | `IMITATION_CAMERA_SOURCE` empty, or the moment came from a photo (robot not present). |
+| `itu memes discover` fails | Imgflip API unreachable or changed; add memes by hand (JSON). |

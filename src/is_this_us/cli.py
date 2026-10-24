@@ -42,8 +42,7 @@ def cmd_setup(args) -> None:
 
 # ---------------------------------------------------------------------- simulate
 def _build_sim(s, seed, *, use_estimator: bool):
-    from .artworks.repository import YamlArtworkRepository
-    from .bot.app import build_estimator
+    from .bot.app import build_estimator, build_library, build_planner
     from .motion.guard import MotionGuard
     from .notifier import ConsoleNotifier
     from .orchestrator import InteractionOrchestrator
@@ -57,10 +56,11 @@ def _build_sim(s, seed, *, use_estimator: bool):
     storage = Storage(":memory:")
     notifier = ConsoleNotifier()
     orch = InteractionOrchestrator(
-        repo=YamlArtworkRepository(s.artwork_data_dir),
+        repo=build_library(s),
         estimator=build_estimator(s) if use_estimator else None,
         storage=storage, guard=guard, notifier=notifier, synthesizer=make_synthesizer(s),
-        player=LocalSpeakerPlayer(s.local_audio_playback), default_lang=s.default_language, seed=seed,
+        player=LocalSpeakerPlayer(s.local_audio_playback), planner=build_planner(s),
+        default_lang=s.default_language, default_archive=s.default_archive, seed=seed,
     )
     return orch, storage, robot
 
@@ -70,6 +70,8 @@ def cmd_simulate(args) -> None:
     s = get_settings()
     if args.lang:
         s.default_language = args.lang
+    if args.archive:
+        s.default_archive = args.archive
     from .vision.frame_sources import ImageFileSource, WebcamSource
 
     use_est = bool(args.image or args.webcam)
@@ -102,12 +104,11 @@ def cmd_simulate(args) -> None:
 
             from .cards import render_memory_card
 
-            local = orch.repo.local_image(outcome.artwork)
-            if local:
-                data = render_memory_card(Image.open(local), outcome.artwork,
-                                          caption=outcome.artwork.poem, session_id=outcome.interaction_id)
-                Path(args.card).write_bytes(data)
-                print(f"\nmemory card → {args.card}")
+            local = orch.repo.local_image(outcome.artwork)  # None for reference-only memes
+            data = render_memory_card(Image.open(local) if local else None, outcome.artwork,
+                                      caption=outcome.artwork.poem, session_id=outcome.interaction_id)
+            Path(args.card).write_bytes(data)
+            print(f"\nmemory card → {args.card}")
 
     try:
         asyncio.run(run())
@@ -209,6 +210,26 @@ def cmd_artworks(args) -> None:
                   f"{a.dog.interaction:16} → {a.dog.robot_behavior:9} | {a.artist}: {a.title[:40]}")
 
 
+# ---------------------------------------------------------------------- memes
+def cmd_memes(args) -> None:
+    s = get_settings()
+    from .memes import curation
+    from .memes.repository import MemeRepository
+
+    if args.action == "discover":
+        print("Imgflip is used for DISCOVERY only — listing there is not permission to reproduce an image.")
+        for p in curation.discover(s.meme_data_dir):
+            print(f"  draft → {p}")
+        print("Drafts are never loaded. Verify, annotate, decide rights, then move to data/memes/annotations/.")
+    elif args.action == "validate":
+        problems = curation.validate(s.meme_data_dir)
+        print("OK" if not problems else "\n".join(problems))
+        sys.exit(1 if problems else 0)
+    elif args.action == "list":
+        for m in MemeRepository(s.meme_data_dir, include_drafts=args.drafts).all():
+            print(curation.describe(m))
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="itu", description="Is This Us? — installation tools")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -227,6 +248,7 @@ def main(argv: list[str] | None = None) -> None:
     sim.add_argument("--scale", type=float, default=1.0, help="synthetic skeleton scale (proximity)")
     sim.add_argument("--camera-index", type=int, default=0)
     sim.add_argument("--lang", choices=["en", "ru", "de"])
+    sim.add_argument("--archive", choices=["art", "meme", "both", "surprise"], help="which memory to search")
     sim.add_argument("--seed", type=int, default=None)
     sim.add_argument("--another", action="store_true", help="also simulate 'Try another painting'")
     sim.add_argument("--card", help="write a memory card JPEG to this path")
@@ -251,6 +273,11 @@ def main(argv: list[str] | None = None) -> None:
     art.add_argument("--limit", type=int, default=20)
     art.add_argument("--force", action="store_true")
     art.set_defaults(fn=cmd_artworks)
+
+    mm = sub.add_parser("memes", help="meme curation (Imgflip discovery, validate, list)")
+    mm.add_argument("action", choices=["discover", "validate", "list"])
+    mm.add_argument("--drafts", action="store_true", help="include drafts in list")
+    mm.set_defaults(fn=cmd_memes)
 
     from .hardware_cli import register
 

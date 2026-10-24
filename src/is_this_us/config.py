@@ -51,6 +51,15 @@ class Settings(BaseSettings):
     pose_model_path: Path = Path("./models/pose_landmarker_lite.task")
 
     artwork_data_dir: Path = Path("./data/artworks")
+    meme_data_dir: Path = Path("./data/memes")
+    # art | meme | both | surprise — what a visitor gets until they choose with /art /meme /surprise
+    default_archive: str = "both"
+    # A camera that can SEE the robot (not the robot's own camera), for consented imitation photos.
+    # Empty = feature off. Same syntax as CAMERA_SOURCE (webcam:1, image:<path>, ...).
+    imitation_camera_source: str = ""
+    # Comma-separated behaviors allowed at start-up. Empty = defaults (everything except
+    # look_aside and peer, which an operator must /approve after testing them on the robot).
+    motion_allowed_behaviors: str = ""
     database_path: Path = Path("./data/runtime/is_this_us.sqlite3")
     audio_cache_dir: Path = Path("./data/runtime/audio_cache")
     card_font_path: str = ""

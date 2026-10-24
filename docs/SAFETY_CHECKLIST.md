@@ -11,6 +11,8 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] Each behavior tested once with `itu robot-test <behavior> --i-have-physical-estop` with nobody inside the area.
 - [ ] Camera-notice sign visible at the entrance (posture only, no recording, no face recognition).
 - [ ] `.env`: `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOTION_ENABLED=true` only on show days.
+- [ ] `look_aside` and `peer` tested once each (direction noted) before any `/approve`. Leave them off if unsure.
+- [ ] If an imitation camera is used: it watches the robot area only; visitors are told photos happen only on request.
 
 ## During the show
 - [ ] Operator arms with `/arm` only when the area is clear and they are watching.
@@ -23,6 +25,6 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] `data/runtime/` is never copied off the machine; memories stay until visitors `/forget`.
 
 ## Built-in software guards (do not replace the above)
-Static hardware gates · operator arming · one motion at a time · cooldown · per-motion timeout →
+Static hardware gates · operator arming · operator approval of body poses · Euler angles capped at ±0.3 rad · one motion at a time · cooldown · per-motion timeout →
 software stop · battery / error / state-freshness checks · stop latch requiring re-arm · photo flow
 never moves the real robot · approved-call allowlist in the Go2 adapter.

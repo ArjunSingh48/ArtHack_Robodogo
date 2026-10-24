@@ -1,0 +1,49 @@
+{
+  "id": "meme:long-nose-borzoi",
+  "name": "Long Nose Borzoi",
+  "also_known_as": [
+    "Borzoi Long Nose Dog",
+    "why the long face"
+  ],
+  "subject": "a Borzoi (the most-used photos show Lapsha, @loopsnoot)",
+  "year": "2016 (Vines), 2020 (memes)",
+  "origin": "Viral Borzoi Vines in 2016; the long-nose image macro began on Instagram in October 2020, usually shot with a 0.5× wide-angle lens close to the snout.",
+  "attribution": "Photos: the @loopsnoot account (Lapsha) and many other Borzoi owners; format by Instagram meme pages.",
+  "sources": [
+    {
+      "label": "Know Your Meme — Borzoi Long Nose Dog",
+      "url": "https://knowyourmeme.com/memes/borzoi-long-nose-dog"
+    },
+    {
+      "label": "NBC News — TikTok users are loving borzois",
+      "url": "https://www.nbcnews.com/news/tiktok-borzoi-cellophane-meme-rcna65769"
+    }
+  ],
+  "cultural_meaning": "An impossibly long, gentle face pushed toward the camera — curiosity, elegance and absurdity at once.",
+  "human": {
+    "posture": "leaning_forward",
+    "gestures": [],
+    "confidence": 0.7
+  },
+  "dog": {
+    "posture": "standing",
+    "relation": "facing_viewer",
+    "interaction": "peering",
+    "gaze_at_human": true,
+    "reproducible": "approximate",
+    "robot_behavior": "peer",
+    "confidence": 0.7
+  },
+  "reflection": {
+    "en": "So much nose, coming so close. Maybe that is how you say hello.",
+    "ru": "Столько носа, и так близко. Может, так и говорят «привет».",
+    "de": "So viel Nase, so nah. Vielleicht sagt man so Hallo."
+  },
+  "notes": "The wide-angle closeness is the point; the robot only lowers its nose slightly (peer, operator-approved), it never moves toward the visitor. Summoned by the lean itself; 'looking down' is too weak to require.",
+  "curation_status": "approved",
+  "discovered_via": "manual (Imgflip lists only This Is Fine and Buff Doge vs. Cheems)",
+  "image": {
+    "rights": "reference_only",
+    "license_note": "Copyrighted image; not stored or sent. Linked and credited only."
+  }
+}

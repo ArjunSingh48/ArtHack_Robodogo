@@ -55,13 +55,29 @@ robot:
   response_another:
     - "Vielleicht habe ich mich an den falschen Hund erinnert. Ich versuche es nochmal."
 
+meme:
+  opening_first:
+    - "Ich habe eine andere Art von Gemälde gefunden. Menschen nennen es ein Meme."
+  opening:
+    - "Warte… das kenne ich auch. Nicht aus dem Museum."
+    - "Oh… das ist aus dem Internet. Ich habe es sehr ernsthaft studiert."
+  found: "{name}."
+  fallback_reflection:
+    - "Ich glaube, dieser Hund versteht etwas, das ich nicht verstehe."
+  attempt:
+    - "Ich habe diesen Ausdruck geübt."
+    - "Ich versuche das Gesicht… mit dem ganzen Körper."
+  question: "Habe ich das Meme richtig gemacht?"
+
 bot:
   intro: "Hallo.\n\nIch habe viele Hunde auf Gemälden gesehen.\nIch versuche zu verstehen, wie man einer ist.\n\nMöchtest du mit mir eine Erinnerung machen?"
   start_button: "♡ Beginnen"
   privacy_short: "Eine Kamera bei mir erkennt deine Körperhaltung. Bilder bleiben auf diesem Computer und werden nicht gespeichert. /privacy"
   begin: "Danke.\n\nWenn du bei der Installation bist, scanne den QR-Code neben mir — oder schick mir ein Foto, auf dem du sitzt, stehst oder kniest… und ich suche nach uns."
-  help: "<b>Sind das wir?</b>\n\nEin Roboterhund lernt aus alten Gemälden, wie man ein Hund ist.\n\n/pair — mit der Installation verbinden\n/observe — den Roboter dich ansehen lassen\nFoto senden — ohne Roboter ausprobieren\n/memory — gespeicherte Gemälde\n/privacy — Datenschutz\n/forget — alles über dich löschen\n/stop — anhalten"
-  privacy: "<b>Datenschutz</b>\n\n• Die Kamera schätzt nur die Körperhaltung. Keine Gesichtserkennung, keine Identifikation.\n• Kamerabilder und Fotos werden im Speicher verarbeitet und nicht gespeichert.\n• An den Sprachdienst (ElevenLabs) geht nur der kurze Satz des Roboters.\n• Erinnerungen enthalten nur das Gemälde und die Zeit. Sitzungen laufen automatisch ab.\n• /forget löscht sofort alle deine Daten."
+  help: "<b>Sind das wir?</b>\n\nEin Roboterhund lernt aus alten Gemälden, wie man ein Hund ist.\n\n/pair — mit der Installation verbinden\n/observe — den Roboter dich ansehen lassen\nFoto senden — ohne Roboter ausprobieren\n/art · /meme · /surprise — welche Erinnerung durchsucht wird
+/memory — gespeicherte Szenen\n/privacy — Datenschutz\n/forget — alles über dich löschen\n/stop — anhalten"
+  privacy: "<b>Datenschutz</b>\n\n• Die Kamera schätzt nur die Körperhaltung. Keine Gesichtserkennung, keine Identifikation.\n• Kamerabilder und Fotos werden im Speicher verarbeitet und nicht gespeichert.\n• An den Sprachdienst (ElevenLabs) geht nur der kurze Satz des Roboters.\n• Erinnerungen enthalten nur das Gemälde und die Zeit. Sitzungen laufen automatisch ab.\n• Ein Foto vom Versuch des Roboters entsteht nur mit deiner Zustimmung, geht nur an dich und wird nicht gespeichert.
+• /forget löscht sofort alle deine Daten."
   pair_ok: "Wir sind verbunden. Wenn du bereit bist, stell dich, setz dich oder knie dich zu mir und drücke /observe."
   pair_invalid: "Dieser Code ist abgelaufen… Bitte scanne den QR-Code noch einmal."
   pair_needed: "Bitte scanne zuerst den QR-Code bei der Installation. Oder schick mir ein Foto."
@@ -81,3 +97,15 @@ bot:
   expired: "Dieser Moment ist vorbei… mach einen neuen mit /observe oder einem Foto."
   simulated_note: "(simulierter Roboter: {behavior})"
   operator_only: "Dieser Befehl ist nur für die Betreuung der Installation."
+  archive_art: "Also Gemälde. Ich erinnere mich langsam."
+  archive_meme: "Also Memes. Menschen haben sie sehr schnell gemacht. Ich lerne noch."
+  archive_both: "Gemälde und Memes. Ich schaue in beiden Erinnerungen."
+  archive_surprise: "Ich sage dir nicht, welche Erinnerung ich wähle."
+  button_photo: "📷 Den Versuch fotografieren"
+  consent_ask: "Darf ich ein Foto vom Roboter machen, während er es versucht? Wenn du nah stehst, bist du vielleicht mit drauf.\nEs geht nur an dich und wird nicht gespeichert."
+  consent_yes: "Ja, ein Foto"
+  consent_no: "Nein, danke"
+  consent_declined: "Natürlich. Nur die Erinnerung bleibt."
+  photo_unavailable: "Hier beobachtet mich keine Kamera, deshalb kann ich kein Foto machen."
+  reference_only: "Bild nicht wiedergegeben — siehe Quelle"
+  meme_reference: "Quelle"

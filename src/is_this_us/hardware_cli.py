@@ -119,7 +119,7 @@ def cmd_robot_check(args) -> None:
 
 
 # ---------------------------------------------------------------------- robot-test
-SEQUENCE = ["stand", "sit", "stand", "lie_down", "stand", "greet", "stretch", "stand"]
+SEQUENCE = ["stand", "sit", "stand", "lie_down", "stand", "greet", "stretch", "stand", "look_aside", "peer"]
 
 
 def _go2_guard(s, iface, *, cooldown: float):
@@ -162,6 +162,10 @@ def cmd_robot_test(args) -> None:
             dt = time.monotonic() - t0
             timings.append((b, r.status.value, r.detail, round(dt, 1)))
             print(f"    {r.status.value}: {r.detail}  ({dt:.1f}s)  body={robot.body}  battery={robot.status().battery_percent}%")
+            if b == "look_aside":
+                print("    → did the body turn slightly LEFT or RIGHT? (note it; yaw sign is hardware-unverified)")
+            if b == "peer":
+                print("    → did the nose go DOWN? If it went up, report it: PEER_PITCH sign must be flipped")
             if r.status.value in ("failed", "stopped", "rejected"):
                 print("    stopping the test here.")
                 break
@@ -181,8 +185,7 @@ def cmd_robot_test(args) -> None:
 def cmd_live(args) -> None:
     """The full experience in the terminal with the real robot (no Telegram needed)."""
     s = get_settings()
-    from .artworks.repository import YamlArtworkRepository
-    from .bot.app import build_estimator
+    from .bot.app import build_estimator, build_library, build_planner
     from .motion.guard import MotionGuard
     from .notifier import ConsoleNotifier
     from .orchestrator import InteractionOrchestrator
@@ -216,9 +219,9 @@ def cmd_live(args) -> None:
     storage = Storage(":memory:")
     storage.touch_visitor(1, lang)
     orch = InteractionOrchestrator(
-        repo=YamlArtworkRepository(s.artwork_data_dir), estimator=estimator, storage=storage, guard=guard,
-        notifier=ConsoleNotifier(), synthesizer=make_synthesizer(s),
-        player=LocalSpeakerPlayer(True), default_lang=lang,
+        repo=build_library(s), estimator=estimator, storage=storage, guard=guard,
+        notifier=ConsoleNotifier(), synthesizer=make_synthesizer(s), planner=build_planner(s),
+        player=LocalSpeakerPlayer(True), default_lang=lang, default_archive=args.archive or s.default_archive,
     )
     print(f"  camera: {source.name}   voice: {'ElevenLabs' if s.elevenlabs_configured else 'text-only'}")
     try:
@@ -255,7 +258,8 @@ def register(sub) -> None:
     rc.set_defaults(fn=cmd_robot_check)
 
     rt = sub.add_parser("robot-test", help="supervised motion test on the real robot")
-    rt.add_argument("behavior", nargs="?", choices=["stand", "sit", "lie_down", "stretch", "greet"])
+    rt.add_argument("behavior", nargs="?",
+                    choices=["stand", "sit", "lie_down", "stretch", "greet", "look_aside", "peer"])
     rt.add_argument("--sequence", action="store_true", help=f"run {' → '.join(SEQUENCE)} with a confirmation each step")
     rt.add_argument("--interface")
     rt.add_argument("--i-have-physical-estop", action="store_true")
@@ -265,6 +269,7 @@ def register(sub) -> None:
     lv.add_argument("--source", help="camera: unitree | webcam[:i] | image:<path> (default CAMERA_SOURCE)")
     lv.add_argument("--interface")
     lv.add_argument("--lang", choices=["en", "ru", "de"])
+    lv.add_argument("--archive", choices=["art", "meme", "both", "surprise"])
     lv.add_argument("--no-motion", action="store_true", help="real camera + matching, robot does not move")
     lv.add_argument("--i-have-physical-estop", action="store_true")
     lv.set_defaults(fn=cmd_live)
