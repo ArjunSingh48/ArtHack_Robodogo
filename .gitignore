@@ -23,3 +23,7 @@ card*.jpg
 # models are downloaded with `itu setup`
 models/*.task
 test_frame.jpg
+
+# local secrets copy / macOS junk
+env
+.DS_Store
