@@ -252,11 +252,11 @@ async function send(cmd){
  if(cmd==='upload')return upload();
  const r=await fetch('/control?key='+encodeURIComponent(key)+'&cmd='+cmd,{method:'POST'});
  const j=await r.json().catch(()=>({msg:'error'}));document.getElementById('msg').textContent=j.msg||'';}
-let source='';  // camera | photos: only the switch to the other one is shown
+let source='', allowed=[];  // source: camera | photos (only the switch to the other is shown); allowed: what works now
 function controls(state){
  if(!key)return;const c=document.getElementById('controls');c.style.display='flex';
  const ask=(ASK[state]||[]).map(([k,t])=>`<button class="ask" onclick="send('${k}')">${t}</button>`).join('');
- const base=BASE.filter(([k])=>state!=='lobby'||k==='cancel')
+ const base=BASE.filter(([k])=>allowed.includes(k))
   .filter(([k])=>!(k==='camera'&&source!=='photos')&&!(k==='samples'&&source==='photos')).map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
  c.innerHTML=`<span id="state">${state}</span>`+ask+base;}
 function drawSim(m){
@@ -297,7 +297,8 @@ async function tick(){
   if(any){document.body.classList.add('live');lv.style.display='grid';
    document.getElementById('checks').innerHTML=(checks||[]).map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
   else{document.body.classList.remove('live');lv.style.display='none';}
-  if(s.state!==lastState||(s.source||'')!==source){source=s.source||'';controls(s.state);lastState=s.state;
+  if(s.state!==lastState||(s.source||'')!==source||String(s.allowed)!==String(allowed)){
+   source=s.source||'';allowed=s.allowed||[];controls(s.state);lastState=s.state;
    if(key&&s.note){document.getElementById('msg').textContent='🐕 '+s.note}}
  }catch(e){}
  setTimeout(tick,document.body.classList.contains('live')?150:350)}
@@ -427,6 +428,10 @@ class WebStage:
 
     def chapter(self, chapter_id: str, title: str) -> None:
         self._set(chapter=title, chapter_id=chapter_id, step=chapter_id)
+
+    def allowed(self, cmds: list[str]) -> None:
+        """The commands that do something right now: the operator page shows only those buttons."""
+        self._set(allowed=cmds)
 
     def source(self, kind: str) -> None:
         """Where the participant comes from: "camera" or "photos" — only the switch to the other one is shown."""

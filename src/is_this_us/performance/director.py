@@ -184,6 +184,7 @@ class StoryDirector:
         self._consent_decided, self._picture, self._shown_pictures = False, None, set()
         self._goto: str | None = None  # a step to replay / jump to (operator page hash): chapter or cue id
         self._start_cue: str | None = None  # …and, for a cue id, where in its chapter to start
+        self._last_said: tuple[str, str, str] | None = None  # (text, kind, direction): what Repeat says again
         self._real_camera = (frame_source_factory, pose_reader)  # kept while a picture stands in for it
         self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
@@ -337,6 +338,7 @@ class StoryDirector:
         self.transitions.append((self.state.value, st.value))
         self.state = st
         self.stage.status(st.value, detail)
+        getattr(self.stage, "allowed", lambda _: None)([c.value for c in Cmd if st in VALID[c]])
         for fn in list(self.listeners):
             try:
                 fn(self, st)
@@ -412,6 +414,7 @@ class StoryDirector:
     # ------------------------------------------------------------------ speaking
     async def say(self, text: str, *, kind: str = "lines", direction: str = "") -> None:
         """Speak one line with its subtitle. Interruptible only by PAUSE/CANCEL (pause = say it again)."""
+        self._last_said = (text, kind, direction)
         while True:
             self.stage.subtitle(text)
             task = asyncio.ensure_future(self.voice.speak(text, kind=kind, direction=direction))
@@ -423,6 +426,12 @@ class StoryDirector:
                 raise ShowCancelled()
             await self._paused()
 
+    async def _say_again(self) -> None:
+        """Repeat: the last line again (while a picture stays up, or while waiting for a pose)."""
+        if self._last_said is not None:
+            text, kind, direction = self._last_said
+            await self.say(text, kind=kind, direction=direction)
+
     async def say_line(self, section: str, key: str) -> None:
         await self.say(self.lines.pick(section, key), kind="lines")
 
@@ -432,6 +441,7 @@ class StoryDirector:
             if cue.kind == "pause":
                 task = asyncio.ensure_future(self.voice.silence(cue.seconds))
             else:
+                self._last_said = (text, "narration", ch.voice)
                 self.stage.subtitle(text)
                 task = asyncio.ensure_future(self.voice.speak(text, kind="narration", direction=ch.voice))
             cmd = await self._race(task, {Cmd.NEXT, Cmd.SKIP, Cmd.REPEAT, Cmd.POSE, Cmd.DECLINE})
@@ -1111,6 +1121,9 @@ class StoryDirector:
                 await self._paused()
                 deadline = self.clock() + self.readiness_timeout_s
                 continue
+            if cmd is Cmd.REPEAT:
+                await self._with_live(camera, lambda r: checks_for(r), self._say_again())
+                continue
             if cmd is Cmd.READY:
                 if latest is not None and latest.person_visible and latest.observation is not None:
                     return latest
@@ -1673,7 +1686,9 @@ class StoryDirector:
 
     async def _wait_next(self, why: str) -> None:
         self._set_state(ShowState.ARTWORK, why)
-        cmd = await self._await_cmd({Cmd.NEXT, Cmd.SKIP}, timeout=self.photo_view_timeout_s)
+        while (cmd := await self._await_cmd({Cmd.NEXT, Cmd.SKIP, Cmd.REPEAT},
+                                            timeout=self.photo_view_timeout_s)) is Cmd.REPEAT:
+            await self._say_again()
         self._note("picture viewed — continuing" if cmd else "picture viewed (time limit) — continuing")
 
     async def _round_robot(self, behavior: str, side: str, posture: str | None, facing: str = "") -> bool:

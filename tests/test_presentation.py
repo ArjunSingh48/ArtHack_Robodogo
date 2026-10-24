@@ -243,6 +243,54 @@ async def test_walking_round_goes_there_and_back(tmp_path, pres, catalog, lines)
     assert sum(w == "home: done" for w in d.walk_log) == 4  # back after every round; stays with the rescued person
 
 
+async def test_a_failed_walk_is_walked_again_before_the_round_goes_on(tmp_path, pres, catalog, lines):
+    from is_this_us.config import Settings
+    from is_this_us.performance.runtime import simulated_approacher
+
+    approacher = simulated_approacher(Settings(_env_file=None), fast=0.0)
+    real, calls = approacher.approach, []
+
+    def flaky(**kw):
+        calls.append(1)
+        if len(calls) == 1:
+            from is_this_us.performance.approach import ApproachResult
+            return ApproachResult("lost")
+        return real(**kw)
+    approacher.approach = flaky
+    d = director(tmp_path, pres, catalog, lines, motion=FakeMotion(), approacher=approacher)
+    answer(d, YES)
+    await d.run(start_at="prehistory")
+    walks = [w for w in d.walk_log if w.startswith("approach")]
+    assert walks[0].startswith("approach: lost") and walks[1].startswith("approach: arrived")
+    assert d.rounds[0]["settled"]  # the pose and the photo came only after it arrived
+
+
+async def test_a_still_photo_waits_for_ready_and_shows_the_era_collage(tmp_path, pres, catalog, lines):
+    from is_this_us.performance.runtime import SyntheticParticipant
+
+    pic = SyntheticParticipant("sitting")
+    pic.is_still = True
+    d = director(tmp_path, pres, catalog, lines, photo_factory=lambda data: pic)
+    d.frame_source_factory, d.pose_reader = (lambda: pic), PoseReader(pic)
+    waited = []
+
+    def on_state(director_, st):
+        if st is ShowState.READINESS:  # every round waits for Ready; the first one 0.3 s
+            if not waited:
+                waited.append(time.monotonic())
+            sid = director_.session_id
+            asyncio.get_running_loop().call_later(0.3 if len(waited) == 1 else 0.01,
+                                                  lambda: director_.command(Cmd.READY, sid))
+        elif st is ShowState.REMEMBERING and len(waited) == 1:
+            waited.append(time.monotonic())
+    d.listeners.append(on_state)
+    answer(d, YES)
+    await d.run(start_at="prehistory")
+    assert waited[1] - waited[0] >= 0.25  # not "steady" by itself: it waited for Ready
+    shows = d.stage.of("show")
+    assert shows[shows.index("consider") - 1] != "consider" and shows.count("consider") >= 2  # collage, then remembering
+
+
 def test_approach_keeps_distance_from_someone_lying(tmp_path):
     from is_this_us.config import Settings
     from is_this_us.performance.runtime import simulated_approacher
