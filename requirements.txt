@@ -18,6 +18,9 @@ openai[realtime]>=3.37,<4
 # Talk mode (live conversation)
 sounddevice>=0.5
 
+# ZHAW go2_main bridge connection
+pyzmq>=25
+
 # Tests
 pytest>=8
 pytest-asyncio>=1.4

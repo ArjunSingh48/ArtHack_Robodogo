@@ -50,6 +50,8 @@ class MotionGuard:
             return False, f"robot not connected: {st.detail}"
         self._armed, self._armed_by, self._stop_latched = True, operator_id, False
         log.warning("Motion ARMED by operator %s", operator_id)
+        if self.robot.is_real and not getattr(self.robot, "reports_battery", True):
+            return True, "armed — this connection does not report battery: watch it in the Unitree app"
         return True, "armed"
 
     def disarm(self, reason: str = "operator") -> None:
@@ -87,7 +89,7 @@ class MotionGuard:
             return False, f"robot reports error code {st.error_code}"
         if st.battery_percent is not None and st.battery_percent < self.min_battery:
             return False, f"battery {st.battery_percent}% below minimum {self.min_battery}%"
-        if self.robot.is_real and st.battery_percent is None:
+        if self.robot.is_real and st.battery_percent is None and getattr(self.robot, "reports_battery", True):
             return False, "battery level unknown"
         return True, "ok"
 

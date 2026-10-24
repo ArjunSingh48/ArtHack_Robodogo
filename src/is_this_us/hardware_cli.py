@@ -41,6 +41,8 @@ def cmd_robot_check(args) -> None:
     s = get_settings()
     iface = args.interface or s.robot_network_interface
     print("\nIs This Us? — robot check (read-only, no motion)\n")
+    if s.robot_model.value == "zhaw_bridge":
+        return _check_bridge(s, args)
 
     try:
         import unitree_sdk2py  # type: ignore  # noqa: F401
@@ -118,16 +120,66 @@ def cmd_robot_check(args) -> None:
     print("\nNext (area clear, remote in hand):  itu robot-test --sequence --i-have-physical-estop\n")
 
 
+def _check_bridge(s, args) -> None:
+    from .robot.zhaw_bridge import STEP_TO_ACTION, BridgeError, ZhawBridgeAdapter, ZhawBridgeCameraSource
+
+    print(f"  connection: ZHAW go2_main bridge at {s.zhaw_bridge_host}:{s.zhaw_bridge_cmd_port}")
+    robot = ZhawBridgeAdapter(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port, timeout_ms=3000)
+    try:
+        robot.connect()
+    except (BridgeError, Exception) as exc:
+        _bad("bridge not answering", "start it first: GO2_NETWORK_INTERFACE=<iface> python -m go2_bridge "
+             f"(in the go2_main repo) — {exc}")
+        sys.exit(1)
+    _ok("bridge answers", str(robot._last_status))
+    actions = set(robot.list_actions())
+    needed = set(STEP_TO_ACTION.values()) | {"stop_move"}
+    missing = needed - actions
+    (_ok if not missing else _bad)("bridge actions we need", ", ".join(sorted(needed)) if not missing
+                                   else f"missing: {', '.join(sorted(missing))}")
+    print("  ℹ  battery is not reported through the bridge — watch it in the Unitree app")
+    print("  ℹ  look_aside / peer are not available through the bridge (no Euler); the robot stands instead")
+    if not args.no_camera:
+        cam = ZhawBridgeCameraSource(s.zhaw_bridge_host, s.zhaw_bridge_pub_port)
+        frame = cam.read()
+        if frame is None:
+            _bad("no camera frame from the bridge (port %d)" % s.zhaw_bridge_pub_port)
+        else:
+            h, w = frame.image.shape[:2]
+            _ok("bridge camera", f"{w}×{h}")
+            if args.save_frame:
+                from PIL import Image
+
+                Image.fromarray(frame.image).save(args.save_frame)
+                print(f"      saved one test frame → {args.save_frame} (delete it after checking framing)")
+        cam.close()
+    robot.close()
+    print("\nNext (area clear, remote in hand):  itu robot-test --sequence --i-have-physical-estop\n")
+
+
 # ---------------------------------------------------------------------- robot-test
 SEQUENCE = ["stand", "sit", "stand", "lie_down", "stand", "greet", "stretch", "stand", "look_aside", "peer"]
 
 
-def _go2_guard(s, iface, *, cooldown: float):
-    from .motion.guard import MotionGuard
-    from .robot.unitree_go2 import UnitreeGo2Adapter
+def _real_robot(s, iface, model: str | None = None):
+    """The real robot connection: direct SDK (go2) or the ZHAW bridge (zhaw_bridge)."""
+    model = model or s.robot_model.value
+    if model == "zhaw_bridge":
+        from .robot.zhaw_bridge import ZhawBridgeAdapter
 
-    robot = UnitreeGo2Adapter(iface, state_topic=s.go2_state_topic, lowstate_topic=s.go2_lowstate_topic)
+        robot = ZhawBridgeAdapter(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port)
+    else:
+        from .robot.unitree_go2 import UnitreeGo2Adapter
+
+        robot = UnitreeGo2Adapter(iface, state_topic=s.go2_state_topic, lowstate_topic=s.go2_lowstate_topic)
     robot.connect()
+    return robot
+
+
+def _go2_guard(s, iface, *, cooldown: float, model: str | None = None):
+    from .motion.guard import MotionGuard
+
+    robot = _real_robot(s, iface, model)
     time.sleep(1.5)  # let state + battery arrive
     guard = MotionGuard(robot, hardware_gates_open=True, cooldown_s=cooldown,
                         timeout_s=s.motion_timeout_seconds, min_battery=s.min_battery_percent)
@@ -150,6 +202,10 @@ def cmd_robot_test(args) -> None:
     print(f"  arm: {ok} ({why})")
     if not ok:
         sys.exit(1)
+    unsupported = {b.value for b in getattr(robot, "unsupported_behaviors", ())}
+    if unsupported & set(steps):
+        print(f"  skipping {', '.join(sorted(unsupported & set(steps)))}: not available on this connection")
+        steps = [b for b in steps if b not in unsupported]
     timings = []
     try:
         for b in steps:
@@ -220,7 +276,7 @@ def cmd_live(args) -> None:
     storage.touch_visitor(1, lang)
     orch = InteractionOrchestrator(
         repo=build_library(s), estimator=estimator, storage=storage, guard=guard,
-        notifier=ConsoleNotifier(), synthesizer=make_synthesizer(s), planner=build_planner(s),
+        notifier=ConsoleNotifier(), synthesizer=make_synthesizer(s), planner=build_planner(s, robot),
         player=LocalSpeakerPlayer(True), default_lang=lang, default_archive=args.archive or s.default_archive,
     )
     print(f"  camera: {source.name}   voice: {'OpenAI Realtime' if s.voice_configured else 'text-only'}")
@@ -276,11 +332,11 @@ def cmd_talk(args) -> None:
     from .vision.frame_sources import make_frame_source
 
     iface = args.interface or s.robot_network_interface
-    if args.robot == "go2":
+    if args.robot in ("go2", "zhaw_bridge"):
         if not args.i_have_physical_estop:
-            sys.exit("Refusing: --robot go2 needs --i-have-physical-estop (remote in hand, area clear).")
+            sys.exit(f"Refusing: --robot {args.robot} needs --i-have-physical-estop (remote in hand, area clear).")
         print(ESTOP_REMINDER)
-        robot, guard = _go2_guard(s, iface, cooldown=s.motion_cooldown_seconds)
+        robot, guard = _go2_guard(s, iface, cooldown=s.motion_cooldown_seconds, model=args.robot)
         ok, why = guard.arm(operator_id=0)
         print(f"  arm: {ok} ({why})")
         if not ok:
@@ -303,7 +359,7 @@ def cmd_talk(args) -> None:
     orch = InteractionOrchestrator(
         repo=build_library(s), estimator=estimator, storage=storage, guard=guard, notifier=ConsoleNotifier(),
         synthesizer=NullSynthesizer(),  # the live voice speaks; no second TTS voice
-        planner=build_planner(s), default_lang=args.lang or s.default_language,
+        planner=build_planner(s, robot), default_lang=args.lang or s.default_language,
         default_archive=args.archive or s.default_archive,
     )
     lang_names = {"en": "English", "ru": "Russian", "de": "German"}
@@ -374,7 +430,7 @@ def register(sub) -> None:
     lv.set_defaults(fn=cmd_live)
 
     tk = sub.add_parser("talk", help="live spoken conversation with the dog (OpenAI Realtime)")
-    tk.add_argument("--robot", choices=["mock", "go2"], default="mock")
+    tk.add_argument("--robot", choices=["mock", "go2", "zhaw_bridge"], default="mock")
     tk.add_argument("--source", help="camera: webcam[:i] | unitree | image:<path> (default CAMERA_SOURCE)")
     tk.add_argument("--no-camera", action="store_true", help="talk only; the dog cannot look")
     tk.add_argument("--archive", choices=["art", "meme", "both", "surprise"])

@@ -18,7 +18,8 @@ class AppMode(StrEnum):
 
 class RobotModel(StrEnum):
     MOCK = "mock"
-    GO2 = "go2"
+    GO2 = "go2"  # direct Unitree SDK2 (DDS) from this process
+    ZHAW_BRIDGE = "zhaw_bridge"  # via the ZHAW go2_main bridge (python -m go2_bridge)
 
 
 class Settings(BaseSettings):
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     min_battery_percent: int = 25
     go2_state_topic: str = "rt/sportmodestate"
     go2_lowstate_topic: str = "rt/lowstate"
+    zhaw_bridge_host: str = "localhost"
+    zhaw_bridge_cmd_port: int = 5555
+    zhaw_bridge_pub_port: int = 5556
 
     telegram_bot_token: str = ""
     telegram_operator_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
@@ -95,7 +99,7 @@ class Settings(BaseSettings):
         """
         return (
             self.app_mode is AppMode.INSTALLATION
-            and self.robot_model is RobotModel.GO2
+            and self.robot_model in (RobotModel.GO2, RobotModel.ZHAW_BRIDGE)
             and self.robot_motion_enabled
         )
 

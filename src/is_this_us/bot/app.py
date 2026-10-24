@@ -170,7 +170,11 @@ def build_router(flows: VisitorFlows, settings: Settings) -> Router:
 def build_robot(settings: Settings) -> RobotAdapter:
     from ..config import RobotModel
 
-    if settings.robot_model is RobotModel.GO2:
+    if settings.robot_model is RobotModel.ZHAW_BRIDGE:
+        from ..robot.zhaw_bridge import ZhawBridgeAdapter
+
+        robot = ZhawBridgeAdapter(settings.zhaw_bridge_host, settings.zhaw_bridge_cmd_port)
+    elif settings.robot_model is RobotModel.GO2:
         from ..robot.unitree_go2 import UnitreeGo2Adapter
 
         robot = UnitreeGo2Adapter(settings.robot_network_interface, state_topic=settings.go2_state_topic,
@@ -193,14 +197,15 @@ def build_library(settings: Settings):
     return SceneLibrary(YamlArtworkRepository(settings.artwork_data_dir), memes)
 
 
-def build_planner(settings: Settings):
+def build_planner(settings: Settings, robot=None):
     from ..domain import RobotBehavior
     from ..motion.planner import DEFAULT_ALLOWED, SafeMotionPlanner
 
+    unavailable = frozenset(getattr(robot, "unsupported_behaviors", frozenset()))
     if not settings.motion_allowed_behaviors.strip():
-        return SafeMotionPlanner(DEFAULT_ALLOWED)
+        return SafeMotionPlanner(DEFAULT_ALLOWED, unavailable)
     allowed = frozenset(RobotBehavior(x.strip()) for x in settings.motion_allowed_behaviors.split(",") if x.strip())
-    return SafeMotionPlanner(allowed)
+    return SafeMotionPlanner(allowed, unavailable)
 
 
 def build_estimator(settings: Settings):
@@ -229,7 +234,7 @@ async def run_bot(settings: Settings) -> None:
     orch = InteractionOrchestrator(
         repo=repo, estimator=build_estimator(settings), storage=storage, guard=guard, notifier=notifier,
         synthesizer=make_synthesizer(settings), player=LocalSpeakerPlayer(settings.local_audio_playback),
-        planner=build_planner(settings), default_lang=settings.default_language,
+        planner=build_planner(settings, robot), default_lang=settings.default_language,
         default_archive=settings.default_archive,
     )
     flows = VisitorFlows(

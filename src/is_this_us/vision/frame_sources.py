@@ -139,7 +139,7 @@ class UnitreeFrontCameraSource:
 
 
 def make_frame_source(spec: str, *, network_interface: str = "") -> FrameSource:
-    """Build a source from CAMERA_SOURCE: image:<path> | video:<path> | webcam[:i] | unitree."""
+    """Build a source from CAMERA_SOURCE: image:<path> | video:<path> | webcam[:i] | unitree | zhaw_bridge[:host[:port]]."""
     kind, _, arg = spec.partition(":")
     if kind == "image":
         return ImageFileSource(arg)
@@ -149,4 +149,9 @@ def make_frame_source(spec: str, *, network_interface: str = "") -> FrameSource:
         return WebcamSource(int(arg or 0))
     if kind == "unitree":
         return UnitreeFrontCameraSource(network_interface)
+    if kind == "zhaw_bridge":  # zhaw_bridge[:host[:port]]
+        from ..robot.zhaw_bridge import ZhawBridgeCameraSource
+
+        host, _, port = arg.partition(":")
+        return ZhawBridgeCameraSource(host or "localhost", int(port or 5556))
     raise ValueError(f"Unknown CAMERA_SOURCE {spec!r}")

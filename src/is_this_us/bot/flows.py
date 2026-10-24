@@ -297,7 +297,10 @@ class VisitorFlows:
                     b = RobotBehavior(arg.strip())
                 except ValueError:
                     return [Reply("text", text=f"usage: /{command} <{'|'.join(x.value for x in RobotBehavior)}>")]
-                (planner.approve if command == "approve" else planner.revoke)(b)
+                if command == "approve" and not planner.approve(b):
+                    return [Reply("text", text=f"⛔ {b.value} is not available on this robot connection")]
+                if command == "revoke":
+                    planner.revoke(b)
             allowed = sorted(x.value for x in planner.allowed)
             blocked = sorted(x.value for x in RobotBehavior if x not in planner.allowed)
             return [Reply("text", text=f"approved: {', '.join(allowed)}\nnot approved (fallback used): {', '.join(blocked) or '—'}")]
