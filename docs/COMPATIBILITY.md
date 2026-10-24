@@ -15,7 +15,7 @@ Verified **in source code**, not on hardware:
 | Software stop | `StopMove()` | yes |
 | Body orientation | `Euler(roll, pitch, yaw)` (radians) | yes — fixed small poses, ±0.3 rad cap, operator-approved |
 | Mode (read-only) | `MotionSwitcherClient.CheckMode()` | yes, in `robot-check`; `SelectMode` never called |
-| Walking | `Move(vx, vy, vyaw)` | **no** — no autonomous translation toward visitors |
+| Walking | `Move(vx, vy, vyaw)` | direct SDK: **no**. ZHAW bridge: only the show's `--walk` approach, via the bridge's `move` (velocity, 20 Hz heartbeat, obstacle avoidance on), clamped to 0.3 m/s · 0.15 m/s · 0.6 rad/s |
 | Flips, jumps, pounce, dance, free gaits | `FrontFlip`, `FrontJump`, … | **never** |
 | Front camera | `go2.video.video_client.VideoClient.GetImageSample()` → JPEG bytes | yes (Mode C) |
 | Battery | `rt/lowstate` → `LowState_.bms_state.soc` | yes |

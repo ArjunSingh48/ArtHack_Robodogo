@@ -14,6 +14,8 @@ REQUIRED = {
     "compare": ("shared", "differ", "okay", "understand"),
     "delivery": ("ask_send", "sent", "not_sent", "failed", "caption"),
     "decline": ("ok",),
+    "invite": ("practised", "robot_pose"),
+    "approach": ("ask", "arrived", "not_found", "home"),
     "conversation": ("opening", "closing"),
 }
 

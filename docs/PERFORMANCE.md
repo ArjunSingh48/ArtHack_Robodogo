@@ -132,6 +132,41 @@ with the detected skeleton drawn on top and a short checklist: ✓ I can see you
 picture · ✓ in the middle · ✓ sitting · ✓ head tilted. It disappears before the photo/composition. Frames
 stay in memory (replaced ~5× per second) and are never saved.
 
+**Where the robot goes.** Each interactive painting says where its dog is, as the viewer sees it
+(`robot_spot` in `catalog.yaml`): e.g. Zorn → LEFT of the person, the robot sits. Two ways:
+
+* **By hand (default).** The operator sees "Place the robot on the LEFT of the person…" in the terminal,
+  on the operator page and in Telegram, and puts the robot there (carry it, or the Unitree remote)
+  **before** the person sits down. With show motion on and the robot armed, it then takes the painted
+  dog's pose (sit / lie down / stand) — "I will try to be the dog in the picture. You can be the person."
+* **It walks there by itself (`--walk`).** Once the person is in place and the operator presses Ready,
+  the robot says "May I come a little closer?", stands, and finds the person with **its own camera**:
+  it turns slowly to look for them, estimates where they are (direction from the image, distance from
+  how tall they look), **remembers that position**, and walks slowly to a spot beside them — on the
+  painting's side as seen from where the robot started — never closer than 0.55 m. It turns to face
+  the person, takes the dog's pose ("Here I am."), and the person adjusts next to it with the live view.
+  After the picture it stands up, says "I will go back to my place now." and retraces its path.
+
+  Limits: ≤ 0.22 m/s (adapter cap 0.3), ≤ 0.45 rad/s turning, ≤ 3.5 m, ≤ 40 s, gives up if it can't find
+  or loses the person; Pause, Skip, End, `/cancel`, `/disarm` stop it at once; the ZHAW bridge stops the
+  legs by itself if commands stop arriving and keeps its obstacle avoidance on. Needs
+  `SHOW_WALK_ENABLED=true`, `ROBOT_MODEL=zhaw_bridge`, every motion gate, `--motion --walk
+  --i-have-physical-estop`, an armed robot, and a person holding the remote. Distances come from one
+  camera and are estimates: **calibrate and test without people first** (`itu show walk-test`, below).
+
+```bash
+itu show walk-test --sim --side left                    # simulated room: see what it would do
+itu show walk-test --calibrate 2 --posture sitting --i-have-physical-estop
+    # a person sits exactly 2 m in front of the robot; prints SHOW_WALK_K_SITTING=… for .env
+itu show walk-test --side left --i-have-physical-estop  # the real walk, alone, then back home
+itu show --dry-run --interactive --walk --auto          # whole finale with a simulated walk
+itu show --interactive --display web --source webcam --motion --walk --i-have-physical-estop
+```
+
+**Mirror.** The live view is mirrored like a mirror, and the photo is saved the same way, so the NOW picture
+looks exactly like what the participant saw while matching the painting (dog on the same side as in the
+painting). If the camera already mirrors, set `SHOW_CAMERA_MIRRORED=true` and nothing is flipped twice.
+
 **The participant is part of the story from the first chapter.** Every chapter ends with a small
 *moment* (`@try` in the script): the robot turns to the person in front of the camera and asks for
 something small that belongs to that chapter — "Is someone there?", "Could you stand like the hunter?",

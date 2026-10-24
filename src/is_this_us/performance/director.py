@@ -19,6 +19,7 @@ import collections
 import logging
 import random
 import secrets
+import threading
 import time
 from dataclasses import dataclass, field
 from enum import StrEnum
@@ -42,6 +43,7 @@ class ShowState(StrEnum):
     NARRATION = "narration"
     ARTWORK = "artwork_display"  # holding on a picture (guided mode)
     PARTICIPATION = "participation"  # a small moment with the participant inside a chapter (@try)
+    APPROACH = "approach"  # the robot walks to the participant / back (camera-guided, --walk)
     CONVERSATION = "conversation"  # hold + live conversation window open
     INVITATION = "invitation"
     READINESS = "participant_readiness"
@@ -75,7 +77,7 @@ class Cmd(StrEnum):
 
 
 RUNNING = {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
-           ShowState.PARTICIPATION,
+           ShowState.PARTICIPATION, ShowState.APPROACH,
            ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT, ShowState.CAPTURE,
            ShowState.AWAITING_PHOTO, ShowState.COMPOSITION, ShowState.DELIVERY, ShowState.CONCLUSION}
 SPEAKING = {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.INVITATION, ShowState.CONCLUSION}
@@ -88,7 +90,8 @@ VALID: dict[Cmd, set[ShowState]] = {
     Cmd.CANCEL: RUNNING | {ShowState.PAUSED},
     Cmd.POSE: {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
                ShowState.INVITATION, ShowState.PARTICIPATION},
-    Cmd.READY: {ShowState.READINESS, ShowState.PARTICIPATION},  # in a moment: "yes, they did it"
+    Cmd.READY: {ShowState.READINESS, ShowState.PARTICIPATION},
+    # (APPROACH accepts only PAUSE / SKIP / CANCEL — all of which stop the walk at once)  # in a moment: "yes, they did it"
     Cmd.DECLINE: {ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT},
     Cmd.CONSENT_YES: {ShowState.CONSENT},
     Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO},
@@ -122,7 +125,9 @@ class StoryDirector:
                  pose_preference: str = "sitting", readiness_timeout_s: float = 240, consent_timeout_s: float = 120,
                  send_timeout_s: float = 180, photo_wait_s: float = 120, hint_gap_s: float = 8.0,
                  tick_s: float = 0.8, theme: str = "ivory", font_path: str = "", rng: random.Random | None = None,
-                 photo_upload_allowed: bool = False, try_seconds: float = 12.0, clock=time.monotonic):
+                 photo_upload_allowed: bool = False, try_seconds: float = 12.0, approacher=None,
+                 moment_hold_s: float = 1.5, live_linger_s: float = 2.0,
+                 clock=time.monotonic):
         self.script, self.catalog, self.lines, self.voice, self.stage = script, catalog, lines, voice, stage
         self.store, self.pose_reader, self.frame_source_factory = store, pose_reader, frame_source_factory
         self.delivery, self.motion, self.conversation = delivery, motion, conversation
@@ -135,10 +140,16 @@ class StoryDirector:
         self.rng = rng or random.Random()
         self.photo_upload_allowed = photo_upload_allowed
         self.try_seconds = try_seconds
+        self.approacher = approacher  # camera-guided walking to the participant (None = never walks)
+        self.walk_log: list[str] = []
         self.clock = clock
         self.tries: list[tuple[str, bool]] = []  # (cue id, seen) — what the participant joined
         self._camera = None
         self._camera_failed = False
+        self._camera_lock = threading.Lock()  # one camera read at a time (OpenCV is not thread-safe)
+        self._jump_to_pose = False
+        self.moment_hold_s = moment_hold_s  # a moment counts once the pose is held this long
+        self.live_linger_s = live_linger_s  # keep the camera view up this long after the reaction
         self.live_tick_s = min(tick_s, 0.2)  # faster looking while the live view is on screen
 
         self.session_id = ""
@@ -173,6 +184,8 @@ class StoryDirector:
             return False, "that belongs to an earlier performance — ignored"
         if self.state not in VALID[cmd]:
             return False, f"'{cmd.value}' does nothing while {self.state.value}"
+        if cmd is Cmd.POSE:
+            self._jump_to_pose = True  # sticky: honoured at the next safe point, whatever is playing
         self._inbox.append(cmd)
         self._has_cmd.set()
         return True, f"ok: {cmd.value}"
@@ -201,7 +214,11 @@ class StoryDirector:
     def _set_state(self, st: ShowState, detail: str = "") -> None:
         if st is self.state:
             return
-        self._inbox.clear()  # commands meant for the previous state are stale now
+        # commands that make no sense in the new state are stale; the rest (e.g. "next" pressed while
+        # the robot was finishing a line) still count
+        kept = [c for c in self._inbox if st in VALID[c] or st is ShowState.PAUSED and c in (Cmd.RESUME, Cmd.CANCEL)]
+        self._inbox.clear()
+        self._inbox.extend(kept)
         self.transitions.append((self.state.value, st.value))
         self.state = st
         self.stage.status(st.value, detail)
@@ -375,6 +392,8 @@ class StoryDirector:
         state = self._chapter_state(ch)
         i = 0
         while i < len(cues):
+            if self._jump_to_pose and not ch.interactive:
+                return "pose"
             cue = cues[i]
             self._set_state(state)
             self.cue_id = cue.id
@@ -416,6 +435,8 @@ class StoryDirector:
 
     async def _hold(self, ch: Chapter) -> str:
         """Guided mode: wait for the operator. A conversation window may open here."""
+        if self._jump_to_pose and not ch.interactive:
+            return "pose"
         window = None
         if self.conversation is not None and getattr(self.conversation, "enabled", False):
             self._set_state(ShowState.CONVERSATION)
@@ -482,28 +503,49 @@ class StoryDirector:
     async def _try_moment(self, ch: Chapter, cue: Cue) -> str:
         """A @try cue: ask, look for a few seconds, react. No photo, nothing stored.
 
-        → "done" | "skip" | "pose". Without a camera the moment is left out entirely."""
+        The camera view is on screen the whole time: while the robot asks, while it looks, during its
+        reaction, and a moment after. A moment counts once the pose is HELD (moment_hold_s), not on
+        a single frame. → "done" | "skip" | "pose". Without a camera the moment is left out entirely."""
         camera = self._open_camera()
         if camera is None or self.pose_reader is None:
             return "done"
+        if self._jump_to_pose:
+            return "pose"
         self._set_state(ShowState.PARTICIPATION)
-        result = await self._play_cue(ch, cue, cue.text)  # ask
+
+        def checks(reading):
+            return checks_for(reading, posture=cue.target if cue.target in ("standing", "sitting") else None,
+                              head_tilt=cue.target == "head_tilt", any_person=cue.target == "any")
+
+        result = "done"
+
+        async def ask():
+            nonlocal result
+            result = await self._play_cue(ch, cue, cue.text)
+
+        await self._with_live(camera, checks, ask())
         if result != "done":  # the operator moved on while the robot was still asking
             self.tries.append((cue.id, False))
+            self._clear_live()
             return result if result in ("skip", "pose") else "done"
         deadline = self.clock() + self.try_seconds
-        streak, seen = 0, False
+        held_since, seen = None, False
         while self.clock() < deadline:
+            if self._jump_to_pose:
+                self.tries.append((cue.id, False))
+                self._clear_live()
+                return "pose"
             reading, frame = await self._read_pose(camera)
-            await self._publish_live(frame, reading, checks_for(
-                reading, posture=cue.target if cue.target in ("standing", "sitting") else None,
-                head_tilt=cue.target == "head_tilt", any_person=cue.target == "any"))
+            await self._publish_live(frame, reading, checks(reading))
             if reading is not None:
                 self.last_reading = reading
-                streak = streak + 1 if self._moment_seen(cue.target, reading) else 0
-                if streak >= 2:  # two readings in a row: not a flicker
-                    seen = True
-                    break
+                if self._moment_seen(cue.target, reading):
+                    held_since = held_since if held_since is not None else self.clock()
+                    if self.clock() - held_since >= self.moment_hold_s:
+                        seen = True
+                        break
+                else:
+                    held_since = None
             try:
                 cmd = await asyncio.wait_for(self._get_cmd(), self._tick())
             except asyncio.TimeoutError:
@@ -519,22 +561,52 @@ class StoryDirector:
                 seen = True
                 break
             if cmd is Cmd.REPEAT:
-                await self.say(cue.text, kind="narration", direction=ch.voice)
+                await self._with_live(camera, checks, self.say(cue.text, kind="narration", direction=ch.voice))
                 deadline = self.clock() + self.try_seconds
                 continue
             if cmd in (Cmd.NEXT, Cmd.SKIP, Cmd.POSE):
                 self.tries.append((cue.id, False))
+                self._clear_live()
                 return {Cmd.NEXT: "done", Cmd.SKIP: "skip", Cmd.POSE: "pose"}[cmd]
         self.tries.append((cue.id, seen))
-        await self.say(cue.yes if seen else cue.no, kind="narration", direction=ch.voice)
+
+        async def react():
+            await self.say(cue.yes if seen else cue.no, kind="narration", direction=ch.voice)
+            await asyncio.sleep(self.live_linger_s)
+
+        await self._with_live(camera, checks, react())
         self._clear_live()
-        return "done"
+        return "pose" if self._jump_to_pose else "done"
+
+    def _locked_read(self, camera):
+        with self._camera_lock:
+            return camera.read()
+
+    async def _live_feed(self, camera, checks) -> None:
+        """Keep the camera view moving while the robot talks (until cancelled)."""
+        try:
+            while True:
+                reading, frame = await self._read_pose(camera)
+                await self._publish_live(frame, reading, checks(reading))
+                await asyncio.sleep(self._tick())
+        except asyncio.CancelledError:
+            pass
+
+    async def _with_live(self, camera, checks, coro) -> None:
+        """Run `coro` (usually a spoken line) while the live view keeps updating."""
+        feed = asyncio.ensure_future(self._live_feed(camera, checks)) if self._live is not None else None
+        try:
+            await coro
+        finally:
+            if feed is not None:
+                feed.cancel()
+                await asyncio.gather(feed, return_exceptions=True)
 
     async def _read_pose(self, camera) -> tuple[PoseReading | None, object | None]:
         if camera is None or self.pose_reader is None:
             return None, None
         try:
-            frame = await asyncio.to_thread(camera.read)
+            frame = await asyncio.to_thread(self._locked_read, camera)
             if frame is None:
                 return None, None
             return await asyncio.to_thread(self.pose_reader.read, frame.image, frame.source), frame
@@ -554,12 +626,15 @@ class StoryDirector:
         from .live_view import render
 
         try:
-            # like a mirror — unless the camera already mirrors, or it is the drawn rehearsal stand-in
-            mirror = not getattr(self.pose_reader, "mirrored", False) and frame.source != "synthetic"
-            jpeg = await asyncio.to_thread(render, frame.image, reading, mirror=mirror)
+            jpeg = await asyncio.to_thread(render, frame.image, reading, mirror=self._mirror(frame))
             live(jpeg, [(c.label, c.ok) for c in checks])
         except Exception as exc:
             log.debug("live view failed: %s", exc)
+
+    def _mirror(self, frame) -> bool:
+        """Show and keep images like a mirror, so left/right match what the participant saw while
+        posing — and the painting. Not if the camera already mirrors, nor for the drawn stand-in."""
+        return not getattr(self.pose_reader, "mirrored", False) and getattr(frame, "source", "") != "synthetic"
 
     def _clear_live(self) -> None:
         live = self._live
@@ -574,7 +649,11 @@ class StoryDirector:
 
     async def _guide_pose(self, art: ShowArtifact, camera) -> str:
         """Participant readiness. → "ready" | "declined" | "timeout". No forced timer for capture."""
-        self._set_state(ShowState.READINESS)
+        spec_ = art.interactive
+        note = (f"The robot will walk to the person's {(spec_.robot_side or 'front').upper()} by itself once they "
+                f"are in place — keep its path clear, remote in hand." if self.approacher is not None
+                else spec_.placement())
+        self._set_state(ShowState.READINESS, note)
         spec = art.interactive
         coach = PoseCoach(spec, min_gap_s=self.hint_gap_s, clock=self.clock)
         deadline = self.clock() + self.readiness_timeout_s
@@ -632,7 +711,10 @@ class StoryDirector:
             from PIL import Image
 
             buf = BytesIO()
-            Image.fromarray(frame.image).save(buf, format="JPEG", quality=92)
+            img = Image.fromarray(frame.image)
+            if self._mirror(frame):  # the photo looks exactly like the live view did
+                img = img.transpose(Image.Transpose.FLIP_LEFT_RIGHT)
+            img.save(buf, format="JPEG", quality=92)
             self._capture_source = frame.source
             return buf.getvalue(), reading
         if not self.photo_upload_allowed:
@@ -649,18 +731,37 @@ class StoryDirector:
         return self._photo, None
 
     async def _interactive(self) -> str:
-        """Invitation → readiness → consent → capture → composition → delivery. → together | alone."""
+        outcome = await self._interactive_inner()
+        try:
+            await self._walk_home()
+        except ShowCancelled:
+            raise
+        except Exception as exc:
+            log.warning("walking home failed: %s", exc)
+        return outcome
+
+    async def _interactive_inner(self) -> str:
+        """Invitation → readiness → [walk + dog pose] → consent → capture → composition → delivery."""
         art = self.artifact
         if art is None:
             log.warning("no interactive artwork available; the story continues without a photo")
             return "alone"
         camera = self._open_camera()
         try:
+            await self._robot_takes_its_place(art)
             ready = await self._guide_pose(art, camera)
             if ready != "ready":
                 self._clear_live()
                 await self.say_line("decline", "ok")
                 return "alone"
+            if self.approacher is not None:  # the person is in place: now the robot comes to them
+                self._clear_live()
+                if await self._walk_to_person(art):
+                    ready = await self._guide_pose(art, camera)  # a last adjustment, side by side
+                    if ready != "ready":
+                        self._clear_live()
+                        await self.say_line("decline", "ok")
+                        return "alone"
             self._set_state(ShowState.CONSENT)
             await self.say_line("consent", "ask")
             await self.say_line("consent", "explain")
@@ -688,6 +789,74 @@ class StoryDirector:
         except Exception as exc:  # a failed photo never prevents the ending
             log.exception("interactive part failed: %s", exc)
             return "together" if self.composition else "alone"
+
+    async def _robot_takes_its_place(self, art: ShowArtifact) -> None:
+        """The robot goes into the painted dog's pose BEFORE the person settles next to it.
+
+        It never walks: the operator has placed it at the spot named in the catalog (shown to the
+        operator in the readiness prompt). The pose goes through the existing MotionGuard."""
+        spec = art.interactive
+        placement = spec.placement()
+        if placement:
+            log.info("operator: %s", placement)
+        if self.approacher is not None:
+            return  # it will walk to the person once they are in place, and take the pose there
+        if spec.robot_behavior and self.motion is not None and getattr(self.motion, "enabled", False):
+            self.motion.request(spec.robot_behavior)
+            await self.say_line("invite", "robot_pose")
+
+    async def _walk(self, fn, **kw):
+        """Run a walking routine in a thread; PAUSE / SKIP / CANCEL stop it at once. → (result, cmd)"""
+        import threading
+
+        stop = threading.Event()
+        loop = asyncio.get_running_loop()
+        fut = loop.run_in_executor(None, lambda: fn(should_stop=stop.is_set, **kw))
+        waiter = asyncio.ensure_future(asyncio.shield(fut))
+        cmd = await self._race(waiter, {Cmd.SKIP})
+        if cmd is not None:
+            stop.set()
+        try:
+            result = await asyncio.wait_for(asyncio.shield(fut), 5)
+        except asyncio.TimeoutError:
+            result = None
+        return result, cmd
+
+    async def _walk_to_person(self, art: ShowArtifact) -> bool:
+        """The robot finds the participant with its own camera, walks to the painted dog's side of
+        them, and takes the dog's pose there. → arrived?"""
+        spec = art.interactive
+        self._set_state(ShowState.APPROACH, f"walking to the person's {spec.robot_side or 'front'}")
+        await self.say_line("approach", "ask")
+        if self.motion is not None:
+            await asyncio.to_thread(self.motion.perform, "stand")  # walking starts from standing
+        res, cmd = await self._walk(self.approacher.approach, side=spec.robot_side or "front", posture=spec.posture)
+        self.walk_log.append(f"approach: {getattr(res, 'status', 'interrupted')} {getattr(res, 'detail', '')}".strip())
+        if cmd is Cmd.CANCEL:
+            raise ShowCancelled()
+        if cmd is Cmd.PAUSE:
+            await self._paused()  # the robot stays where it stopped; the operator decides
+        if res is not None and res.arrived:
+            if spec.robot_behavior and self.motion is not None:
+                await asyncio.to_thread(self.motion.perform, spec.robot_behavior)
+            await self.say_line("approach", "arrived")
+            return True
+        await self.say_line("approach", "not_found")
+        return False
+
+    async def _walk_home(self) -> None:
+        if self.approacher is None or self.approacher.memory is None or not self.approacher.memory.path:
+            return
+        self._set_state(ShowState.APPROACH, "walking back")
+        await self.say_line("approach", "home")
+        if self.motion is not None:
+            await asyncio.to_thread(self.motion.perform, "stand")  # stand up before walking
+        res, cmd = await self._walk(self.approacher.go_home)
+        self.walk_log.append(f"home: {res or 'interrupted'}")
+        if cmd is Cmd.CANCEL:
+            raise ShowCancelled()
+        if cmd is Cmd.PAUSE:
+            await self._paused()
 
     async def _compose(self, art: ShowArtifact, photo: bytes, reading: PoseReading | None) -> Path:
         from io import BytesIO
@@ -752,6 +921,7 @@ class StoryDirector:
         self._capture_source = ""
         self.transitions, self.chapters_played = [], []
         self.tries = []
+        self._jump_to_pose = False
         self.state = ShowState.IDLE
         self.store.cleanup()
         log.info("performance %s starting (%s mode)", self.session_id, self.mode)
@@ -774,6 +944,7 @@ class StoryDirector:
                     cues = ch.cues_for(self.outcome) if ch.id == "present" else ch.cues
                 result = await self._play_chapter(ch, cues)
                 if result == "pose":
+                    self._jump_to_pose = False
                     idx = next(i for i, c in enumerate(chapters) if c.interactive)
                     jumped_to_pose = True
                     continue

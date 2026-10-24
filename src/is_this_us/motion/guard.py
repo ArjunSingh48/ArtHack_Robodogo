@@ -42,6 +42,10 @@ class MotionGuard:
     def armed(self) -> bool:
         return self._armed
 
+    @property
+    def stop_latched(self) -> bool:
+        return self._stop_latched
+
     def arm(self, operator_id: int) -> tuple[bool, str]:
         if self.robot.is_real and not self.hardware_gates_open:
             return False, "hardware gates closed (APP_MODE/ROBOT_MODEL/ROBOT_MOTION_ENABLED)"
@@ -91,6 +95,23 @@ class MotionGuard:
             return False, f"battery {st.battery_percent}% below minimum {self.min_battery}%"
         if self.robot.is_real and st.battery_percent is None and getattr(self.robot, "reports_battery", True):
             return False, "battery level unknown"
+        return True, "ok"
+
+    def walk_allowed(self) -> tuple[bool, str]:
+        """Walking (the show's approach) needs everything a pose needs — and a robot that can walk.
+
+        Checked before the approach starts AND on every step, so /disarm or a software stop ends it."""
+        if not getattr(self.robot, "can_walk", False):
+            return False, "this robot connection cannot walk (use the ZHAW bridge)"
+        if self._stop_latched and self.robot.is_real:
+            return False, "stop latched; operator must re-arm"
+        if self.robot.is_real and not (self.hardware_gates_open and self._armed):
+            return False, "not armed by operator" if self.hardware_gates_open else "hardware gates closed"
+        st = self.robot.status()
+        if not st.connected:
+            return False, f"robot not connected ({st.detail})"
+        if st.error_code not in (None, 0):
+            return False, f"robot reports error code {st.error_code}"
         return True, "ok"
 
     def execute(self, plan: MotionPlan) -> ExecutionResult:

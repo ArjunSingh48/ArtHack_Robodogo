@@ -177,6 +177,83 @@ def cmd_purge(args) -> None:
     print(f"deleted {n + m} performance session folder(s) (participant photos and compositions)")
 
 
+# ---------------------------------------------------------------------- walking
+def cmd_walk_test(args) -> int:
+    s = get_settings()
+    from .runtime import approach_settings, simulated_approacher
+
+    if args.sim:
+        a = simulated_approacher(s, fast=0.05)
+        res = a.approach(side=args.side, posture=args.posture)
+        w = a.world
+        print(f"{res.status}: {res.detail}; walked {res.travelled_m:.1f} m; now {w.distance():.2f} m from the "
+              f"person, on their {w.side_of_person()} (closest {w.min_distance:.2f} m)")
+        if not args.no_home:
+            print("back home:", a.go_home())
+        return 0 if res.arrived else 1
+    if not args.i_have_physical_estop:
+        sys.exit("Refusing: pass --i-have-physical-estop and keep the remote / e-stop in your hand.")
+    from ..bot.app import build_estimator, build_robot
+    from ..motion.guard import MotionGuard
+    from ..vision.frame_sources import make_frame_source
+    from ..vision.pose import select_primary_person
+    from .approach import Approacher
+
+    est = build_estimator(s)
+    if est is None:
+        sys.exit("Pose model missing: pip install -e '.[vision]' && itu setup")
+    if args.calibrate:
+        cam = make_frame_source(s.show_walk_camera, network_interface=s.robot_network_interface)
+        heights = []
+        for _ in range(20):
+            f = cam.read()
+            if f is None:
+                continue
+            p, _ = select_primary_person(est.estimate(f.image))
+            if p is not None:
+                x0, y0, x1, y1 = p.bbox()
+                h = p.image_size[1]
+                if y0 / h > 0.02 and y1 / h < 0.98:
+                    heights.append((y1 - y0) / h)
+        cam.close()
+        if len(heights) < 5:
+            sys.exit("Could not see the whole person (head to feet) often enough — move them back a little.")
+        heights.sort()
+        k = heights[len(heights) // 2] * args.calibrate
+        name = "SHOW_WALK_K_STANDING" if args.posture == "standing" else "SHOW_WALK_K_SITTING"
+        print(f"{name}={k:.2f}    # put this in .env ({len(heights)} readings)")
+        return 0
+    if not (s.real_robot_possible and s.show_walk_enabled):
+        sys.exit("Needs APP_MODE=installation, ROBOT_MODEL=zhaw_bridge, ROBOT_MOTION_ENABLED=true, SHOW_WALK_ENABLED=true.")
+    robot = build_robot(s)
+    guard = MotionGuard(robot, hardware_gates_open=True, cooldown_s=0, timeout_s=s.motion_timeout_seconds)
+    ok, why = guard.arm(operator_id=0)
+    print(("ARMED: " if ok else "NOT armed: ") + why)
+    if not ok:
+        return 1
+    from ..domain import MotionPlan, Reproducibility, RobotBehavior
+
+    guard.execute(MotionPlan(requested=RobotBehavior.STAND, behavior=RobotBehavior.STAND,
+                             fidelity=Reproducibility.YES, explanation="walk test"))
+    a = Approacher(robot, guard, lambda: make_frame_source(s.show_walk_camera,
+                                                           network_interface=s.robot_network_interface),
+                   est, approach_settings(s))
+    input(f"Person in place? Robot will walk to their {args.side}. Remote in hand. Enter to start, Ctrl+C to abort… ")
+    try:
+        res = a.approach(side=args.side, posture=args.posture)
+        print(f"{res.status}: {res.detail}; walked {res.travelled_m:.1f} m; person estimated at {res.person_at}")
+        if not args.no_home:
+            input("Enter to walk back home… ")
+            guard.execute(MotionPlan(requested=RobotBehavior.STAND, behavior=RobotBehavior.STAND,
+                                     fidelity=Reproducibility.YES, explanation="walk test home"))
+            print("home:", a.go_home())
+    finally:
+        guard.software_stop("walk test ended")
+        guard.shutdown()
+        robot.close()
+    return 0
+
+
 # ---------------------------------------------------------------------- run
 def cmd_show(args) -> int:
     action = getattr(args, "show_action", None)
@@ -188,12 +265,16 @@ def cmd_show(args) -> int:
         return cmd_voice(args)
     if action == "purge":
         return cmd_purge(args)
+    if action == "walk-test":
+        return cmd_walk_test(args)
 
     s = get_settings()
     from .runtime import ShowOptions
 
     if args.motion and not args.i_have_physical_estop:
         sys.exit("Refusing motion: pass --i-have-physical-estop and keep the remote / e-stop in your hand.")
+    if args.walk and not args.dry_run and not args.motion:
+        sys.exit("--walk on the real robot needs --motion --i-have-physical-estop (and SHOW_WALK_ENABLED=true).")
     source = args.source
     if source is None and args.dry_run:
         source = "synthetic:sitting"
@@ -201,7 +282,7 @@ def cmd_show(args) -> int:
                        display=args.display, source=source, voice=not args.no_voice,
                        fast=args.fast if args.fast else 1.0, motion=args.motion,
                        out_dir=Path(args.out) if args.out else (Path("./data/runtime/rehearsal") if args.dry_run else None),
-                       seed=args.seed)
+                       seed=args.seed, walk=args.walk)
     if args.telegram:
         if args.dry_run:
             sys.exit("--telegram cannot be combined with --dry-run (rehearsals never contact Telegram).")
@@ -267,6 +348,8 @@ async def _run_local(s, opts, args) -> int:
         print(f"delivery: {result.delivery_detail}")
     if director.motion.log:
         print("motion cues: " + "; ".join(director.motion.log))
+    if director.walk_log:
+        print("walking: " + "; ".join(director.walk_log))
     if sim:
         print("simulated participant answered: " + ", ".join(sim.answered))
     return 0 if result.final_state.value in ("finished", "cancelled") else 1
@@ -297,6 +380,9 @@ def register(sub) -> None:
                     help="begin with this chapter (rehearsing one part)")
     sh.add_argument("--telegram", action="store_true", help="also run the Telegram bot in this process (/show …)")
     sh.add_argument("--motion", action="store_true", help="allow the script's robot cues (needs all gates + e-stop)")
+    sh.add_argument("--walk", action="store_true",
+                    help="the robot finds the participant with its camera and walks to their side "
+                         "(real robot: needs --motion and SHOW_WALK_ENABLED; --dry-run: simulated room)")
     sh.add_argument("--i-have-physical-estop", action="store_true")
     sh.set_defaults(fn=cmd_show, show_action=None)
     ssub = sh.add_subparsers(dest="show_action")
@@ -311,6 +397,14 @@ def register(sub) -> None:
     vo.add_argument("--lang", default="en")
     vo.add_argument("--limit", type=int, default=40)
     ssub.add_parser("purge", help="delete all participant photos and compositions now")
+    wt = ssub.add_parser("walk-test", help="try the camera-guided walk alone (simulated with --sim)")
+    wt.add_argument("--side", choices=["left", "right", "front"], default="left")
+    wt.add_argument("--posture", choices=["sitting", "standing"], default="sitting")
+    wt.add_argument("--sim", action="store_true", help="simulated room and robot, nothing real moves")
+    wt.add_argument("--calibrate", type=float, metavar="METERS",
+                    help="no walking: a person stands/sits this far in front of the robot; prints the k value")
+    wt.add_argument("--no-home", action="store_true", help="stay there instead of walking back")
+    wt.add_argument("--i-have-physical-estop", action="store_true")
 
     va = sub.add_parser("voice", help="voice tools")
     vsub = va.add_subparsers(dest="voice_action", required=True)

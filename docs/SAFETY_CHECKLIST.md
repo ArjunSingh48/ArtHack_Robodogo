@@ -26,9 +26,17 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] Photo consent and send confirmation are given by a person, not by the software (§7 of docs/PERFORMANCE.md).
 - [ ] `/cancel` (or `q`) ends the performance and issues a software stop — still **not** an e-stop.
 
+### Walking to the participant (`itu show --walk`)
+- [ ] Tested first with nobody near: `itu show walk-test --sim`, then `--calibrate`, then a real `walk-test`.
+- [ ] Clear floor between the robot's start and the chair; no bags, cables, children's feet.
+- [ ] The person who holds the remote stands where they can see the robot AND the participant.
+- [ ] The participant is seated/standing still before Ready is pressed; tell them the robot will come.
+- [ ] Anything unexpected: physical stop first, then End / `/cancel` (stops the walk, software stop).
+
 ## During the show
 - [ ] Operator arms with `/arm` only when the area is clear and they are watching.
-- [ ] Visitors interact from the edge of the marked area; the robot never walks (no `Move` in the code).
+- [ ] Visitors interact from the edge of the marked area. The robot walks ONLY in the show's `--walk` mode
+      (camera-guided approach, below); everywhere else it never translates.
 - [ ] Any unexpected behavior → physical stop first, then `/disarm`.
 - [ ] After any failure, the guard disarms automatically; investigate before `/arm` again.
 

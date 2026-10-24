@@ -70,7 +70,9 @@ def prompt_for(state: ShowState, director: StoryDirector, recipient: str) -> tup
     art = director.artifact
     if state is ShowState.READINESS:
         title = html.escape(art.title) if art else "the picture"
-        return (f"🎭 Pose session — <i>{title}</i>.\nWhen the participant says they are ready:",
+        place = html.escape(art.interactive.placement()) if art and art.interactive else ""
+        return (f"🎭 Pose session — <i>{title}</i>.\n" + (f"🐕 {place}\n" if place else "")
+                + "When the participant says they are ready:",
                 _kb([[("✓ Ready (/capture)", callback_data(Cmd.READY, sid)),
                       ("✗ Declines", callback_data(Cmd.DECLINE, sid))]]))
     if state is ShowState.CONSENT:

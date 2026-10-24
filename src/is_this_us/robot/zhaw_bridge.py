@@ -10,7 +10,11 @@ process ever talks to the robot. Protocol checked against go2_main commit 6bca98
 What the bridge does NOT offer (so we disable it): `Euler` (our look_aside / peer poses),
 battery and error-code readings. The operator must watch the battery in the Unitree app.
 Only these bridge actions are ever sent: stand_up, stand_down, balance_stand, sit, hello,
-stretch, stop_move (+ the "stop" command). Never flips, jumps, dances, handstand, damp or move.
+stretch, stop_move (+ the "stop" command). Never flips, jumps, dances, handstand or damp.
+
+Walking (`move`) is used ONLY by the show's camera-guided approach, through `walk()`, which
+clamps every velocity to slow limits. The bridge zeroes velocity by itself if no new `move`
+arrives within its heartbeat timeout, and keeps its obstacle avoidance on by default.
 """
 
 from __future__ import annotations
@@ -37,6 +41,15 @@ STEP_TO_ACTION = {
 ALLOWED_ACTIONS = frozenset(STEP_TO_ACTION.values()) | {"stop_move"}
 UNSUPPORTED_BEHAVIORS = frozenset({RobotBehavior.LOOK_ASIDE, RobotBehavior.PEER})  # need Euler
 
+# Hard limits for walk(): slow, short steps near people. m/s and rad/s.
+MAX_VX, MAX_VY, MAX_VYAW = 0.3, 0.15, 0.6
+
+
+def clamp_velocity(vx: float, vy: float, vyaw: float) -> tuple[float, float, float]:
+    def c(v, m):
+        return max(-m, min(m, float(v)))
+    return c(vx, MAX_VX), c(vy, MAX_VY), c(vyaw, MAX_VYAW)
+
 
 class BridgeError(RuntimeError):
     pass
@@ -58,6 +71,8 @@ class ZhawBridgeAdapter:
         self._connected = False
         self._last_status: dict = {}
         self.sent: list[dict] = []
+        self._walking = False
+        self.can_walk = True
 
     # ------------------------------------------------------------------ transport
     def _new_socket(self):
@@ -72,12 +87,14 @@ class ZhawBridgeAdapter:
         self._sock.connect(self.endpoint)
 
     def request(self, cmd: str, params: dict | None = None) -> dict:
-        import zmq
-
         if cmd == "action" and (params or {}).get("name") not in ALLOWED_ACTIONS:
             raise PermissionError(f"bridge action {(params or {}).get('name')!r} is not in the approved vocabulary")
-        if cmd not in {"action", "stop", "status", "list_actions"}:
+        if cmd == "move" and not self._walking:
+            raise PermissionError("'move' is only sent through walk() (velocity-clamped)")
+        if cmd not in {"action", "stop", "status", "list_actions", "move"}:
             raise PermissionError(f"bridge command {cmd!r} is not used by this installation")
+        import zmq  # after the permission checks: refusing never needs the transport
+
         msg = {"cmd": cmd, **({"params": params} if params else {})}
         with self._lock:
             if self._sock is None:
@@ -154,6 +171,24 @@ class ZhawBridgeAdapter:
             self.body = st.body
         return ExecutionResult(behavior=behavior, status=ExecutionStatus.SUCCESS,
                                detail=" → ".join(done) or "nothing to do", duration_s=time.monotonic() - start)
+
+    def walk(self, vx: float, vy: float, vyaw: float) -> None:
+        """One velocity command (body frame: vx forward, vy left, vyaw counter-clockwise), clamped."""
+        vx, vy, vyaw = clamp_velocity(vx, vy, vyaw)
+        self._walking = True
+        try:
+            resp = self.request("move", {"vx": round(vx, 3), "vy": round(vy, 3), "vyaw": round(vyaw, 3)})
+        finally:
+            self._walking = False
+        if not resp.get("ok"):
+            raise BridgeError(f"move refused: {resp.get('msg')}")
+
+    def halt(self) -> None:
+        """Zero velocity now."""
+        try:
+            self.request("stop")
+        except Exception:  # pragma: no cover
+            log.exception("bridge halt failed")
 
     def stop(self) -> None:
         """Software stop: cancel our sequence, zero velocity, StopMove. NOT an emergency stop."""

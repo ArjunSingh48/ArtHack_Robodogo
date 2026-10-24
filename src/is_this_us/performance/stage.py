@@ -169,7 +169,7 @@ font:13px system-ui,sans-serif;z-index:5}
 #controls button.main{background:var(--accent);color:#1f1d21;border-color:var(--accent);font-weight:600}
 #controls button.ask{border-color:var(--accent);color:var(--accent)}
 #state{color:var(--muted);align-self:center;margin-right:6px}
-#msg{position:fixed;top:6.5vh;right:2vw;color:var(--muted);font:12px system-ui,sans-serif}
+#msg{position:fixed;top:6.5vh;right:2vw;max-width:46vw;text-align:right;color:var(--accent);font:13px system-ui,sans-serif}
 </style></head><body>
 <div id="chapter"></div><div id="controls"></div><div id="msg"></div>
 <div id="stage"><div id="view"></div><div id="live"><img id="liveimg" alt="what the robot sees">
@@ -202,7 +202,8 @@ async function tick(){
    document.getElementById('liveimg').src='/live.jpg?v='+s.live.v;
    document.getElementById('checks').innerHTML=s.live.checks.map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
   else{document.body.classList.remove('live');lv.style.display='none';}
-  if(s.state!==lastState){controls(s.state);lastState=s.state}
+  if(s.state!==lastState){controls(s.state);lastState=s.state;
+   if(key&&s.note){document.getElementById('msg').textContent='🐕 '+s.note}}
  }catch(e){}
  setTimeout(tick,document.body.classList.contains('live')?150:350)}
 tick();
@@ -329,7 +330,7 @@ class WebStage:
 
     def status(self, state: str, detail: str = "") -> None:
         if state != "listening":
-            self._set(state=state)
+            self._set(state=state, note=detail)
 
     def live(self, jpeg: bytes | None, checks: list) -> None:
         """Newest camera view (or None to hide it). Kept in memory, replaced by the next frame."""

@@ -24,6 +24,10 @@
 #     priority          lower = preferred
 #     crop              optional [x0, y0, x1, y1] (0..1) of the figure, for the comparison read
 #     note              what the curator sees (shown in the composition's label)
+#     robot_spot        where the dog is in the picture AS THE VIEWER SEES IT (left | right | front) +
+#                       a note — the operator places the robot there by hand before the person poses.
+#                       `behavior` = the pose it takes there (only with show motion on + armed).
+#                       The robot never walks there by itself.
 
 artifacts:
   # ---------------------------------------------------------------- 2 · prehistory
@@ -139,6 +143,7 @@ artifacts:
       suggest: [hands_in_lap]
       priority: 1
       note: She sits, hands resting in her lap; the collie sits at her side.
+      robot_spot: {side: left, note: "Close beside the chair, facing the camera; the robot sits.", behavior: sit}
   met:437841:
     chapter: paintings
     subject: human_and_dog
@@ -154,6 +159,7 @@ artifacts:
       suggest: []
       priority: 2
       note: She sits and rests her tilted head on her hand; the dog lies near her feet.
+      robot_spot: {side: front, note: "Low, in front of the chair, a little to the left; the robot lies down.", behavior: lie_down}
   met:437173:
     chapter: paintings
     subject: human_and_dog
@@ -168,6 +174,7 @@ artifacts:
       suggest: [hand_out]
       priority: 1
       note: He stands, one hand resting on the dog's head.
+      robot_spot: {side: left, note: "Beside the person, within reach of their hand; the robot stands.", behavior: stand}
   met:435864:
     chapter: paintings
     subject: human_and_dog
@@ -182,6 +189,7 @@ artifacts:
       suggest: [arms_holding]
       priority: 2
       note: She stands holding the small dog close, her other hand open.
+      robot_spot: {side: right, note: "The painted dog is held — the robot cannot be. Put it close at the person's side; it sits.", behavior: sit}
 
   # ---------------------------------------------------------------- 5 · photography
   met:283102:
@@ -235,6 +243,7 @@ artifacts:
       suggest: [hand_out]
       priority: 3
       note: He sits with one hand resting on his bulldog's head.
+      robot_spot: {side: left, note: "Beside the chair, within reach of the person's hand; the robot stands.", behavior: stand}
 
   # ---------------------------------------------------------------- 6 · the internet
   # Memes are reference-only: the screen shows a typographic card and the source, not the image.

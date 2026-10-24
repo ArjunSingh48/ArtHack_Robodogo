@@ -43,6 +43,17 @@ class InteractiveSpec:
     priority: int = 9
     crop: tuple[float, float, float, float] | None = None
     note: str = ""
+    robot_side: str = ""  # where the dog is in the picture, as the viewer sees it: left | right | front
+    robot_note: str = ""  # how the operator places the robot for the photo
+    robot_behavior: str = ""  # the pose the robot takes there (RobotBehavior value), e.g. sit
+
+    def placement(self) -> str:
+        """One line for the operator: where to put the robot before the person poses."""
+        if not self.robot_side:
+            return ""
+        where = {"left": "on the LEFT of the person", "right": "on the RIGHT of the person",
+                 "front": "IN FRONT of the person, low"}.get(self.robot_side, self.robot_side)
+        return f"Place the robot {where} (as seen on the screen). {self.robot_note}".strip()
 
     @property
     def semantic_only(self) -> bool:
@@ -99,6 +110,9 @@ def _spec(raw: dict | None) -> InteractiveSpec | None:
         head_tilt=bool(raw.get("head_tilt", False)), suggest=tuple(raw.get("suggest") or ()),
         priority=int(raw.get("priority", 9)), crop=tuple(float(v) for v in crop) if crop else None,
         note=str(raw.get("note", "")).strip(),
+        robot_side=str((raw.get("robot_spot") or {}).get("side", "")).strip(),
+        robot_note=str((raw.get("robot_spot") or {}).get("note", "")).strip(),
+        robot_behavior=str((raw.get("robot_spot") or {}).get("behavior", "")).strip(),
     )
 
 
@@ -213,6 +227,13 @@ class PerformanceCatalog:
                 problems.append(f"{p} interactive.posture must be one of {POSTURES}")
             if not s.request:
                 problems.append(f"{p} interactive.request is empty")
+            if s.robot_side and s.robot_side not in ("left", "right", "front"):
+                problems.append(f"{p} interactive.robot_spot.side must be left, right or front")
+            if s.robot_behavior:
+                from ..domain import RobotBehavior
+
+                if s.robot_behavior not in {b.value for b in RobotBehavior}:
+                    problems.append(f"{p} interactive.robot_spot.behavior {s.robot_behavior!r} is not a RobotBehavior")
             if a.kind != "art":
                 problems.append(f"{p} only open-access artworks can be interactive")
             if s.crop is not None and not (len(s.crop) == 4 and 0 <= s.crop[0] < s.crop[2] <= 1

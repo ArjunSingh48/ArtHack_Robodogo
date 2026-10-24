@@ -79,6 +79,16 @@ class Settings(BaseSettings):
     show_photo_retention_minutes: int = 60  # participant photos + compositions are deleted after this
     show_output_dir: Path = Path("./data/runtime/performance")
     show_motion_enabled: bool = False  # robot cues in the script; still needs all motion gates + /arm
+    # Camera-guided walking to the participant (`itu show --walk`). Off by default.
+    show_walk_enabled: bool = False
+    show_walk_camera: str = "zhaw_bridge"  # the ROBOT's camera (it must see the person from the robot)
+    show_walk_speed: float = 0.22  # m/s, max (the adapter caps at 0.3)
+    show_walk_max_distance_m: float = 3.5
+    show_walk_hfov_deg: float = 90.0  # robot camera field of view
+    show_walk_k_sitting: float = 0.8  # distance calibration: `itu show walk-test --calibrate 2`
+    show_walk_k_standing: float = 1.1
+    show_walk_beside_m: float = 0.65  # how far beside the person it stops
+    show_walk_face: str = "person"  # at the end face: person | start
 
     # Talk mode (`itu talk`): live conversation with the dog via OpenAI Realtime
     talk_model: str = ""  # empty = OPENAI_REALTIME_MODEL
