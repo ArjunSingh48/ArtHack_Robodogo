@@ -1603,14 +1603,20 @@ class StoryDirector:
             nonlocal said
             said = await self._play_cue(ch, cue, cue.text)
 
-        if looking:
-            await self._with_live(eyes, lambda r: _checks(r, any_person=True), invite())
+        still = looking and getattr(eyes, "is_still", False)
+        if still:  # a sample / uploaded photo IS the pose: no invitation, no waiting
+            reading, frame = await self._read_pose(eyes)
+            await self._publish_live(frame, reading, _checks(reading, any_person=True))
+            reading = reading if reading is not None and reading.person_visible else None
         else:
-            await invite()
-        if said == "skip":
-            self._clear_live()
-            return "done"
-        reading = await self._wait_for_steady_pose(eyes) if looking else None
+            if looking:
+                await self._with_live(eyes, lambda r: _checks(r, any_person=True), invite())
+            else:
+                await invite()
+            if said == "skip":
+                self._clear_live()
+                return "done"
+            reading = await self._wait_for_steady_pose(eyes) if looking else None
         if reading is None:
             self._clear_live()
             await self.say_line("round", "nobody")
