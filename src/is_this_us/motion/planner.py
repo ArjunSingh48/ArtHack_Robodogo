@@ -29,11 +29,17 @@ DEFAULT_ALLOWED = frozenset(RobotBehavior) - REQUIRES_APPROVAL
 class SafeMotionPlanner:
     """Implements the MotionPlanner role."""
 
-    def __init__(self, allowed: frozenset[RobotBehavior] = DEFAULT_ALLOWED):
-        self.allowed = set(allowed) | {RobotBehavior.STILLNESS}
+    def __init__(self, allowed: frozenset[RobotBehavior] = DEFAULT_ALLOWED,
+                 unavailable: frozenset[RobotBehavior] = frozenset()):
+        # `unavailable`: behaviors the connected robot interface cannot perform at all
+        self.unavailable = set(unavailable)
+        self.allowed = (set(allowed) | {RobotBehavior.STILLNESS}) - self.unavailable
 
-    def approve(self, behavior: RobotBehavior) -> None:
+    def approve(self, behavior: RobotBehavior) -> bool:
+        if behavior in self.unavailable:
+            return False
         self.allowed.add(behavior)
+        return True
 
     def revoke(self, behavior: RobotBehavior) -> None:
         if behavior is not RobotBehavior.STILLNESS:

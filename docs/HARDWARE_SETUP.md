@@ -3,6 +3,45 @@
 Status of the Go2 integration: **HARDWARE-UNVERIFIED** until these steps pass on your unit.
 Follow `SAFETY_CHECKLIST.md` throughout.
 
+## Two ways to connect — use the ZHAW bridge in the lab
+
+| | **A. ZHAW bridge (recommended)** | B. Direct SDK |
+|---|---|---|
+| What | [zhaw-physical-ai/go2_main](https://github.com/zhaw-physical-ai/go2_main) runs `python -m go2_bridge`, which owns the robot connection; we talk to it over ZeroMQ | this project loads the Unitree SDK itself |
+| `.env` | `ROBOT_MODEL=zhaw_bridge`, `CAMERA_SOURCE=zhaw_bridge` | `ROBOT_MODEL=go2`, `CAMERA_SOURCE=unitree` |
+| Unitree SDK / CycloneDDS in our env | not needed | needed (Python 3.11 recommended) |
+| Battery / error code | not reported — watch the Unitree app | read and enforced by the guard |
+| `look_aside`, `peer` (Euler poses) | not available (robot stands instead) | available after `/approve` |
+| Known to work with your lab's robot | yes — it's the lab's own tooling | not yet verified |
+
+**Never run both at once**: only one program should command the robot.
+
+### Option A — step by step
+
+1. In the `go2_main` repo, follow its `INSTALL.md` (Python 3.11 venv, CycloneDDS, Unitree SDK, `pip install -r requirements_bridge.txt`).
+   Laptop Ethernet IP: `192.168.123.100` (from their INSTALL.md).
+2. Start the bridge (leave this terminal open):
+   ```bash
+   cd go2_main && source go2_py311/bin/activate
+   GO2_NETWORK_INTERFACE=<your ethernet interface> python -m go2_bridge
+   ```
+   Wait for `Go2 Bridge running — CMD port 5555, PUB port 5556`.
+3. In a second terminal, in this project:
+   ```bash
+   pip install -e ".[vision,bridge]"
+   ```
+   `.env`: `ROBOT_MODEL=zhaw_bridge` and `CAMERA_SOURCE=zhaw_bridge`.
+4. Read-only check (no motion): `itu robot-check --save-frame test_frame.jpg`
+   — should show ✓ bridge answers, ✓ bridge actions we need, ✓ bridge camera.
+5. Continue with step 4 below (`itu robot-test --sequence --i-have-physical-estop`); `look_aside` and `peer` are skipped.
+6. Talk mode through the bridge: `itu talk --robot zhaw_bridge --source zhaw_bridge --i-have-physical-estop`.
+
+Note: their bridge also exposes flips, jumps, dances, `damp` and walking (`move`). This project never sends
+those — the adapter refuses anything outside stand_up, stand_down, balance_stand, sit, hello, stretch, stop_move.
+Do **not** connect their MCP server to an LLM during the exhibition: it can trigger flips and walking.
+
+The rest of this page describes **Option B** (direct SDK).
+
 ## 0. What you need
 * Go2 (SDK access is expected on **EDU**; AIR/PRO may refuse SDK commands), charged battery.
 * Laptop with Ethernet (or USB-Ethernet adapter) + cable to the robot.

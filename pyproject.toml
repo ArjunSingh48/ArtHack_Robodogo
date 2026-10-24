@@ -23,6 +23,8 @@ dependencies = [
 [project.optional-dependencies]
 vision = ["mediapipe>=0.10.30", "opencv-python>=4.10"]
 voice = ["openai[realtime]>=3.37,<4"]
+talk = ["openai[realtime]>=3.37,<4", "sounddevice>=0.5"]
+bridge = ["pyzmq>=25"]  # ZHAW go2_main bridge connection
 dev = ["pytest>=8", "pytest-asyncio>=1.4"]
 # unitree_sdk2py is not on PyPI in a reliable form; install it from the official
 # GitHub repository (see docs/HARDWARE_SETUP.md).

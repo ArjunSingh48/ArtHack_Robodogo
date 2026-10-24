@@ -18,7 +18,8 @@ class AppMode(StrEnum):
 
 class RobotModel(StrEnum):
     MOCK = "mock"
-    GO2 = "go2"
+    GO2 = "go2"  # direct Unitree SDK2 (DDS) from this process
+    ZHAW_BRIDGE = "zhaw_bridge"  # via the ZHAW go2_main bridge (python -m go2_bridge)
 
 
 class Settings(BaseSettings):
@@ -35,6 +36,9 @@ class Settings(BaseSettings):
     min_battery_percent: int = 25
     go2_state_topic: str = "rt/sportmodestate"
     go2_lowstate_topic: str = "rt/lowstate"
+    zhaw_bridge_host: str = "localhost"
+    zhaw_bridge_cmd_port: int = 5555
+    zhaw_bridge_pub_port: int = 5556
 
     telegram_bot_token: str = ""
     telegram_operator_ids: Annotated[list[int], NoDecode] = Field(default_factory=list)
@@ -46,6 +50,16 @@ class Settings(BaseSettings):
     openai_realtime_model: str = "gpt-realtime-2.1"
     openai_realtime_voice: str = "marin"
     local_audio_playback: bool = False
+
+    # Talk mode (`itu talk`): live conversation with the dog via OpenAI Realtime
+    talk_model: str = ""  # empty = OPENAI_REALTIME_MODEL
+    talk_voice: str = ""  # empty = OPENAI_REALTIME_VOICE
+    talk_half_duplex: bool = True  # true for an open speaker; false only with headset / echo-cancelling speakerphone
+    talk_idle_seconds: float = 45
+    talk_max_session_seconds: float = 300
+    talk_input_device: str = ""  # sounddevice name or index; empty = system default
+    talk_output_device: str = ""
+    story_path: Path = Path("./data/persona/story.md")
 
     camera_source: str = "webcam"
     pose_model_path: Path = Path("./models/pose_landmarker_lite.task")
@@ -85,7 +99,7 @@ class Settings(BaseSettings):
         """
         return (
             self.app_mode is AppMode.INSTALLATION
-            and self.robot_model is RobotModel.GO2
+            and self.robot_model in (RobotModel.GO2, RobotModel.ZHAW_BRIDGE)
             and self.robot_motion_enabled
         )
 

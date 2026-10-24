@@ -7,12 +7,16 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] Exhibition area marked on the floor (≥ 1.5 m clear radius around the robot); barrier or rope if children attend.
 - [ ] Floor flat, dry, non-slip; no cables in the robot's footprint.
 - [ ] Battery ≥ `MIN_BATTERY_PERCENT` (default 25 %). Spare battery charged.
-- [ ] `itu robot-check` shows fresh state, error code 0, battery reading.
+- [ ] `itu robot-check` shows fresh state, error code 0, battery reading (direct SDK), or ✓ bridge answers / actions / camera (ZHAW bridge).
+- [ ] ZHAW bridge: battery is not reported — check it in the Unitree app before and during the show. Their MCP server stays off.
 - [ ] Each behavior tested once with `itu robot-test <behavior> --i-have-physical-estop` with nobody inside the area.
 - [ ] Camera-notice sign visible at the entrance (posture only, no recording, no face recognition).
 - [ ] `.env`: `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOTION_ENABLED=true` only on show days.
 - [ ] `look_aside` and `peer` tested once each (direction noted) before any `/approve`. Leave them off if unsure.
 - [ ] If an imitation camera is used: it watches the robot area only; visitors are told photos happen only on request.
+
+- [ ] Talk mode: microphone sign visible ("your voice is sent to OpenAI to answer you; nothing is recorded here").
+- [ ] Talk mode with the real robot: `itu talk --robot go2 … --i-have-physical-estop`; the operator stays by the robot.
 
 ## During the show
 - [ ] Operator arms with `/arm` only when the area is clear and they are watching.
