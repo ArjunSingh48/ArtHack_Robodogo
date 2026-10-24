@@ -65,13 +65,13 @@ const msg = (t) => { $('msg').textContent = t || ''; };
 // ---------------------------------------------------------------- the screen
 const art = (id) => show.art[id];
 const label = (a) => `<div class="label"><i>${a.title}</i>${a.artist}${a.date ? ', ' + a.date : ''}<br><span>${a.museum} · ${a.rights}</span></div>`;
-function screen(kind, x) {
+function screen(kind, x, heading) {
   const v = $('view');
   if (kind === 'title') v.innerHTML = `<div class="title">Is this us?</div>`;
   else if (kind === 'blank') v.innerHTML = '';
   else if (kind === 'art') { const a = art(x); v.innerHTML = a ? `<div class="figure"><img src="${a.image}" alt="">${label(a)}</div>` : ''; }
   else if (kind === 'memes') v.innerHTML = `<div class="memes">${show.memes.map((m) => `<img src="${art(m).image}" alt="">`).join('')}</div>`;
-  else if (kind === 'grid') v.innerHTML = `<div class="consider"><b>remembering…</b><div class="cgrid">${x.map((id) => `<img data-id="${id}" src="${art(id).image}" alt="">`).join('')}</div></div>`;
+  else if (kind === 'grid') v.innerHTML = `<div class="consider"><b>${heading || 'remembering…'}</b><div class="cgrid">${x.map((id) => `<img data-id="${id}" src="${art(id).image}" alt="">`).join('')}</div></div>`;
   else if (kind === 'html') v.innerHTML = x;
 }
 function showCue(s) {
@@ -241,7 +241,8 @@ function choosePicture(era, group) {
 }
 function fitSample(era) {  // sample photos: the unused person whose pose fits this era's pictures best
   if (used.size >= show.samples.length) used.clear();
-  const fit = (i) => Math.max(0, ...show.eras[era].map((id) => score(art(id), POSE_GROUP[show.samples[i].posture]))) - (used.has(i) ? 100 : 0);
+  const fit = (i) => Math.max(0, ...show.eras[era].map((id) => score(art(id), POSE_GROUP[show.samples[i].posture])))
+    - (used.has(i) ? 100 : 0) - (show.samples[i].posture ? 0 : 50);  // a pose that cannot be read: last resort
   const sc = show.samples.map((_, i) => fit(i)), top = Math.max(...sc);
   sample = pick(sc.map((s, i) => [s, i]).filter(([s]) => s === top).map(([, i]) => i)); used.add(sample);
   readNow();
@@ -288,9 +289,10 @@ function meme(img, group) {
     im.src = img;
   });
 }
-async function round(cue, g) {
+async function round(cue, g, title) {
   const era = cue.target;
   state = 'readiness'; controls(state);
+  if (show.eras[era].length) screen('grid', show.eras[era], title);  // the era's pictures stay up while posing
   let r;
   if (source === 'photos') { fitSample(era); r = reading; checks(); }  // the sample photo IS the pose
   else {
@@ -370,7 +372,7 @@ async function run(from) {
         showCue(cue.show);
         if (cue.kind === 'consent') continue;  // decided on the start screen
         if (cue.kind === 'pause') await sleep(cue.seconds * 1000, g);
-        else if (cue.kind === 'round') await round(cue, g);
+        else if (cue.kind === 'round') await round(cue, g, ch.title);
         else if (cue.kind === 'rescue') await rescue(cue, g);
         else if (cue.text) await say(cue.text, cue.audio, g);
       }
