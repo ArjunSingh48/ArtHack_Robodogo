@@ -206,7 +206,9 @@ def compare(artifact: ShowArtifact, now: PoseReading | None, painted: PoseReadin
                           note="The camera could not read the pose, so no comparison was made.")
     shared, different = [], []
     who = "the dog" if spec.semantic_only else "the figure"
-    if posture_ok(spec.posture, now.posture):
+    if spec.posture not in ("sitting", "standing"):
+        pass  # the curators did not record a comparable posture for this picture
+    elif posture_ok(spec.posture, now.posture):
         shared.append(POSTURE_WORD.get(spec.posture, spec.posture))
     else:
         different.append(f"{who} {POSTURE_WORD.get(spec.posture, spec.posture)}, you {POSTURE_WORD.get(now.posture, now.posture)}")

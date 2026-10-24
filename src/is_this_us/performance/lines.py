@@ -14,10 +14,18 @@ REQUIRED = {
     "compare": ("shared", "differ", "okay", "understand"),
     "delivery": ("ask_send", "sent", "not_sent", "failed", "caption"),
     "decline": ("ok",),
-    "invite": ("practised", "robot_pose"),
+    "invite": ("practised", "robot_pose", "found_like"),
     "approach": ("ask", "arrived", "not_found", "home"),
+    "encounter": ("invite", "found", "goodboy", "goodboy_after"),
+    "telegram_caption": ("painting", "meme"),
     "conversation": ("opening", "closing"),
+    "presentation_consent": ("thanks", "declined"),
+    "round": ("waiting", "nobody", "thinking", "found", "hold", "photo", "sent", "shown", "no_photo", "meme_found",
+              "meme_no_photo"),
+    "rescue": ("nobody", "alarm", "coming", "arrived", "wake", "stay", "saved"),
+    "meme_phrases": ("wow", "any", "standing", "sitting", "kneeling", "lying"),
 }
+WRITTEN = ("telegram_caption", "meme_phrases")  # sections that are shown/sent, never spoken
 
 
 class Lines:
@@ -45,6 +53,14 @@ class Lines:
     def text(self, section: str, key: str) -> str:
         return self.variants(section, key)[0]
 
+    def captions(self) -> dict[str, list[str]]:
+        """Telegram image captions (written, never spoken)."""
+        return {k: self.variants("telegram_caption", k) for k in ("painting", "meme")}
+
+    def caption(self, key: str) -> str:
+        """One written caption for an image the robot made (together | rescue | meme | painting)."""
+        return self.pick("telegram_caption", key)
+
     def keys(self, section: str) -> set[str]:
         return set((self.data.get(section) or {}).keys())
 
@@ -53,8 +69,8 @@ class Lines:
         out = []
         for section, entries in self.data.items():
             for key, v in (entries or {}).items():
-                if section == "delivery" and key == "caption":
-                    continue  # written, not spoken
+                if section in WRITTEN or (section == "delivery" and key == "caption"):
+                    continue  # written, never spoken (docs/UX.md: spoken lines and captions stay separate)
                 for i, text in enumerate([v] if isinstance(v, str) else v):
                     out.append((f"{section}.{key}.{i + 1}", text))
         return out

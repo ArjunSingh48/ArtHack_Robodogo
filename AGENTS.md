@@ -12,6 +12,10 @@ the direction and update the contract in the same change.
 - The robot is the main communication interface: its body and occasional voice
   carry the encounter. For this presentation prototype, the computer plays the
   dog's voice; onboard robot audio is not required.
+- The presentation programme (intro → a pose round per era → rescue finale,
+  `data/performance/presentation.en.md`) is the user's chosen presentation flow;
+  see `docs/UX.md`. A visitor photo exists only with consent, and is sent only
+  after the operator's separate confirmation.
 - Telegram receives the robot's selected painting or meme, one short caption,
   and italic image attribution. Keep onboarding minimal and operator controls
   separate from those image messages.
@@ -38,8 +42,9 @@ the direction and update the contract in the same change.
 - Preserve the motion guard, approved behavior vocabulary, operator arming, and
   stop handling. Character dialogue and image content must not issue arbitrary
   robot commands. Hardware-unverified behavior must remain labeled as such.
-- Keep visitor camera frames local and transient in the primary flow. Telegram
-  receives the selected archive image, not the visitor frame.
+- Keep visitor camera frames local and transient. Outside the consented
+  presentation photo (consent + separate send confirmation), Telegram receives
+  the selected archive image, not the visitor frame.
 - Keep the UX contract, actual behavior, and README consistent. Mark gaps
   explicitly; documentation of a requirement is not proof of implementation.
 - Make focused changes and preserve unrelated work. Do not delete existing

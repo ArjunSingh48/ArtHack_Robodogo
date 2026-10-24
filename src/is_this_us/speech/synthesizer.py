@@ -9,7 +9,14 @@
   and the moment continues as text. The robot never says words it was not given, and
   nothing the voice model returns is ever used for anything but playback.
 * Audio (24 kHz PCM16 mono) is cached as WAV by a hash of (text, voice, model,
-  direction) to avoid repeat API calls; Telegram voice notes are OGG/Opus via FFmpeg.
+  direction/instructions, voice preset) to avoid repeat API calls; Telegram voice notes
+  are OGG/Opus via FFmpeg.
+* Voice character (``speech/character.py``, ``VOICE_PRESET``): the preset's delivery text
+  goes into the session instructions (the only style control Realtime has — no SSML, no
+  extra parameters), and the RAW model audio is post-processed locally (``speech/fx.py``).
+  Raw and processed audio are cached separately (``<cache>/<key>.wav`` and
+  ``<cache>/fx/<key>.<fx-hash>.wav``): changing only FX parameters re-processes cached raw
+  audio without a new API call. If processing fails, the raw audio is used.
 * Any failure (no key, invalid key, rate limit, network, timeout) degrades to
   text-only; the installation never stops because the voice is unavailable.
 """
@@ -31,6 +38,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Protocol
 
+from .character import CHARACTER_RULES, VoicePreset, resolve_preset, scene_direction, voice_for
+
 log = logging.getLogger(__name__)
 
 SAMPLE_RATE = 24_000  # Realtime "audio/pcm" output: 24 kHz, mono, signed 16-bit little-endian
@@ -49,6 +58,18 @@ VOICE_DIRECTION = (
 PERFORMANCE_DIRECTION = (
     " This is a theatrical narration. Each line break is a short natural pause; leave a longer, "
     "thoughtful pause at every '…'. Delivery for this passage: {direction}."
+)
+# With a voice preset (VOICE_PRESET != off): the reader rules stay, the voice becomes the character.
+CHARACTER_READER_DIRECTION = (
+    "You are the voice of a small robot dog in an art installation. You are a reader, not a conversation "
+    "partner. Read the user's text aloud EXACTLY as written, word for word, in {language}. Do not answer it, "
+    "comment on it, translate it, greet, or add anything before or after.\n"
+    "{character}\n{rules}\nTake a short breath at every '…'."
+)
+CHARACTER_SCENE_DIRECTION = (
+    "\nThis is a theatrical narration. Each line break is a short natural pause; leave a longer, thoughtful "
+    "pause at every '…'. Delivery for this passage: {direction}. Only the emotion changes with the scene — "
+    "the voice, its size and its character stay exactly the same."
 )
 
 
@@ -136,8 +157,11 @@ class VoiceRejected(RuntimeError):
 
 class OpenAIRealtimeSynthesizer:
     def __init__(self, api_key: str, model: str, voice: str, cache: AudioCache, *,
-                 timeout_s: float = 25.0, fidelity: float = 0.8, client=None, voice_notes: bool = True):
+                 timeout_s: float = 25.0, fidelity: float = 0.8, client=None, voice_notes: bool = True,
+                 character: VoicePreset | None = None):
         self.voice_notes = voice_notes  # also make an OGG/Opus copy for Telegram
+        # None / preset "off" = the previous voice (old instructions, no processing)
+        self.character = character if character is not None and not character.is_off else None
         self.model = model
         self.voice = voice
         self.cache = cache
@@ -156,22 +180,92 @@ class OpenAIRealtimeSynthesizer:
         # a fresh client per utterance: each phrase runs in its own short event loop
         return get_settings().openai_client()
 
-    @staticmethod
-    def instructions_for(lang: str, direction: str = "") -> str:
-        text = VOICE_DIRECTION.format(language=LANGUAGE_NAMES.get(lang, "English"))
-        if direction.strip():
-            text += PERFORMANCE_DIRECTION.format(direction=direction.strip())
+    def instructions_for(self, lang: str, direction: str = "") -> str:
+        language = LANGUAGE_NAMES.get(lang, "English")
+        if self.character is None:
+            text = VOICE_DIRECTION.format(language=language)
+            if direction.strip():
+                text += PERFORMANCE_DIRECTION.format(direction=direction.strip())
+            return text
+        text = CHARACTER_READER_DIRECTION.format(language=language, character=self.character.character,
+                                                 rules=CHARACTER_RULES)
+        scene = scene_direction(direction)
+        if scene:
+            text += CHARACTER_SCENE_DIRECTION.format(direction=scene)
         return text
 
     def key_for(self, text: str, lang: str = "en", direction: str = "") -> str:
-        return AudioCache.key(text, self.voice, self.model,
-                              {"direction": self.instructions_for(lang, direction), "lang": lang})
+        extra = {"direction": self.instructions_for(lang, direction), "lang": lang}
+        if self.character is not None:
+            extra["preset"] = self.character.name
+            extra["preset_fp"] = self.character.fingerprint()
+        return AudioCache.key(text, self.voice, self.model, extra)
+
+    # ------------------------------------------------------------------ processed (character) audio
+    @property
+    def fx(self):
+        """Active FX parameters, or None when nothing is processed."""
+        if self.character is None or self.character.fx.is_identity():
+            return None
+        return self.character.fx
+
+    def processed_paths(self, key: str) -> tuple[Path, Path]:
+        from .fx import fx_key
+
+        d = self.cache.dir / "fx"
+        stem = f"{key}.{fx_key(self.fx)}"
+        return d / f"{stem}.wav", d / f"{stem}.ogg"
+
+    def paths_for(self, text: str, lang: str = "en", direction: str = "") -> list[Path]:
+        """Every file belonging to this utterance under the CURRENT settings (for prune)."""
+        key = self.key_for(text, lang, direction)
+        out = list(self.cache.paths(key))
+        if self.fx is not None:
+            out += list(self.processed_paths(key))
+        return out
+
+    def _process(self, raw: Path, key: str) -> Path:
+        """Raw → character audio (cached). Falls back to the raw clip if processing fails."""
+        if self.fx is None:
+            return raw
+        out, _ = self.processed_paths(key)
+        if out.exists():
+            return out
+        from .fx import process_file
+
+        res = process_file(raw, out, self.fx, seed=key)
+        return res.path if res else raw
 
     def cached(self, text: str, lang: str = "en", direction: str = "") -> Path | None:
-        wav, _ = self.cache.paths(self.key_for(text, lang, direction))
+        """Ready-to-play clip under the current settings (pure lookup, no processing)."""
+        key = self.key_for(text, lang, direction)
+        wav, _ = self.cache.paths(key)
+        if self.fx is not None:
+            out, _ = self.processed_paths(key)
+            return out if out.exists() else None
         return wav if wav.exists() else None
 
-    def _result(self, wav: Path, ogg: Path, cached: bool) -> SpeechAudio:
+    def process_cached(self, text: str, lang: str = "en", direction: str = "") -> Path | None:
+        """If the RAW clip exists, make (or reuse) the processed one — local, no API call."""
+        key = self.key_for(text, lang, direction)
+        wav, _ = self.cache.paths(key)
+        return self._process(wav, key) if wav.exists() else None
+
+    def forget(self, text: str, lang: str = "en", direction: str = "") -> None:
+        """Delete raw + processed audio for this utterance (forces a fresh take)."""
+        key = self.key_for(text, lang, direction)
+        for p in self.cache.paths(key):
+            p.unlink(missing_ok=True)
+        fx_dir = self.cache.dir / "fx"
+        if fx_dir.exists():
+            for p in fx_dir.glob(f"{key}.*"):
+                p.unlink(missing_ok=True)
+
+    def _result(self, wav: Path, ogg: Path, cached: bool, key: str | None = None) -> SpeechAudio:
+        if key is not None and self.fx is not None:
+            final = self._process(wav, key)
+            if final != wav:
+                wav, ogg = final, final.with_suffix(".ogg")
         return SpeechAudio(wav, to_telegram_voice(wav, ogg) if self.voice_notes else None, cached=cached,
                            provider="openai-realtime")
 
@@ -208,14 +302,15 @@ class OpenAIRealtimeSynthesizer:
     def synthesize(self, text: str, lang: str = "en", direction: str = "") -> SpeechAudio | None:
         if not text.strip():
             return None
-        wav, ogg = self.cache.paths(self.key_for(text, lang, direction))
+        key = self.key_for(text, lang, direction)
+        wav, ogg = self.cache.paths(key)
         if wav.exists():  # cached audio plays even offline / after a credential failure
-            return self._result(wav, ogg, cached=True)
+            return self._result(wav, ogg, cached=True, key=key)
         if not self.available:
             return None
         with self._lock:
             if wav.exists():  # made by another thread meanwhile
-                return self._result(wav, ogg, cached=True)
+                return self._result(wav, ogg, cached=True, key=key)
             for attempt in range(2):
                 try:
                     audio, said = asyncio.run(asyncio.wait_for(self._speak(text, lang, direction), self.timeout_s))
@@ -250,7 +345,7 @@ class OpenAIRealtimeSynthesizer:
             else:
                 return None
         write_wav(wav, audio)
-        return self._result(wav, ogg, cached=False)
+        return self._result(wav, ogg, cached=False, key=key)
 
 
 class RealtimeError(RuntimeError):
@@ -317,8 +412,9 @@ class _NoCache(AudioCache):
 
     def __init__(self, directory: Path):
         super().__init__(directory)
-        for f in self.dir.glob("*"):
-            f.unlink(missing_ok=True)
+        for f in self.dir.rglob("*"):
+            if f.is_file():
+                f.unlink(missing_ok=True)
 
 
 def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesizer:
@@ -330,7 +426,8 @@ def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesize
     else:
         cache = AudioCache(directory)
     model = settings.openai_realtime_model if purpose == "dialogue" else settings.openai_narration_model
-    voice = getattr(settings, "primary_voice", None) or settings.openai_realtime_voice
+    character = resolve_preset(settings)  # VOICE_PRESET (+ overrides); "off" = previous voice
+    voice = voice_for(settings, character) or settings.openai_realtime_voice
     if settings.voice_configured:
         try:
             import openai  # noqa: F401
@@ -339,9 +436,9 @@ def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesize
             log.warning("AZURE_OPENAI_API_KEY set but the SDK is missing: pip install -e '.[voice]'. Text-only for now.")
             return NullSynthesizer()
         return OpenAIRealtimeSynthesizer(settings.azure_openai_api_key, model, voice, cache,
-                                         voice_notes=(purpose == "dialogue"))
+                                         voice_notes=(purpose == "dialogue"), character=character)
     if purpose != "dialogue":
         # no key (or provider=none): previously generated cues still play offline
-        return OpenAIRealtimeSynthesizer("", model, voice, cache, voice_notes=False)
+        return OpenAIRealtimeSynthesizer("", model, voice, cache, voice_notes=False, character=character)
     log.info("OpenAI voice not configured; text-only voice")
     return NullSynthesizer()

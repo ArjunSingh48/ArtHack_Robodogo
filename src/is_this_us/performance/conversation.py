@@ -53,9 +53,11 @@ details (names, contacts, where people live). If a visitor seems upset or afraid
 {story}"""
 
 
-def build_show_instructions(context: dict, *, language: str = "English", story: str = "") -> str:
+def build_show_instructions(context: dict, *, language: str = "English", story: str = "",
+                            voice_note: str = "") -> str:
+    """`voice_note`: the voice preset's session-level delivery text (speech/character.py)."""
     story_block = f"\nYOUR STORY (tell only this):\n{story.strip()}\n" if story.strip() else ""
-    return (SHOW_CHARACTER.format(language=language, story=story_block)
+    return (SHOW_CHARACTER.format(language=language, story=story_block) + voice_note
             + "\nWHAT IS HAPPENING NOW (verified facts, JSON):\n" + json.dumps(context, ensure_ascii=False))
 
 
@@ -298,12 +300,16 @@ class ConversationService:
 
     def __init__(self, *, enabled: bool, client_factory=None, audio_factory=None, stage=None,
                  live_model: str = "gpt-live-1", fallback_model: str = "gpt-realtime-2.1", voice: str = "marin",
-                 language: str = "English", story_path: Path | None = None):
+                 language: str = "English", story_path: Path | None = None, character=None):
+        """`character`: the active VoicePreset — its delivery text goes into the session instructions and,
+        unless `voice` is given explicitly by the caller, its base voice is the one used live. Live audio is
+        NOT pitch-processed (streamed in real time); see docs/VOICE.md."""
         self.enabled = enabled
         self.client_factory = client_factory
         self.audio_factory = audio_factory
         self.stage = stage
         self.live_model, self.fallback_model, self.voice = live_model, fallback_model, voice
+        self.character = character if character is not None and not getattr(character, "is_off", False) else None
         self.language = language
         self.story = ""
         if story_path and Path(story_path).exists():
@@ -316,7 +322,10 @@ class ConversationService:
     async def open(self, context: dict):
         if not self.enabled:
             return None
-        instructions = build_show_instructions(context, language=self.language, story=self.story)
+        from ..speech.character import live_character_note
+
+        instructions = build_show_instructions(context, language=self.language, story=self.story,
+                                               voice_note=live_character_note(self.character))
         try:
             client, audio = self.client_factory(), self.audio_factory()
         except Exception as exc:

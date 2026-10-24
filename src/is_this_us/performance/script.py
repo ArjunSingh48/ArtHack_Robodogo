@@ -13,6 +13,12 @@ from pathlib import Path
 
 CHAPTER_ORDER = ("last_dog", "prehistory", "middle_ages", "paintings", "photography", "internet",
                  "invitation", "present")
+# The presentation (beamer + robot): a short intro, one pose round per era, the rescue finale.
+PRESENTATION_ORDER = ("last_dog", "prehistory", "middle_ages", "paintings", "internet", "rescue")
+ROUND_ERAS = ("prehistory", "middle_ages", "paintings", "internet")
+PROGRAMMES = {"show": ("script", CHAPTER_ORDER), "presentation": ("presentation", PRESENTATION_ORDER)}
+ALL_CHAPTERS = tuple(dict.fromkeys(CHAPTER_ORDER + PRESENTATION_ORDER))
+ACTION_KINDS = ("try", "round", "consent", "rescue")  # cues that are more than speech
 BRANCHES = ("always", "together", "alone")
 SPECIAL_SHOWS = {"title", "blank", "memes", "composition", "chosen"}
 TRY_TARGETS = ("any", "standing", "sitting", "head_tilt")
@@ -30,14 +36,14 @@ class ScriptError(ValueError):
 class Cue:
     id: str  # "<chapter>.<nn>" — stable while the chapter's order is unchanged
     chapter: str
-    kind: str  # "speech" | "pause" | "try" (a small moment for the participant, inside the story)
+    kind: str  # "speech" | "pause" | "try" | "round" | "consent" | "rescue" (see the script's format notes)
     text: str = ""  # lines joined with "\n"
     seconds: float = 0.0  # pauses
     show: str | None = None  # display change when this cue starts
     motion: str | None = None  # optional robot behavior with this cue
     hold_after: bool = False  # guided mode: wait for the operator after this cue
     branch: str = "always"
-    target: str = ""  # try cues: any | standing | sitting | head_tilt
+    target: str = ""  # try cues: any | standing | sitting | head_tilt; round cues: the era
     yes: str = ""  # try cues: said when the camera sees it
     no: str = ""  # try cues: said when it doesn't (or nobody is there)
 
@@ -69,6 +75,11 @@ class Script:
     lang: str
     chapters: list[Chapter]
     source: Path | None = None
+    programme: str = "show"
+
+    @property
+    def is_presentation(self) -> bool:
+        return self.programme == "presentation"
 
     def chapter(self, cid: str) -> Chapter:
         for c in self.chapters:
@@ -88,9 +99,7 @@ class Script:
         out = []
         for ch in self.chapters:
             for c in ch.cues:
-                if c.kind == "speech":
-                    out.append(c)
-                elif c.kind == "try":
+                if c.kind == "speech" or c.kind in ACTION_KINDS:
                     out.append(c)
         return out
 
@@ -109,7 +118,7 @@ def _strip_comments(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text, flags=re.S)
 
 
-def parse_script(text: str, lang: str = "en", source: Path | None = None) -> Script:
+def parse_script(text: str, lang: str = "en", source: Path | None = None, programme: str = "show") -> Script:
     chapters: list[Chapter] = []
     cur: Chapter | None = None
     buf: list[str] = []
@@ -121,10 +130,11 @@ def parse_script(text: str, lang: str = "en", source: Path | None = None) -> Scr
         if not buf:
             return
         assert cur is not None
+        kind = next((k for k in ACTION_KINDS if k in pending), "speech")
         cur.cues.append(Cue(id=f"{cur.id}.{len(cur.cues) + 1:02d}", chapter=cur.id,
-                            kind="try" if "try" in pending else "speech", text="\n".join(buf),
+                            kind=kind, text="\n".join(buf),
                             show=pending.get("show"), motion=pending.get("motion"), branch=branch,
-                            target=pending.get("try", "")))
+                            target=pending.get("try", pending.get("round", ""))))
         buf, pending = [], {}
 
     for n, raw in enumerate(_strip_comments(text).splitlines(), 1):
@@ -166,6 +176,14 @@ def parse_script(text: str, lang: str = "en", source: Path | None = None) -> Scr
                 if value not in TRY_TARGETS:
                     raise ScriptError(f"line {n}: @try must be one of {TRY_TARGETS}")
                 pending["try"] = value
+            elif name == "round":
+                flush()
+                if value not in ROUND_ERAS:
+                    raise ScriptError(f"line {n}: @round must be one of {ROUND_ERAS}")
+                pending["round"] = value
+            elif name in ("consent", "rescue"):
+                flush()
+                pending[name] = True
             elif name in ("yes", "no"):
                 flush()
                 if not cur.cues or cur.cues[-1].kind != "try":
@@ -193,12 +211,16 @@ def parse_script(text: str, lang: str = "en", source: Path | None = None) -> Scr
             raise ScriptError(f"line {n}: stage directions must use @directives or [pause N]: {line}")
         buf.append(line)
     flush()
-    script = Script(lang=lang, chapters=chapters, source=source)
+    if pending:
+        raise ScriptError(f"directives {sorted(pending)} at the end have no line to say")
+    script = Script(lang=lang, chapters=chapters, source=source, programme=programme)
     validate_structure(script)
     return script
 
 
 def validate_structure(script: Script) -> None:
+    if script.is_presentation:
+        return validate_presentation(script)
     ids = [c.id for c in script.chapters]
     if tuple(ids) != CHAPTER_ORDER:
         raise ScriptError(f"chapters must be, in order: {', '.join(CHAPTER_ORDER)} (found: {', '.join(ids)})")
@@ -208,6 +230,8 @@ def validate_structure(script: Script) -> None:
         for c in ch.cues:
             if c.kind == "try" and not (c.text and c.yes and c.no):
                 raise ScriptError(f"{c.id}: a @try needs the request text, @yes and @no")
+            if c.kind in ("round", "consent", "rescue"):
+                raise ScriptError(f"{c.id}: @{c.kind} belongs to the presentation, not the narrated show")
     inter = [c for c in script.chapters if c.interactive]
     if [c.id for c in inter] != ["invitation"]:
         raise ScriptError("exactly the 'invitation' chapter must be @interactive")
@@ -219,16 +243,47 @@ def validate_structure(script: Script) -> None:
             raise ScriptError(f"chapter 'present' has no lines for the '{outcome}' ending")
 
 
-def script_path(data_dir: Path, lang: str) -> Path:
-    return Path(data_dir) / f"script.{lang}.md"
+def validate_presentation(script: Script) -> None:
+    ids = [c.id for c in script.chapters]
+    if tuple(ids) != PRESENTATION_ORDER:
+        raise ScriptError(f"presentation chapters must be, in order: {', '.join(PRESENTATION_ORDER)} "
+                          f"(found: {', '.join(ids)})")
+    for ch in script.chapters:
+        if not any(c.kind == "speech" for c in ch.cues):
+            raise ScriptError(f"chapter {ch.id} has no spoken lines")
+        kinds = [c.kind for c in ch.cues]
+        if ch.interactive:
+            raise ScriptError(f"{ch.id}: @interactive belongs to the narrated show")
+        rounds = [c for c in ch.cues if c.kind == "round"]
+        if ch.id in ROUND_ERAS:
+            if len(rounds) != 1 or rounds[0].target != ch.id:
+                raise ScriptError(f"chapter {ch.id} needs exactly one '@round: {ch.id}'")
+        elif rounds:
+            raise ScriptError(f"chapter {ch.id} cannot have a @round")
+        if kinds.count("consent") != (1 if ch.id == "last_dog" else 0):
+            raise ScriptError("the intro (last_dog) needs exactly one @consent, and no other chapter has one")
+        if kinds.count("rescue") != (1 if ch.id == "rescue" else 0):
+            raise ScriptError("the 'rescue' chapter needs exactly one @rescue, and no other chapter has one")
+        for c in ch.cues:
+            if c.kind in ACTION_KINDS and not c.text.strip():
+                raise ScriptError(f"{c.id}: @{c.kind} needs a line to say")
+            if c.kind == "try":
+                raise ScriptError(f"{c.id}: @try belongs to the narrated show; the presentation uses @round")
 
 
-def load_script(data_dir: Path, lang: str = "en") -> Script:
-    path = script_path(data_dir, lang)
+def script_path(data_dir: Path, lang: str, programme: str = "show") -> Path:
+    stem = PROGRAMMES.get(programme, PROGRAMMES["show"])[0]
+    return Path(data_dir) / f"{stem}.{lang}.md"
+
+
+def load_script(data_dir: Path, lang: str = "en", programme: str = "show") -> Script:
+    if programme not in PROGRAMMES:
+        raise ValueError(f"unknown programme {programme!r}; one of {', '.join(PROGRAMMES)}")
+    path = script_path(data_dir, lang, programme)
     if not path.exists():
-        fallback = script_path(data_dir, "en")
+        fallback = script_path(data_dir, "en", programme)
         if lang != "en" and fallback.exists():
             path, lang = fallback, "en"
         else:
             raise FileNotFoundError(path)
-    return parse_script(path.read_text(encoding="utf-8"), lang=lang, source=path)
+    return parse_script(path.read_text(encoding="utf-8"), lang=lang, source=path, programme=programme)

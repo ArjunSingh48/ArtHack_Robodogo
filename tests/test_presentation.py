@@ -1,0 +1,263 @@
+"""The presentation programme: intro (@consent) → a pose round per era → rescue finale."""
+
+from __future__ import annotations
+
+import asyncio
+import random
+from io import BytesIO
+from pathlib import Path
+
+import pytest
+from PIL import Image
+
+from is_this_us.artworks.repository import YamlArtworkRepository
+from is_this_us.memes.repository import MemeRepository
+from is_this_us.performance.catalog import PerformanceCatalog
+from is_this_us.performance.delivery import DeliveryResult, PhotoStore
+from is_this_us.performance.director import Cmd, ShowState, StoryDirector
+from is_this_us.performance.lines import Lines
+from is_this_us.performance.pose_session import PoseReader
+from is_this_us.performance.rounds import (behavior_for, candidates, human_pose, make_meme, meme_phrases,
+                                           pick_for_round, side_for)
+from is_this_us.performance.runtime import SyntheticParticipant
+from is_this_us.performance.script import PRESENTATION_ORDER, ROUND_ERAS, ScriptError, load_script, parse_script
+from is_this_us.performance.stage import RecordingStage
+from is_this_us.performance.voice import ShowVoice, Speaker, all_utterances
+from is_this_us.speech.synthesizer import NullSynthesizer
+
+ROOT = Path(__file__).resolve().parents[1]
+SHOW = ROOT / "data" / "performance"
+
+
+@pytest.fixture(scope="module")
+def pres():
+    return load_script(SHOW, "en", "presentation")
+
+
+@pytest.fixture(scope="module")
+def catalog():
+    return PerformanceCatalog(SHOW, YamlArtworkRepository(ROOT / "data" / "artworks"),
+                              MemeRepository(ROOT / "data" / "memes"))
+
+
+@pytest.fixture
+def lines():
+    return Lines.load(SHOW, "en", rng=random.Random(1))
+
+
+class Delivery:
+    name = "fake"
+
+    def __init__(self, ok=True):
+        self.ok, self.sent = ok, []
+
+    async def send(self, image, caption, session_id):
+        self.sent.append((Path(image), caption))
+        return DeliveryResult(self.ok, "sent" if self.ok else "boom")
+
+
+class FakeMotion:
+    enabled = True
+
+    def __init__(self):
+        self.done = []
+
+    def perform(self, name):
+        from is_this_us.domain import ExecutionStatus
+
+        self.done.append(name)
+
+        class R:
+            status = ExecutionStatus.SIMULATED
+            detail = ""
+        return R()
+
+    def request(self, name):
+        self.done.append(name)
+
+    def stop(self, reason):
+        pass
+
+
+def director(tmp_path, pres, catalog, lines, *, camera=True, delivery=None, **kw) -> StoryDirector:
+    stand_in = SyntheticParticipant("sitting", head_tilt_deg=14)
+    return StoryDirector(
+        script=pres, catalog=catalog, lines=lines,
+        voice=ShowVoice(NullSynthesizer(), NullSynthesizer(), Speaker(enabled=False), time_scale=0.0),
+        stage=RecordingStage(), store=PhotoStore(tmp_path / "out", retention_minutes=60),
+        pose_reader=PoseReader(stand_in) if camera else None,
+        frame_source_factory=(lambda: stand_in) if camera else None,
+        delivery=delivery if delivery is not None else Delivery(), mode="automatic", tick_s=0.005, hint_gap_s=0.0,
+        rng=random.Random(0), moment_hold_s=0.0, stable_s=0.02, round_hold_s=0.03, rescue_wait_s=0.3,
+        rescue_wake_s=0.05, flash_s=0.002, **kw)
+
+
+def answer(d, mapping, delay=0.01):
+    def on_state(director, st):
+        if st in mapping:
+            sid = director.session_id
+            asyncio.get_running_loop().call_later(delay, lambda: director.command(mapping[st], sid))
+    d.listeners.append(on_state)
+
+
+YES = {ShowState.CONSENT: Cmd.CONSENT_YES, ShowState.DELIVERY: Cmd.SEND_YES, ShowState.RESCUE: Cmd.READY}
+
+
+# ---------------------------------------------------------------- script
+def test_presentation_structure(pres):
+    assert tuple(c.id for c in pres.chapters) == PRESENTATION_ORDER
+    for era in ROUND_ERAS:
+        rounds = [c for c in pres.chapter(era).cues if c.kind == "round"]
+        assert len(rounds) == 1 and rounds[0].target == era and rounds[0].text
+    assert [c.kind for c in pres.chapter("last_dog").cues].count("consent") == 1
+    assert [c.kind for c in pres.chapter("rescue").cues].count("rescue") == 1
+    assert pres.chapter("rescue").cues[-1].text == "Is this us?"
+
+
+def test_presentation_validation_catches_a_missing_round(pres):
+    text = (SHOW / "presentation.en.md").read_text().replace("@round: middle_ages\n", "")
+    with pytest.raises(ScriptError, match="middle_ages"):
+        parse_script(text, programme="presentation")
+    with pytest.raises(ScriptError, match="presentation"):
+        parse_script((SHOW / "script.en.md").read_text() + "\n@round: prehistory\nPose!\n")
+
+
+def test_presentation_lines_are_pregenerated(pres, catalog, lines):
+    texts = {u.text for u in all_utterances(pres, catalog, lines)}
+    for era in ROUND_ERAS:
+        assert next(c for c in pres.chapter(era).cues if c.kind == "round").text in texts
+    assert lines.text("round", "found") in texts and lines.text("rescue", "wake") in texts
+    spoken = {t for _, t in lines.fixed_lines()}
+    assert not any(p in spoken for p in lines.variants("meme_phrases", "any"))  # written on the picture only
+    assert not lines.validate()
+
+
+# ---------------------------------------------------------------- picking
+def test_every_era_has_pictures_and_a_robot_pose(catalog):
+    from is_this_us.domain import RobotBehavior
+
+    for era in ("prehistory", "middle_ages", "paintings"):
+        cands = candidates(catalog, era)
+        assert len(cands) >= 3, era
+        for a in cands:
+            assert behavior_for(a, catalog.art_repo) in {b.value for b in RobotBehavior}
+            assert side_for(a, catalog.art_repo) in ("left", "right", "front")
+
+
+def test_pick_prefers_the_same_human_pose(catalog):
+    rng = random.Random(0)
+    for posture in ("sitting", "standing"):
+        pick = pick_for_round(catalog, "paintings", posture, rng=rng)
+        assert human_pose(pick.artifact, catalog.art_repo) == posture
+        assert posture in pick.why
+    assert pick_for_round(catalog, "internet", "sitting") is None  # memes are never sent as archive images
+
+
+# ---------------------------------------------------------------- the whole presentation
+async def test_full_presentation_with_consent_and_send(tmp_path, pres, catalog, lines):
+    delivery, motion = Delivery(), FakeMotion()
+    d = director(tmp_path, pres, catalog, lines, delivery=delivery, motion=motion)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED and res.outcome == "together"
+    assert [r["era"] for r in d.rounds] == ["prehistory", "middle_ages", "paintings", "internet", "rescue"]
+    assert all(r["photo"] and r["settled"] for r in d.rounds)
+    kinds = [r["sent"] for r in d.rounds]
+    assert kinds[:3] == [["painting", "together"]] * 3 and kinds[3] == ["meme"] and kinds[4] == ["rescue"]
+    assert len(delivery.sent) == 8
+    # captions: short line + italic credit (HTML); the archive ones carry the real attribution
+    for img, cap in delivery.sent:
+        assert "\n\n<i>" in cap and cap.endswith("</i>")
+    assert "Photo taken with consent" in delivery.sent[1][1]
+    # the robot echoed each painted dog, then the rescue: a paw, then sitting
+    assert motion.done[-2:] == ["greet", "sit"]
+    # the remembered pictures flashed by before each reveal
+    shows = d.stage.of("show")
+    assert shows.count("composition") >= 5
+    out = {p.name for p in (tmp_path / "out" / res.session_id).iterdir()}
+    assert {"prehistory.jpg", "middle_ages.jpg", "paintings.jpg", "internet.jpg", "rescue.jpg"} <= out
+
+
+async def test_no_consent_means_no_photo_at_all(tmp_path, pres, catalog, lines):
+    delivery = Delivery()
+    d = director(tmp_path, pres, catalog, lines, delivery=delivery)
+    answer(d, {ShowState.CONSENT: Cmd.CONSENT_NO, ShowState.RESCUE: Cmd.READY})
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED and res.outcome == "alone"
+    assert not any(r["photo"] for r in d.rounds)
+    assert [p.parent.name for p, _ in delivery.sent] == ["images"] * len(delivery.sent)  # archive pictures only
+    assert len(delivery.sent) == 3
+    assert not (tmp_path / "out" / res.session_id).exists() or not any((tmp_path / "out" / res.session_id).iterdir())
+
+
+async def test_consent_without_send_ok_keeps_photos_on_screen(tmp_path, pres, catalog, lines):
+    delivery = Delivery()
+    d = director(tmp_path, pres, catalog, lines, delivery=delivery)
+    answer(d, {ShowState.CONSENT: Cmd.CONSENT_YES, ShowState.DELIVERY: Cmd.SEND_NO, ShowState.RESCUE: Cmd.READY})
+    res = await d.run()
+    assert all(r["photo"] for r in d.rounds)
+    assert all(p.parent.name == "images" for p, _ in delivery.sent)  # visitor photos never left the computer
+    assert any("big screen only" in n for n in d.encounter_log)
+    assert res.outcome == "together"
+
+
+async def test_without_camera_the_rounds_still_show_pictures(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines, camera=False)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert [r["artifact"] is not None for r in d.rounds[:3]] == [True, True, True]
+    assert not any(r["photo"] for r in d.rounds)
+
+
+async def test_rounds_only_skips_narration(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines)
+    answer(d, YES)
+    await d.run(start_at="invitation")
+    subs = d.stage.of("subtitle")
+    assert "I have four legs. I can walk.\nSometimes I fall over." not in subs
+    assert len(d.rounds) == 5
+
+
+async def test_cancel_during_a_round_stops_everything(tmp_path, pres, catalog, lines):
+    motion = FakeMotion()
+    d = director(tmp_path, pres, catalog, lines, motion=motion)
+    answer(d, {**YES, ShowState.FINAL_POSE: Cmd.CANCEL})
+    res = await d.run()
+    assert res.final_state is ShowState.CANCELLED
+    assert not (tmp_path / "out" / res.session_id).exists()
+
+
+async def test_walking_round_goes_there_and_back(tmp_path, pres, catalog, lines):
+    from is_this_us.config import Settings
+    from is_this_us.performance.runtime import simulated_approacher
+
+    approacher = simulated_approacher(Settings(_env_file=None), fast=0.0)
+    d = director(tmp_path, pres, catalog, lines, motion=FakeMotion(), approacher=approacher)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert sum(w.startswith("approach: arrived") for w in d.walk_log) >= 4
+    assert sum(w == "home: done" for w in d.walk_log) == 4  # back after every round; stays with the rescued person
+
+
+def test_approach_keeps_distance_from_someone_lying(tmp_path):
+    from is_this_us.config import Settings
+    from is_this_us.performance.runtime import simulated_approacher
+
+    a = simulated_approacher(Settings(_env_file=None), fast=0.0, person=(2.6, 0.2))
+    a.world.posture = "lying"
+    res = a.approach(side="front", posture="lying")
+    assert res.arrived
+    assert a.world.min_distance >= a.s.lying_gap_m - 0.25
+
+
+# ---------------------------------------------------------------- pictures the robot makes
+def test_meme_is_drawn_on_the_photo(lines):
+    buf = BytesIO()
+    Image.new("RGB", (640, 480), (90, 90, 120)).save(buf, format="JPEG")
+    phrases = meme_phrases(lines, "sitting", random.Random(2))
+    assert phrases[-1] == "wow" and len(phrases) == 5
+    img = Image.open(BytesIO(make_meme(buf.getvalue(), phrases, seed=3)))
+    assert img.width == 1600 and img.height == 1200
+    assert len(img.convert("RGB").getcolors(maxcolors=1 << 20)) > 10  # text was drawn

@@ -83,7 +83,7 @@ def make_director(tmp_path, script, catalog, lines, *, mode="automatic", posture
                       store=PhotoStore(tmp_path / "out", retention_minutes=60), pose_reader=reader,
                       frame_source_factory=factory, delivery=delivery if delivery is not None else CountingDelivery(),
                       mode=mode, tick_s=0.005, hint_gap_s=0.0, rng=random.Random(0),
-                      **{"try_seconds": 0.05, "moment_hold_s": 0.0, "live_linger_s": 0.0, **kw})
+                      **{"try_seconds": 0.05, "moment_hold_s": 0.0, "live_linger_s": 0.0, "finale": "imitate", **kw})
     return d
 
 
@@ -614,7 +614,7 @@ async def test_telegram_delivery_requires_chat_and_handles_errors(tmp_path):
         def __init__(self, fail=False):
             self.fail, self.calls = fail, []
 
-        async def send_photo(self, chat_id, photo, caption=None):
+        async def send_photo(self, chat_id, photo, caption=None, **kw):
             self.calls.append(chat_id)
             if self.fail:
                 raise TelegramNetworkError(method=None, message="down")
@@ -692,7 +692,8 @@ def test_cli_dry_run_end_to_end(tmp_path, monkeypatch):
     monkeypatch.setenv("SHOW_OUTPUT_DIR", str(tmp_path / "perf"))
     get_settings.cache_clear()
     try:
-        cli.main(["show", "--dry-run", "--auto", "--fast", "0.002", "--no-voice", "--out", str(tmp_path / "r")])
+        cli.main(["show", "--programme", "show", "--dry-run", "--auto", "--fast", "0.002", "--no-voice",
+                  "--out", str(tmp_path / "r")])
     finally:
         get_settings.cache_clear()
     outs = list((tmp_path / "r").glob("*/is-this-us.jpg"))
@@ -836,7 +837,7 @@ async def test_telegram_show_interactive(tmp_path, script, catalog, lines):
 
 # ---------------------------------------------------------------- live camera view
 async def test_live_view_only_while_the_robot_is_looking(tmp_path, script, catalog, lines):
-    d = make_director(tmp_path, script, catalog, lines)
+    d = make_director(tmp_path, script, catalog, lines, live_always=False)
     answer(d, HAPPY)
     await d.run()
     live = [v for k, v in d.stage.events if k == "live"]
@@ -847,6 +848,21 @@ async def test_live_view_only_while_the_robot_is_looking(tmp_path, script, catal
     last_live = max(i for i, (k, v) in enumerate(ev) if k == "live" and v is True)
     assert last_live < first_comp
     assert any(k == "live" and v is False for k, v in ev[last_live:first_comp])
+
+
+async def test_live_view_can_stay_on_for_the_whole_show(tmp_path, script, catalog, lines):
+    from is_this_us.performance.voice import ShowVoice, Speaker
+    from is_this_us.speech.synthesizer import NullSynthesizer
+
+    voice = ShowVoice(NullSynthesizer(), NullSynthesizer(), Speaker(enabled=False), time_scale=0.004)
+    d = make_director(tmp_path, script, catalog, lines, live_always=True, voice=voice)
+    answer(d, HAPPY)
+    await d.run()
+    ev = d.stage.events
+    live_on = [i for i, (k, v) in enumerate(ev) if k == "live" and v]
+    first_chapter_change = [i for i, (k, v) in enumerate(ev) if k == "chapter"][1]
+    assert live_on and live_on[0] < first_chapter_change  # already up during the first chapter's narration
+    assert ev[[i for i, (k, _) in enumerate(ev) if k == "live"][-1]][1] is False  # hidden after the show
 
 
 def test_live_view_render_and_checks():
@@ -1139,3 +1155,145 @@ async def test_next_pressed_during_a_line_is_not_lost(tmp_path, script, catalog,
     d._inbox.append(Cmd.SEND_YES)
     d._set_state(ShowState.NARRATION)
     assert Cmd.SEND_YES not in d._inbox  # meaningless now: dropped
+
+
+# ---------------------------------------------------------------- the good boy encounter (finale, docs/UX.md)
+def enc_director(tmp_path, script, catalog, lines, *, motion=None, delivery=None, **kw):
+    kw.setdefault("finale", "encounter")
+    kw.setdefault("stable_s", 0.0)
+    kw.setdefault("final_hold_s", 0.2)
+    return make_director(tmp_path, script, catalog, lines, motion=motion, delivery=delivery, **kw)
+
+
+def mock_motion():
+    from is_this_us.motion.guard import MotionGuard
+    from is_this_us.motion.planner import SafeMotionPlanner
+    from is_this_us.performance.motion import MotionCues
+    from is_this_us.robot.mock import MockRobotAdapter
+
+    robot = MockRobotAdapter(time_scale=0.0)
+    robot.connect()
+    return MotionCues(MotionGuard(robot, hardware_gates_open=False, cooldown_s=0, timeout_s=5), SafeMotionPlanner(),
+                      enabled=True), robot
+
+
+async def test_encounter_is_the_default_finale_and_follows_the_contract(tmp_path, script, catalog, lines):
+    from is_this_us.performance.encounter import attribution
+
+    motion, robot = mock_motion()
+    delivery = CountingDelivery()
+    d = enc_director(tmp_path, script, catalog, lines, motion=motion, delivery=delivery)
+    answer(d, {ShowState.CONSENT: Cmd.CONSENT_YES})  # nobody presses Ready: it starts by itself
+    t0 = {}
+    d.listeners.append(lambda dd, st: t0.setdefault(st.value, dd.clock()))
+    res = await d.run(start_at="invitation")
+    assert res.final_state is ShowState.FINISHED and res.outcome == "together"
+    # one Telegram message: the ARCHIVE image (never the visitor's photo), short caption, italic credit
+    assert len(delivery.sent) == 1
+    image, text, _ = delivery.sent[0]
+    art = d.artifact
+    assert image == art.image_path and "now.jpg" not in str(image)
+    first, _, credit = text.partition("\n\n")
+    assert first in ("me and who?🥺", "us?👉👈")
+    assert credit.startswith("<i>") and credit.endswith("</i>") and art.title.split("(")[0].strip()[:20] in credit
+    assert attribution(art).startswith(art.artist)
+    # speech: short good-boy lines, the caption is never spoken
+    subs = d.stage.of("subtitle")
+    assert "Am I a good boy already?" in subs and "A really good boy now?" in subs
+    assert not any(c in s for s in subs for c in ("us?👉👈", "me and who?🥺"))
+    # the physical finale: the image's pose, then a hold measured after settling
+    assert robot.calls, "the robot took a pose"
+    assert any("final pose" in n and ("simulated" in n or "success" in n) for n in d.encounter_log)
+    held = [n for n in d.encounter_log if n.startswith("held the pose")]
+    assert held and float(held[0].split("for ")[1].split(" s")[0]) >= 0.2 - 0.01
+    states = [b for _, b in res.transitions]
+    assert states.index("sending") < states.index("final_pose") < states.index("composition")
+    assert "delivery" not in states  # no send-confirmation step for the archive image
+
+
+async def test_encounter_skip_ends_the_hold_and_cancel_stops(tmp_path, script, catalog, lines):
+    motion, robot = mock_motion()
+    d = enc_director(tmp_path, script, catalog, lines, motion=motion, final_hold_s=30.0, photo_in_encounter=False)
+
+    def on_state(director, st):
+        if st is ShowState.FINAL_POSE:
+            asyncio.get_running_loop().call_later(0.05, lambda: director.command(Cmd.SKIP))
+    d.listeners.append(on_state)
+    res = await asyncio.wait_for(d.run(start_at="invitation"), 10)
+    assert res.final_state is ShowState.FINISHED
+    assert "hold ended early by the operator" in d.encounter_log
+
+    motion2, robot2 = mock_motion()
+    d2 = enc_director(tmp_path, script, catalog, lines, motion=motion2, final_hold_s=30.0, photo_in_encounter=False)
+    d2.listeners.append(lambda dd, st: st is ShowState.FINAL_POSE and asyncio.get_running_loop().call_later(
+        0.05, lambda: dd.command(Cmd.CANCEL)))
+    res2 = await asyncio.wait_for(d2.run(start_at="invitation"), 10)
+    assert res2.final_state is ShowState.CANCELLED and "StopMove" in robot2.calls
+
+
+async def test_encounter_without_motion_does_not_claim_a_pose(tmp_path, script, catalog, lines):
+    d = enc_director(tmp_path, script, catalog, lines, photo_in_encounter=False)
+    res = await d.run(start_at="invitation")
+    assert res.final_state is ShowState.FINISHED
+    assert any("not performed" in n for n in d.encounter_log)
+    assert not any(n.startswith("held the pose") for n in d.encounter_log)
+
+
+async def test_encounter_without_camera_sends_nothing(tmp_path, script, catalog, lines):
+    delivery = CountingDelivery()
+    d = enc_director(tmp_path, script, catalog, lines, camera=None, delivery=delivery)
+    res = await d.run(start_at="invitation")
+    assert res.outcome == "alone" and delivery.sent == []
+    assert any("no camera" in n for n in d.encounter_log)
+
+
+async def test_encounter_delivery_failure_does_not_replay_motion(tmp_path, script, catalog, lines):
+    motion, robot = mock_motion()
+    d = enc_director(tmp_path, script, catalog, lines, motion=motion, delivery=CountingDelivery(ok=False),
+                     photo_in_encounter=False)
+    await d.run(start_at="invitation")
+    assert any(n.startswith("Telegram (archive image): boom") for n in d.encounter_log)
+    finals = [n for n in d.encounter_log if n.startswith("final pose")]
+    assert len(finals) == 1  # the pose happened once; delivery failure changes nothing
+
+
+async def test_encounter_only_sends_images_we_may_send(tmp_path, script, catalog, lines):
+    from is_this_us.performance.encounter import deliverable
+
+    assert not deliverable(catalog.get("meme:doge"))  # reference-only memes are never sent
+    for _ in range(3):
+        d = enc_director(tmp_path, script, catalog, lines, photo_in_encounter=False, delivery=CountingDelivery())
+        await d.run(start_at="invitation")
+        assert d.artifact.kind == "art" and deliverable(d.artifact)
+
+
+def test_caption_and_attribution_format(catalog):
+    import random as _r
+
+    from dataclasses import replace
+
+    from is_this_us.performance.encounter import telegram_message
+
+    art = replace(catalog.get("met:437966"), title="A <b>bold</b> & title", date="1897")
+    text = telegram_message(art, {"painting": ["us?👉👈"], "meme": ["hehe or not hehe?"]}, _r.Random(0))
+    assert text.startswith("us?👉👈\n\n<i>Anders Zorn — A &lt;b&gt;bold&lt;/b&gt; &amp; title, 1897.")
+    assert "Public Domain (The Met Open Access)." in text and text.endswith("</i>")
+    meme = replace(art, kind="meme")
+    assert telegram_message(meme, {"painting": ["x"], "meme": ["hehe or not hehe?"]}).startswith("hehe or not hehe?")
+
+
+def test_captions_are_written_never_spoken(lines):
+    spoken = {t for _, t in lines.fixed_lines()}
+    for c in lines.captions()["painting"] + lines.captions()["meme"]:
+        assert c not in spoken
+
+
+def test_stability_tracker_needs_a_held_pose():
+    from is_this_us.performance.encounter import StabilityTracker
+    from is_this_us.performance.pose_session import PoseReading
+
+    t = StabilityTracker(hold_s=2.0)
+    sit = PoseReading(True, "ok", "center", "sitting", None)
+    assert not t.update(sit, 0.0) and not t.update(sit, 1.0) and t.update(sit, 2.1)
+    assert not t.update(PoseReading(True, "ok", "center", "standing", None), 2.2)  # changed pose: restart
+    assert not t.update(PoseReading(False), 2.3)

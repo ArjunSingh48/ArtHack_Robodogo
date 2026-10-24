@@ -85,7 +85,9 @@ class ParticipantScript:
     def attach(self, director: StoryDirector) -> None:
         def on_state(d: StoryDirector, st: ShowState) -> None:
             cmd = None
-            if st is ShowState.READINESS:
+            if st is ShowState.RESCUE:
+                cmd = Cmd.READY if self.takes_part else Cmd.SKIP
+            elif st is ShowState.READINESS:
                 cmd = Cmd.READY if self.takes_part else Cmd.DECLINE
             elif st is ShowState.CONSENT:
                 cmd = Cmd.CONSENT_YES if self.consent else Cmd.CONSENT_NO
@@ -175,12 +177,42 @@ class ShowOptions:
     out_dir: Path | None = None
     seed: int | None = None
     walk: bool = False  # camera-guided walking to the participant
+    finale: str | None = None  # encounter | imitate (default SHOW_FINALE)
+    programme: str | None = None  # presentation | show (default SHOW_PROGRAMME)
+
+
+_WEB_STAGES: dict = {}
+
+
+def operator_key(settings: Settings) -> str:
+    """The operator page's key: SHOW_OPERATOR_KEY, else one kept in data/runtime/ (git-ignored) so a
+    bookmarked operator link keeps working after a restart."""
+    if settings.show_operator_key:
+        return settings.show_operator_key
+    import secrets
+
+    p = Path(settings.show_output_dir).parent / "operator_key"
+    try:
+        if p.exists() and p.read_text().strip():
+            return p.read_text().strip()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        key = secrets.token_urlsafe(9)
+        p.write_text(key)
+        p.chmod(0o600)
+        return key
+    except OSError:
+        return secrets.token_urlsafe(9)
 
 
 def build_stage(settings: Settings, display: str) -> tuple[Stage, WebStage | None]:
     term = TerminalStage(color=sys.stdout.isatty())
     if display == "web":
-        web = WebStage(settings.show_web_host, settings.show_web_port)
+        addr = (settings.show_web_host, settings.show_web_port)
+        web = _WEB_STAGES.get(addr) if settings.show_web_port else None
+        if web is None or getattr(web, "closed", False):  # one page server per address: a second /show reuses it instead of failing to bind
+            web = WebStage(settings.show_web_host, settings.show_web_port, key=operator_key(settings))
+            if settings.show_web_port:
+                _WEB_STAGES[addr] = web
         log.info("projector page: %s", web.url)
         print(f"Projector page: {web.url}")
         stage = MultiStage(term, web)
@@ -194,7 +226,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     from ..bot.app import build_estimator, build_library
 
     data_dir = Path(settings.show_data_dir)
-    script = load_script(data_dir, opts.lang)
+    script = load_script(data_dir, opts.lang, opts.programme or settings.show_programme)
     if art_repo is None or meme_repo is None:
         lib = build_library(settings)
         art_repo, meme_repo = lib.art, lib.memes
@@ -230,7 +262,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     if stage is None:
         stage, _ = build_stage(settings, opts.display or settings.show_display)
     if delivery is None and opts.dry_run:
-        delivery = PreviewDelivery()
+        delivery = PreviewDelivery(out_root)
 
     motion = MotionCues(guard, planner, enabled=bool(opts.motion and settings.show_motion_enabled and not opts.dry_run))
 
@@ -248,20 +280,35 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         conversation = ConversationService(
             enabled=True, client_factory=client_factory, audio_factory=audio_factory, stage=stage,
             live_model=settings.openai_live_model, fallback_model=settings.openai_realtime_model,
-            voice=settings.primary_voice, language=LANGUAGE_NAMES.get(script.lang, "English"),
+            voice=settings.character_voice, character=_preset(settings),
+            language=LANGUAGE_NAMES.get(script.lang, "English"),
             story_path=settings.story_path)
 
     approacher = build_approacher(settings, opts, guard, estimator)
 
-    return StoryDirector(
+    director = StoryDirector(
         approacher=approacher,
         script=script, catalog=catalog, lines=lines, voice=voice, stage=stage, store=store, pose_reader=reader,
         frame_source_factory=frame_factory, delivery=delivery, motion=motion, conversation=conversation,
         mode=opts.mode or settings.show_mode, pose_preference=settings.show_pose_preference,
         tick_s=0.8 * min(1.0, opts.fast) if opts.fast < 1 else 0.8,
         hint_gap_s=8.0 * opts.fast, try_seconds=12.0 * opts.fast,
-        moment_hold_s=1.5 * opts.fast, live_linger_s=2.0 * opts.fast, font_path=settings.card_font_path, rng=rng,
+        moment_hold_s=1.5 * opts.fast, live_linger_s=2.0 * opts.fast,
+        finale=opts.finale or settings.show_finale, stable_s=settings.show_stable_seconds * opts.fast,
+        final_hold_s=settings.show_final_hold_seconds * opts.fast, photo_in_encounter=settings.show_encounter_photo,
+        round_hold_s=settings.show_round_hold_seconds * opts.fast, rescue_wait_s=settings.show_rescue_wait_seconds * opts.fast,
+        rescue_wake_s=20.0 * opts.fast, flash_s=settings.show_montage_flash_seconds * opts.fast,
+        live_always=settings.show_live_always, font_path=settings.card_font_path, rng=rng,
         photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery))
+    web = getattr(stage, "web", None)
+    if web is not None:  # the operator page's buttons work however the show was started (CLI or Telegram)
+        try:
+            loop = asyncio.get_running_loop()
+            web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop)
+            print(f"Operator page (buttons): {web.control_url}")
+        except RuntimeError:
+            pass
+    return director
 
 
 def approach_settings(settings: Settings):
@@ -327,6 +374,12 @@ def build_approacher(settings: Settings, opts: "ShowOptions", guard, estimator=N
                       lambda: make_frame_source(settings.show_walk_camera,
                                                 network_interface=settings.robot_network_interface),
                       est, approach_settings(settings))
+
+
+def _preset(settings):
+    from ..speech.character import resolve_preset
+
+    return resolve_preset(settings)
 
 
 class _Silent:

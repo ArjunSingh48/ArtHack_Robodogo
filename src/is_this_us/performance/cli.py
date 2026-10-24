@@ -22,13 +22,13 @@ def audition_text(script) -> str:
 REALTIME_VOICES = ("alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar")
 
 
-def _parts(s, lang: str):
+def _parts(s, lang: str, programme: str | None = None):
     from ..bot.app import build_library
     from .catalog import PerformanceCatalog
     from .lines import Lines
     from .script import load_script
 
-    script = load_script(Path(s.show_data_dir), lang)
+    script = load_script(Path(s.show_data_dir), lang, programme or s.show_programme)
     lib = build_library(s)
     catalog = PerformanceCatalog(Path(s.show_data_dir), lib.art, lib.memes)
     lines = Lines.load(Path(s.show_data_dir), script.lang)
@@ -36,10 +36,30 @@ def _parts(s, lang: str):
 
 
 # ---------------------------------------------------------------------- validate / catalog
+def _print_rounds(script, catalog) -> None:
+    from .rounds import behavior_for, candidates, human_pose, side_for
+
+    print(f"presentation.{script.lang}.md: " + " → ".join(c.id for c in script.chapters))
+    for era in ("prehistory", "middle_ages", "paintings"):
+        cands = candidates(catalog, era)
+        poses = sorted({human_pose(a, catalog.art_repo) or "?" for a in cands})
+        print(f"  round {era:<12} {len(cands):>2} pictures; person poses: {', '.join(poses)}")
+        for a in cands:
+            print(f"      {a.id:<14} person {human_pose(a, catalog.art_repo) or '?':<9} robot "
+                  f"{behavior_for(a, catalog.art_repo):<9} {side_for(a, catalog.art_repo):<6} {a.title[:48]}")
+    print("  round internet     the robot makes its own meme from the consented photo")
+
+
 def cmd_validate(args) -> int:
     s = get_settings()
-    script, catalog, lines = _parts(s, args.lang)
-    problems = lines.validate() + catalog.validate(script, pose_lines=lines.keys("pose"))
+    problems_all = []
+    for programme in ("presentation", "show"):
+        script, catalog, lines = _parts(s, args.lang, programme)
+        problems_all += [f"[{programme}] {p}" for p in lines.validate() + catalog.validate(script, pose_lines=lines.keys("pose"))]
+        if programme == "presentation":
+            _print_rounds(script, catalog)
+    script, catalog, lines = _parts(s, args.lang, "show")
+    problems = sorted(set(problems_all))
     speech = script.speech_cues()
     print(f"script.{script.lang}.md: {len(script.chapters)} chapters, {len(speech)} spoken cues, "
           f"fingerprint {script.fingerprint()}")
@@ -91,12 +111,18 @@ def cmd_voice(args) -> int:
     s = get_settings()
     from .voice import all_utterances, cache_status, prune
 
-    script, catalog, lines = _parts(s, args.lang)
+    script, catalog, lines = _parts(s, args.lang, "show")
+    other, _, _ = _parts(s, args.lang, "presentation")
     voice = _show_voice(s, script.lang)
-    items = cache_status(all_utterances(script, catalog, lines), voice)
+    # both programmes share one cache: status/pregenerate/prune cover the presentation AND the narrated show
+    utterances = all_utterances(other, catalog, lines) + all_utterances(script, catalog, lines)
+    seen = set()
+    utterances = [u for u in utterances if not ((u.kind, u.text, u.direction) in seen
+                                                or seen.add((u.kind, u.text, u.direction)))]
+    items = cache_status(utterances, voice)
     if args.action == "status":
         missing = [i for i in items if not i.cached]
-        print(f"narration model {s.openai_narration_model}, voice {s.primary_voice}, language {script.lang}")
+        print(f"narration model {s.openai_narration_model}, voice {s.character_voice} (preset {s.voice_preset}), language {script.lang}")
         print(f"{len(items) - len(missing)}/{len(items)} clips cached")
         for i in missing[: args.limit]:
             print(f"  missing  {i.cue_id:<22} {i.text.splitlines()[0][:60]}")
@@ -114,12 +140,14 @@ def cmd_voice(args) -> int:
             return 2
         targets = [i for i in items if i.cue_id in args.cues or i.cue_id.split("~")[0] in args.cues]
         for i in targets:
+            synth = voice._synth(i.kind)
+            getattr(synth, "forget", lambda *a: None)(i.text, script.lang, i.direction)  # raw take + processed
             if i.cached:
                 i.cached.unlink(missing_ok=True)
                 i.cached.with_suffix(".ogg").unlink(missing_ok=True)
                 i.cached = None
     todo = [i for i in targets if not i.cached]
-    print(f"generating {len(todo)} clip(s) with {s.openai_narration_model} / {s.primary_voice} …")
+    print(f"generating {len(todo)} clip(s) with {s.openai_narration_model} / {s.character_voice} (preset {s.voice_preset}) …")
     failed = 0
     for n, i in enumerate(todo, 1):
         synth = voice._synth(i.kind)
@@ -282,7 +310,7 @@ def cmd_show(args) -> int:
                        display=args.display, source=source, voice=not args.no_voice,
                        fast=args.fast if args.fast else 1.0, motion=args.motion,
                        out_dir=Path(args.out) if args.out else (Path("./data/runtime/rehearsal") if args.dry_run else None),
-                       seed=args.seed, walk=args.walk)
+                       seed=args.seed, walk=args.walk, finale=args.finale, programme=args.programme)
     if args.telegram:
         if args.dry_run:
             sys.exit("--telegram cannot be combined with --dry-run (rehearsals never contact Telegram).")
@@ -323,11 +351,6 @@ async def _run_local(s, opts, args) -> int:
           f"voice {'cached/generated' if opts.voice else 'off (text only)'}; "
           f"camera {opts.source or s.show_camera_source or s.camera_source}; robot motion "
           f"{'ON (armed cues only)' if director.motion.enabled else 'off'}")
-    web = getattr(director.stage, "web", None)
-    if web is not None:
-        loop = asyncio.get_running_loop()
-        web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop)
-        print(f"Operator page (buttons): {web.control_url}")
     start_at = "invitation" if args.interactive else args.start_at
     try:
         result = await director.run(start_at=start_at)
@@ -350,6 +373,8 @@ async def _run_local(s, opts, args) -> int:
         print("motion cues: " + "; ".join(director.motion.log))
     if director.walk_log:
         print("walking: " + "; ".join(director.walk_log))
+    if director.encounter_log:
+        print("encounter: " + " | ".join(director.encounter_log))
     if sim:
         print("simulated participant answered: " + ", ".join(sim.answered))
     return 0 if result.final_state.value in ("finished", "cancelled") else 1
@@ -374,12 +399,18 @@ def register(sub) -> None:
     sh.add_argument("--out", help="where rehearsal pictures go (default data/runtime/rehearsal)")
     sh.add_argument("--seed", type=int)
     sh.add_argument("--interactive", action="store_true",
-                    help="skip the history chapters: start at the invitation (pose, photo, ending)")
+                    help="show: start at the invitation; presentation: skip the narration, straight to each round")
+    sh.add_argument("--programme", choices=["presentation", "show"],
+                    help="presentation (default SHOW_PROGRAMME): intro → a pose round per era → rescue finale; "
+                         "show: the long narrated show")
     sh.add_argument("--start-at", choices=["last_dog", "prehistory", "middle_ages", "paintings", "photography",
-                                           "internet", "invitation", "present"],
+                                           "internet", "invitation", "present", "rescue"],
                     help="begin with this chapter (rehearsing one part)")
     sh.add_argument("--telegram", action="store_true", help="also run the Telegram bot in this process (/show …)")
     sh.add_argument("--motion", action="store_true", help="allow the script's robot cues (needs all gates + e-stop)")
+    sh.add_argument("--finale", choices=["encounter", "imitate"],
+                    help="encounter (default): the good boy encounter — any pose → matched picture → Telegram → "
+                         "the dog's pose held 10 s; imitate: copy a picture the robot chose")
     sh.add_argument("--walk", action="store_true",
                     help="the robot finds the participant with its camera and walks to their side "
                          "(real robot: needs --motion and SHOW_WALK_ENABLED; --dry-run: simulated room)")

@@ -22,7 +22,8 @@ FORMAT
   {practised}                            (invitation) "We have practised a little already." — only if a
                                          @try worked earlier; otherwise nothing is said
   Blank line = end of a cue. A cue is one audio clip; lines inside a cue get natural pauses.
-  {pose_request} is replaced with the chosen artwork's request (catalog.yaml).
+  {pose_request} finale "encounter" (default): the invitation to take any pose (lines → encounter.invite);
+                 finale "imitate": empty here — the robot shows its chosen painting and asks for that pose.
 -->
 
 ## last_dog | The Last Dog
@@ -375,9 +376,6 @@ Can we make one together?
 Would you help me?
 
 {practised}
-
-@show: chosen
-I found a picture I like.
 
 {pose_request}
 

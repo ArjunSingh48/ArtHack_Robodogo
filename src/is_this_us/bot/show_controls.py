@@ -23,7 +23,7 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import BotCommand, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from ..performance.director import Cmd, ShowState, StoryDirector
-from ..performance.script import CHAPTER_ORDER
+from ..performance.script import ALL_CHAPTERS as CHAPTER_ORDER
 
 log = logging.getLogger(__name__)
 
@@ -68,6 +68,33 @@ def _kb(rows: list[list[tuple[str, str]]]) -> InlineKeyboardMarkup:
 def prompt_for(state: ShowState, director: StoryDirector, recipient: str) -> tuple[str, InlineKeyboardMarkup | None] | None:
     sid = director.session_id
     art = director.artifact
+    presentation = bool(getattr(getattr(director, "script", None), "is_presentation", False))
+    if presentation and state is ShowState.CONSENT:
+        return ("📷 The robot asked: may it take pictures of you two during the presentation (big screen + "
+                f"{recipient})? Press ✓ only if the participant clearly agreed.",
+                _kb([[("✓ They agreed", callback_data(Cmd.CONSENT_YES, sid)),
+                      ("✗ No photos", callback_data(Cmd.CONSENT_NO, sid))]]))
+    if presentation and state is ShowState.DELIVERY:
+        return (f"📨 Separate confirmation: send this presentation's photos to {recipient} as well? "
+                "Otherwise they are shown on the big screen only.",
+                _kb([[("✓ Send to Telegram", callback_data(Cmd.SEND_YES, sid)),
+                      ("✗ Big screen only", callback_data(Cmd.SEND_NO, sid))]]))
+    if presentation and state is ShowState.READINESS:
+        return ("🎭 Round: waiting for the participant to hold a pose — it starts by itself.",
+                _kb([[("✓ Start now", callback_data(Cmd.READY, sid)), ("✗ Skip round", callback_data(Cmd.DECLINE, sid))]]))
+    if state is ShowState.RESCUE:
+        return ("🚑 Rescue: press ✓ when the person is lying down (then again when they are back up), "
+                "if the camera doesn't notice.",
+                _kb([[("✓ Yes, now", callback_data(Cmd.READY, sid)), ("Skip", callback_data(Cmd.DECLINE, sid))]]))
+    if state is ShowState.READINESS and getattr(director, "finale", "imitate") == "encounter":
+        return ("🎭 Waiting for the participant to hold a pose — the encounter starts by itself.\n"
+                "To start now, or if they don't want to:",
+                _kb([[("✓ Start now", callback_data(Cmd.READY, sid)), ("✗ Declines", callback_data(Cmd.DECLINE, sid))]]))
+    if state is ShowState.CONSENT and getattr(director, "finale", "imitate") == "encounter":
+        return ("📷 The robot asked for a photograph during its pose. It stays on the local screen only "
+                "(never sent). Press ✓ only if the participant clearly agreed.",
+                _kb([[("✓ They agreed", callback_data(Cmd.CONSENT_YES, sid)),
+                      ("✗ No photo", callback_data(Cmd.CONSENT_NO, sid))]]))
     if state is ShowState.READINESS:
         title = html.escape(art.title) if art else "the picture"
         place = html.escape(art.interactive.placement()) if art and art.interactive else ""

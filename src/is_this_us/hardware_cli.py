@@ -361,14 +361,17 @@ def cmd_talk(args) -> None:
         default_archive=args.archive or s.default_archive,
     )
     lang_names = {"en": "English", "ru": "Russian", "de": "German"}
-    instructions = build_instructions(load_story(s.story_path), lang_names.get(args.lang or s.default_language, "English"))
+    from .speech.character import live_character_note, resolve_preset
+
+    instructions = build_instructions(load_story(s.story_path), lang_names.get(args.lang or s.default_language, "English"),
+                                      voice_note=live_character_note(resolve_preset(s)))
 
     def dev(x):
         return int(x) if x.isdigit() else (x or None)
 
     audio = SoundDeviceAudio(dev(s.talk_input_device), dev(s.talk_output_device))
     talk_settings = TalkSettings(
-        model=s.talk_model or s.openai_realtime_model, voice=s.talk_voice or s.primary_voice,
+        model=s.talk_model or s.openai_realtime_model, voice=s.talk_voice or s.character_voice,
         half_duplex=not args.full_duplex and s.talk_half_duplex,
         idle_timeout_s=s.talk_idle_seconds, max_session_s=s.talk_max_session_seconds,
     )

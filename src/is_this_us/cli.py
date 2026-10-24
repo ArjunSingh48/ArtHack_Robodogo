@@ -233,6 +233,19 @@ def cmd_memes(args) -> None:
             print(curation.describe(m))
 
 
+# ---------------------------------------------------------------------- voice demo
+def cmd_voice_demo(args) -> int:
+    """Same sample through every voice preset → voice_previews/*.wav (docs/VOICE.md)."""
+    from .speech.demo import run_demo
+
+    return run_demo(get_settings(), presets=args.preset, out=Path(args.out), play=args.play,
+                    offline_input=Path(args.offline_input) if args.offline_input else None,
+                    text=args.text, lang=args.lang, direction=args.direction, base=not args.no_base,
+                    pitch_compare=not args.no_pitch_compare, cues=not args.no_cues, engines=args.engine,
+                    formats=args.formats, espeak_voice=args.espeak_voice, espeak_pitch=args.espeak_pitch,
+                    espeak_speed=args.espeak_speed, piper_model=args.piper_model)
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(prog="itu", description="Is This Us? — installation tools")
     p.add_argument("-v", "--verbose", action="store_true")
@@ -281,6 +294,30 @@ def main(argv: list[str] | None = None) -> None:
     mm.add_argument("action", choices=["discover", "validate", "list"])
     mm.add_argument("--drafts", action="store_true", help="include drafts in list")
     mm.set_defaults(fn=cmd_memes)
+
+    vd = sub.add_parser("voice-demo", help="audition the voice presets (same sample) → voice_previews/")
+    vd.add_argument("--preset", default="all",
+                    help="all (default) or comma-separated: hertz_deadpan,hertz_buzzy,hertz_tin_can")
+    vd.add_argument("--engine", default="auto",
+                    help="base voice: azure (real show voice, needs key) | espeak | piper; comma-separated for "
+                         "several; auto = azure if a key is set, else espeak")
+    vd.add_argument("--out", default="voice_previews", help="output folder (default voice_previews/, git-ignored)")
+    vd.add_argument("--play", action="store_true", help="play the processed previews on this computer")
+    vd.add_argument("--offline-input", metavar="WAV",
+                    help="process this existing recording through the presets (no API key needed)")
+    vd.add_argument("--text", help="sample text; one line per clip, [pause] / [long pause] / [pause 1.2] markers "
+                                   "(default: the 'This is concerning.' sample)")
+    vd.add_argument("--formats", default="mp3", help="extra copies for phones: mp3,ogg (empty = WAV only)")
+    vd.add_argument("--espeak-voice", default="en-us+m3")
+    vd.add_argument("--espeak-pitch", type=int, default=50, help="0-99; 50 = eSpeak default (~98 Hz with m3)")
+    vd.add_argument("--espeak-speed", type=int, default=140)
+    vd.add_argument("--piper-model", help="piper voice .onnx (or PIPER_MODEL)")
+    vd.add_argument("--lang", default="en", choices=["en", "ru", "de"])
+    vd.add_argument("--direction", default="", help="scene direction, e.g. 'scene:internet'")
+    vd.add_argument("--no-base", action="store_true", help="do not save the unprocessed model audio")
+    vd.add_argument("--no-pitch-compare", action="store_true", help="skip the -2/-3/-4 st comparison")
+    vd.add_argument("--no-cues", action="store_true", help="skip the sound-cue previews")
+    vd.set_defaults(fn=cmd_voice_demo)
 
     from .hardware_cli import register
 

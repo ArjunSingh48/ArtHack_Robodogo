@@ -65,6 +65,19 @@ class Settings(BaseSettings):
     openai_voice_language: str = "en"
     openai_audio_cache_enabled: bool = True
     local_audio_playback: bool = False
+    # Voice character (docs/VOICE.md): off (default) | hertz_deadpan | hertz_buzzy | hertz_tin_can
+    # A preset = base voice + delivery instructions + local audio processing + sound cues.
+    # "off" = the current voice exactly (OPENAI_VOICE, original instructions, no processing).
+    voice_preset: str = "off"
+    voice_base_voice: str = ""  # override the preset's base voice (empty = preset default); also used live
+    voice_fx_enabled: bool = True  # local post-processing (needs ffmpeg; falls back to the raw voice)
+    voice_pitch_semitones: float | None = None  # override the preset (e.g. 3, 5, 7)
+    voice_formant_semitones: float | None = None  # override the preset (keep well below the pitch)
+    voice_rate: float | None = None  # override the preset speaking rate (1.0–1.12 is the useful range)
+    voice_coloration: float | None = None  # multiplies the preset's synthetic coloration (0 = none, 1 = preset)
+    voice_chirps: bool = True  # occasional tiny chirp before a clip (preset decides how often)
+    voice_cues: bool = True  # short procedural character sounds at a few key moments
+    voice_cue_volume: float | None = None  # 0..1; empty = preset default
 
     # Performance mode (`itu show`)
     show_data_dir: Path = Path("./data/performance")
@@ -79,6 +92,18 @@ class Settings(BaseSettings):
     show_photo_retention_minutes: int = 60  # participant photos + compositions are deleted after this
     show_output_dir: Path = Path("./data/runtime/performance")
     show_motion_enabled: bool = False  # robot cues in the script; still needs all motion gates + /arm
+    # The finale: "encounter" = the good boy encounter (docs/UX.md); "imitate" = copy a chosen painting
+    show_finale: str = "encounter"
+    show_stable_seconds: float = 3.0  # a pose held this long starts the encounter by itself
+    show_final_hold_seconds: float = 10.0  # the robot holds its final pose this long AFTER settling
+    show_encounter_photo: bool = True  # ask for a consented local THEN/NOW photo during the hold
+    # presentation (beamer + robot): intro → one pose round per era → rescue finale. "show" = narrated show.
+    show_programme: str = "presentation"
+    show_live_always: bool = True  # the camera view stays beside the picture for the whole show
+    show_operator_key: str = ""  # fixed key for the operator page link (empty = one kept in data/runtime/)
+    show_round_hold_seconds: float = 6.0  # each round: the robot holds its pose this long after settling
+    show_rescue_wait_seconds: float = 60.0  # finale: how long the robot waits for someone to lie down
+    show_montage_flash_seconds: float = 1.4  # each remembered picture while the robot is busy
     # Camera-guided walking to the participant (`itu show --walk`). Off by default.
     show_walk_enabled: bool = False
     show_walk_camera: str = "zhaw_bridge"  # the ROBOT's camera (it must see the person from the robot)
@@ -130,6 +155,19 @@ class Settings(BaseSettings):
     @classmethod
     def _empty_none(cls, value: object):
         return None if value in ("", None) else value
+
+    @field_validator("voice_pitch_semitones", "voice_formant_semitones", "voice_rate", "voice_coloration",
+                     "voice_cue_volume", mode="before")
+    @classmethod
+    def _empty_float_none(cls, value: object):
+        return None if value in ("", None) else value
+
+    @property
+    def character_voice(self) -> str:
+        """The base voice of the active VOICE_PRESET (OPENAI_VOICE when the preset is off)."""
+        from .speech.character import voice_for
+
+        return voice_for(self)
 
     @property
     def voice_configured(self) -> bool:

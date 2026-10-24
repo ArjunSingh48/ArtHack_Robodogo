@@ -9,7 +9,8 @@ background and does not override the agreed experience or this work order.
 
 Steps 1 and 2 were authorized and completed separately. The current request
 authorizes **step 3**, delegated to a subagent and reviewed in the main thread.
-Steps 4–6 remain planned. Documentation changes do not establish that the runtime
+Steps 4–6 for the single encounter remain planned; the presentation programme's
+separate implementation is recorded below. Documentation changes do not establish that the runtime
 implements the new experience. The presentation clarification defines the setup
 for later integration; the current meme direction permits familiar meme images
 in this noncommercial presentation with accurate credits and provenance.
@@ -179,10 +180,20 @@ separately. Preserve unrelated existing work.
   tests; two talk tests were blocked by the missing optional `openai` package.
   Installation speech remains silent pending the cadence decision. No visitor
   choice was added. Live Telegram delivery remains unverified.
-- Steps 4–6: not started.
-- Presentation clarification: documentation now includes the dog + computer +
+- Steps 4–6: remaining work for the single encounter; the presentation programme
+  has progressed separately as described below.
+- Original presentation clarification: documentation includes the dog + computer +
   beamer setup and a presentation flow based on the main encounter. Runtime
-  integration remains planned in step 6; no visitor choice was added.
+  integration for the single encounter remains planned in step 6; this initial
+  clarification added no visitor choice.
+- Presentation programme (user decision, 2026-10-24 afternoon; see UX.md): implemented in the show runtime
+  (`presentation.en.md`, `performance/rounds.py`, director `@consent` / `@round` / `@rescue`). Intro, four era
+  rounds (pick by posture, "remembering" montage while the robot walks/poses, consented photo, THEN/NOW on the
+  beamer, Telegram archive picture + photo only after the separate send confirmation, the robot's own meme for the
+  internet round), and the rescue finale (a careful approach to a person lying down). Verified in simulation by
+  `tests/test_presentation.py`; not verified with live Telegram, a real Azure voice, or on the robot. The
+  presentation changes preserve the free-play bot (`itu bot`), including the
+  completed step 3 above; the remaining steps 4–5 for that flow are separate work.
 
 Step 3 does not include live Telegram sends or physical robot verification.
 

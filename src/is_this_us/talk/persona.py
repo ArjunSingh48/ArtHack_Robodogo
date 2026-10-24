@@ -65,5 +65,7 @@ def load_story(path: Path) -> str:
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
-def build_instructions(story: str, default_language: str = "English") -> str:
-    return CHARACTER.format(story=story.strip(), default_language=default_language)
+def build_instructions(story: str, default_language: str = "English", voice_note: str | None = None) -> str:
+    """`voice_note`: session-level voice direction of the active VOICE_PRESET
+    (`speech.character.live_character_note(preset)`); empty/None = none."""
+    return CHARACTER.format(story=story.strip(), default_language=default_language) + (voice_note or "")
