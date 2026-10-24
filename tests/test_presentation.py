@@ -480,18 +480,17 @@ def test_simulated_person_follows_the_camera_like_a_mirror(monkeypatch):
     assert sim.skeleton() is None  # stale readings fall back to the preset
 
 
-async def test_lobby_waits_for_start_and_opens_no_camera_without_consent(tmp_path, pres, catalog, lines):
+async def test_lobby_waits_for_start_and_opens_the_camera_only_after_consent(tmp_path, pres, catalog, lines):
     opened = []
     d = director(tmp_path, pres, catalog, lines, wait_for_start=True)
     inner = d.frame_source_factory
-    d.frame_source_factory = lambda: opened.append(1) or inner()
-    answer(d, {ShowState.LOBBY: Cmd.CONSENT_NO, ShowState.RESCUE: Cmd.READY,
-               ShowState.READINESS: Cmd.READY, ShowState.CONSENT: Cmd.CONSENT_YES})
+    d.frame_source_factory = lambda: opened.append(d.state) or inner()
+    answer(d, {ShowState.LOBBY: Cmd.CONSENT_YES, **YES})
     res = await d.run()
     assert res.final_state is ShowState.FINISHED
     assert d.transitions[0] == ("idle", "lobby")  # nothing before the Start
-    assert not opened and not d.photo_consent  # declined at the start: the camera never opened
-    assert "consent" not in [b for _, b in d.transitions]  # and nobody is asked again later
+    assert opened and ShowState.LOBBY not in opened and d.photo_consent  # the camera opened only after Start
+    assert "consent" not in [b for _, b in d.transitions]  # nobody is asked again later
 
 
 async def test_lobby_can_start_with_a_picture_instead_of_the_camera(tmp_path, pres, catalog, lines):
@@ -529,15 +528,36 @@ async def test_operator_can_switch_from_a_sample_picture_to_the_camera(tmp_path,
 async def test_operator_can_replay_a_step_by_its_hash(tmp_path, pres, catalog, lines):
     d = director(tmp_path, pres, catalog, lines)
     jumped = []
+    step = next(c.id for c in pres.chapter("prehistory").cues if c.kind == "round")
 
     def on_state(director, st):
         if st is ShowState.READINESS and director.chapter_id == "middle_ages" and not jumped:
             jumped.append(director.goto("prehistory"))
+        elif st is ShowState.READINESS and director.chapter_id == "paintings" and len(jumped) == 1:
+            jumped.append(director.goto(step))  # one picture step: straight back to that round
     d.listeners.append(on_state)
     answer(d, YES)
     res = await d.run()
     assert res.final_state is ShowState.FINISHED
-    assert jumped == [(True, "ok: going to prehistory")]
+    assert jumped == [(True, "ok: going to prehistory"), (True, f"ok: going to {step}")]
     played = d.chapters_played
     assert played.index("middle_ages") < len(played) - 1 - played[::-1].index("prehistory")  # replayed after
     assert d.goto("nowhere")[0] is False
+
+
+async def test_operator_can_switch_from_the_camera_to_the_sample_photos(tmp_path, pres, catalog, lines):
+    from is_this_us.performance.runtime import SyntheticParticipant
+
+    pic = SyntheticParticipant("standing")
+    pic.is_still = True
+    d = director(tmp_path, pres, catalog, lines, photo_factory=lambda data: pic)
+    switched = []
+
+    def on_state(director, st):
+        if st is ShowState.INTRODUCTION and not switched:
+            switched.append(director.command(Cmd.SAMPLES))
+    d.listeners.append(on_state)
+    answer(d, {**YES, ShowState.READINESS: Cmd.READY})
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert switched == [(True, "ok: sample photos")] and d._open_camera() is pic

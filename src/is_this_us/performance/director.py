@@ -81,6 +81,7 @@ class Cmd(StrEnum):
     LISTEN = "listen"  # push-to-talk toggle in a conversation window
     SAMPLE = "sample"  # start with a photo instead of the camera (a sample, or one just uploaded)
     CAMERA = "camera"  # back from a photo to the real camera (= they agreed to photos); any time
+    SAMPLES = "samples"  # from the camera to the sample stand-in photos; any time
 
 
 RUNNING = {ShowState.LOBBY, ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
@@ -102,9 +103,10 @@ VALID: dict[Cmd, set[ShowState]] = {
     # (APPROACH accepts only PAUSE / SKIP / CANCEL — all of which stop the walk at once)  # in a moment: "yes, they did it"
     Cmd.DECLINE: {ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT, ShowState.RESCUE},
     Cmd.CONSENT_YES: {ShowState.CONSENT, ShowState.LOBBY},
-    Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO, ShowState.LOBBY},
+    Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO},
     Cmd.SAMPLE: {ShowState.LOBBY},
     Cmd.CAMERA: (RUNNING - {ShowState.LOBBY}) | {ShowState.PAUSED},
+    Cmd.SAMPLES: (RUNNING - {ShowState.LOBBY}) | {ShowState.PAUSED},
     Cmd.SEND_YES: {ShowState.DELIVERY},
     Cmd.SEND_NO: {ShowState.DELIVERY},
     Cmd.LISTEN: {ShowState.CONVERSATION},
@@ -180,7 +182,8 @@ class StoryDirector:
         # photo_factory(bytes | None) → a camera + estimator for one picture (None = the sample stand-in)
         self.wait_for_start, self.photo_factory = wait_for_start, photo_factory
         self._consent_decided, self._picture, self._shown_pictures = False, None, set()
-        self._goto: str | None = None  # a chapter to replay / jump to (operator page hash)
+        self._goto: str | None = None  # a step to replay / jump to (operator page hash): chapter or cue id
+        self._start_cue: str | None = None  # …and, for a cue id, where in its chapter to start
         self._real_camera = (frame_source_factory, pose_reader)  # kept while a picture stands in for it
         self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
@@ -235,6 +238,8 @@ class StoryDirector:
             return False, f"'{cmd.value}' does nothing while {self.state.value}"
         if cmd is Cmd.CAMERA:
             return self._switch_to_camera()
+        if cmd is Cmd.SAMPLES:
+            return self._switch_to_samples()
         if cmd is Cmd.POSE:
             self._jump_to_pose = True  # sticky: honoured at the next safe point, whatever is playing
         self._inbox.append(cmd)
@@ -244,8 +249,9 @@ class StoryDirector:
     def goto(self, chapter_id: str) -> tuple[bool, str]:
         """Operator: replay (or jump to) a step. The current step is skipped; the show continues from there."""
         ids = [c.id for c in self.script.chapters]
-        if chapter_id not in ids:
-            return False, f"no step '{chapter_id}' — one of {', '.join(ids)}"
+        steps = ids + [cue.id for c in self.script.chapters for cue in c.cues]
+        if chapter_id not in steps:
+            return False, f"no step '{chapter_id}' — e.g. {', '.join(ids)}"
         if self.state in (ShowState.IDLE, ShowState.LOBBY) or not self.running:
             return False, "start the show first"
         self._goto = chapter_id
@@ -265,6 +271,19 @@ class StoryDirector:
         self.photo_consent = self._consent_decided = True
         self._note("switched to the camera (they agreed to photos)")
         return True, "ok: camera"
+
+    def _switch_to_samples(self) -> tuple[bool, str]:
+        """Operator: the sample stand-in photos instead of the camera (next readings, next rounds)."""
+        if getattr(self._open_camera(), "is_still", False) and self._picture is None:
+            return False, "already using the sample photos"
+        pic = self.photo_factory(None) if self.photo_factory is not None else None
+        if pic is None:
+            return False, "no sample photos available (pose model missing? `itu setup`)"
+        self.frame_source_factory, self.pose_reader = (lambda: pic), PoseReader(pic)
+        self._camera, self._camera_failed, self._picture = None, False, None
+        self.photo_consent = self._consent_decided = True
+        self._note("switched to the sample photos")
+        return True, "ok: sample photos"
 
     def use_picture(self, data: bytes) -> tuple[bool, str]:
         """Start (from the lobby) with an uploaded picture instead of the camera."""
@@ -483,6 +502,10 @@ class StoryDirector:
         if self.script.is_presentation and getattr(self, "rounds_only", False):
             self._jump_to_pose = True
         i = 0
+        start, self._start_cue = self._start_cue, None
+        if start is not None:  # replaying from one of this chapter's steps
+            i = next((j for j, c in enumerate(cues) if c.id == start), 0)
+            self._jump_to_pose = False
         while i < len(cues):
             if self._goto is not None:
                 return "goto"
@@ -498,6 +521,8 @@ class StoryDirector:
             cue = cues[i]
             self._set_state(state)
             self.cue_id = cue.id
+            if cue.show or cue.kind in ("round", "rescue"):
+                getattr(self.stage, "step", lambda _: None)(cue.id)  # a picture step: the operator page shows it as #<cue id>
             self._show(cue.show)
             self._move(cue.motion)
             if cue.kind in ("consent", "round", "rescue"):
@@ -1055,7 +1080,7 @@ class StoryDirector:
                 self.last_reading = reading
             checks = checks_for(reading) + [Check("holding still", steady or tracker.progress(now) >= 1.0)]
             await self._publish_live(frame, reading, checks)
-            if steady and not getattr(camera, "is_still", False):  # a photo is always "steady": Ready decides
+            if steady:
                 return reading
             hint = None
             if reading is None or not reading.person_visible:
@@ -1458,7 +1483,7 @@ class StoryDirector:
         self._set_state(ShowState.LOBBY, "waiting for Start — nothing plays, no camera until then")
         self.stage.show(View("title"))
         while True:
-            cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.CONSENT_NO, Cmd.SAMPLE})
+            cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.SAMPLE})
             if cmd is not Cmd.SAMPLE:
                 break
             pic = self._picture or (self.photo_factory(None) if self.photo_factory else None)
@@ -1756,7 +1781,7 @@ class StoryDirector:
                 reading, frame = await self._read_pose(camera)
                 ok = bool(reading and reading.person_visible and reading.posture in targets)
                 await self._publish_live(frame, reading, [Check(label, ok)])
-                if ok and not getattr(camera, "is_still", False):  # a photo never moves: Ready decides
+                if ok:
                     held_since = held_since if held_since is not None else self.clock()
                     if self.clock() - held_since >= self.moment_hold_s:
                         return True
@@ -1897,8 +1922,10 @@ class StoryDirector:
                         raise
                     self.stage.subtitle(None)
                     self._clear_live()
-                if self._goto is not None:  # replay / jump (operator page hash)
-                    idx, self._goto = [c.id for c in chapters].index(self._goto), None
+                if self._goto is not None:  # replay / jump (operator page hash): a chapter, or one of its steps
+                    target, self._goto = self._goto, None
+                    idx = [c.id for c in chapters].index(target.split(".")[0])
+                    self._start_cue = target if "." in target else None
                     continue
                 if result == "pose":
                     target = next((i for i, c in enumerate(chapters) if c.interactive), None)

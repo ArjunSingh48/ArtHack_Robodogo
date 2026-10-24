@@ -28,7 +28,7 @@ from .catalog import ShowArtifact
 log = logging.getLogger(__name__)
 
 CONTROL_COMMANDS = {"next", "pause", "resume", "repeat", "skip", "pose", "ready", "decline", "consent_yes",
-                    "consent_no", "send_yes", "send_no", "cancel", "listen", "sample", "camera"}
+                    "consent_no", "send_yes", "send_no", "cancel", "listen", "sample", "camera", "samples"}
 MAX_UPLOAD_BYTES = 15_000_000
 AI_VOICE_NOTICE = "The robot's voice is AI-generated. Its words are written by the artists."
 
@@ -232,7 +232,7 @@ border:1px solid #c0525c;border-radius:8px;padding:10px 14px;font:14px/1.35 syst
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
 const ASK={lobby:[['consent_yes','▶ Start — they agreed to photos (camera)'],['upload','▶ Start with an uploaded picture'],
-  ['sample','▶ Start with a sample photo'],['consent_no','▶ Start without photos']],
+  ['sample','▶ Start with a sample photo']],
  participant_readiness:[['ready','✓ Ready / start now'],['decline','✗ Declines']],
  final_pose:[['skip','End the pose now']],
  consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
@@ -241,7 +241,7 @@ const ASK={lobby:[['consent_yes','▶ Start — they agreed to photos (camera)']
  artwork_display:[['next','▸ Continue (photo seen)']],
  participation:[['ready','✓ They did it'],['next','Move on']],
  awaiting_photo:[['consent_no','✗ No photo']]};
-const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['camera','📷 Switch to the webcam'],['cancel','End']];
+const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['camera','📷 Switch to the webcam'],['samples','🖼 Switch to sample photos'],['cancel','End']];
 async function upload(){  // lobby: a picture instead of the camera
  const f=document.createElement('input');f.type='file';f.accept='image/jpeg,image/png';
  f.onchange=async()=>{if(!f.files.length)return;document.getElementById('msg').textContent='uploading…';
@@ -274,7 +274,8 @@ function drawSim(m){
 async function tick(){
  try{const r=await fetch('/state',{cache:'no-store'});const s=await r.json();
   document.getElementById('chapter').textContent=s.chapter||'';
-  if(s.chapter_id&&location.hash.slice(1)!==s.chapter_id)history.replaceState(null,'','#'+s.chapter_id);
+  const step=s.step||s.chapter_id;
+  if(step&&location.hash.slice(1)!==step)history.replaceState(null,'','#'+step);
   document.getElementById('subtitle').textContent=s.subtitle||'';
   document.getElementById('notice').textContent=s.notice||'';
   const al=document.getElementById('alert');if(key&&s.alert){al.style.display='block';al.textContent='⚠ '+s.alert}else{al.style.display='none'}
@@ -423,7 +424,11 @@ class WebStage:
         return f"/img/{token}"
 
     def chapter(self, chapter_id: str, title: str) -> None:
-        self._set(chapter=title, chapter_id=chapter_id)
+        self._set(chapter=title, chapter_id=chapter_id, step=chapter_id)
+
+    def step(self, step_id: str) -> None:
+        """A picture step (cue id): the operator page's address becomes #<step>, to come back to it."""
+        self._set(step=step_id)
 
     def show(self, view: View) -> None:
         if view.kind == "consider" and view.memes:
