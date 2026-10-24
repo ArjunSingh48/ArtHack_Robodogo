@@ -1594,6 +1594,8 @@ class StoryDirector:
                 path = None
         if path is not None:
             await self._admire()
+        elif art is not None:  # no photo: the found picture still stays until the operator moves on
+            await self._wait_next("the picture is on the screen — press Next to continue")
         home = asyncio.ensure_future(self._walk_home(speak=False)) if reading is not None else None
         try:
             if path is None and era == "internet" and reading is not None:
@@ -1612,9 +1614,12 @@ class StoryDirector:
         """The photo stays on screen: the dog says something happy about it, then waits for the operator's Next
         (so everyone can really look at it)."""
         await self.say(self.lines.pick("round", "admire"))
-        self._set_state(ShowState.ARTWORK, "the photo is on the screen — press Next to continue")
+        await self._wait_next("the photo is on the screen — press Next to continue")
+
+    async def _wait_next(self, why: str) -> None:
+        self._set_state(ShowState.ARTWORK, why)
         cmd = await self._await_cmd({Cmd.NEXT, Cmd.SKIP}, timeout=self.photo_view_timeout_s)
-        self._note("photo viewed — continuing" if cmd else "photo viewed (time limit) — continuing")
+        self._note("picture viewed — continuing" if cmd else "picture viewed (time limit) — continuing")
 
     async def _round_robot(self, behavior: str, side: str, posture: str | None) -> bool:
         """Walk to the person (only with --walk) and take the pose. → True only if the robot reports it."""

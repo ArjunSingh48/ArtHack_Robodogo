@@ -70,7 +70,7 @@ STANDIN_DIR = Path(__file__).resolve().parents[3] / "data" / "standins"
 
 
 # the sample stand-ins; each round shows the one whose pose fits that era's pictures best
-SAMPLE_ORDER = ["sitting", "standing", "squatting", "leaning_forward", "standing_2", "sitting_2", "standing_3"]
+SAMPLE_ORDER = ["sitting", "standing", "squatting", "standing_4", "standing_2", "sitting_2", "standing_3"]
 
 
 class PhotoParticipant:
