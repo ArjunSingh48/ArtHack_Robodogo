@@ -28,7 +28,8 @@ from .catalog import ShowArtifact
 log = logging.getLogger(__name__)
 
 CONTROL_COMMANDS = {"next", "pause", "resume", "repeat", "skip", "pose", "ready", "decline", "consent_yes",
-                    "consent_no", "send_yes", "send_no", "cancel", "listen"}
+                    "consent_no", "send_yes", "send_no", "cancel", "listen", "sample"}
+MAX_UPLOAD_BYTES = 15_000_000
 AI_VOICE_NOTICE = "The robot's voice is AI-generated. Its words are written by the artists."
 
 
@@ -230,7 +231,9 @@ border:1px solid #c0525c;border-radius:8px;padding:10px 14px;font:14px/1.35 syst
 <script>
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
-const ASK={participant_readiness:[['ready','✓ Ready / start now'],['decline','✗ Declines']],
+const ASK={lobby:[['consent_yes','▶ Start — they agreed to photos (camera)'],['upload','▶ Start with an uploaded picture'],
+  ['sample','▶ Start with a sample photo'],['consent_no','▶ Start without photos']],
+ participant_readiness:[['ready','✓ Ready / start now'],['decline','✗ Declines']],
  final_pose:[['skip','End the pose now']],
  consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
  delivery:[['send_yes','✓ Send to Telegram'],['send_no',"✗ Don't send"]],
@@ -239,13 +242,20 @@ const ASK={participant_readiness:[['ready','✓ Ready / start now'],['decline','
  participation:[['ready','✓ They did it'],['next','Move on']],
  awaiting_photo:[['consent_no','✗ No photo']]};
 const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['cancel','End']];
+async function upload(){  // lobby: a picture instead of the camera
+ const f=document.createElement('input');f.type='file';f.accept='image/jpeg,image/png';
+ f.onchange=async()=>{if(!f.files.length)return;document.getElementById('msg').textContent='uploading…';
+  const r=await fetch('/upload?key='+encodeURIComponent(key),{method:'POST',body:f.files[0]});
+  const j=await r.json().catch(()=>({msg:'error'}));document.getElementById('msg').textContent=j.msg||'';};
+ f.click();}
 async function send(cmd){
+ if(cmd==='upload')return upload();
  const r=await fetch('/control?key='+encodeURIComponent(key)+'&cmd='+cmd,{method:'POST'});
  const j=await r.json().catch(()=>({msg:'error'}));document.getElementById('msg').textContent=j.msg||'';}
 function controls(state){
  if(!key)return;const c=document.getElementById('controls');c.style.display='flex';
  const ask=(ASK[state]||[]).map(([k,t])=>`<button class="ask" onclick="send('${k}')">${t}</button>`).join('');
- const base=BASE.map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
+ const base=BASE.filter(([k])=>state!=='lobby'||k==='cancel').map(([k,t])=>`<button class="${k==='pose'?'main':''}" onclick="send('${k}')">${t}</button>`).join('');
  c.innerHTML=`<span id="state">${state}</span>`+ask+base;}
 function drawSim(m){
  // top-down: the dog starts at the bottom centre facing up (x forward, y to its left), 1 m = 70 px
@@ -313,6 +323,7 @@ class WebStage:
                        "updated": 0.0}
         self._files: dict[str, Path] = {}
         self._control = None  # (callback, loop) once enabled
+        self._upload = None  # picture bytes -> (ok, msg): the lobby's "Start with an uploaded picture"
         self._live_jpeg: dict[str, bytes | None] = {}  # newest frame per camera feed, in memory only
         self.key = key or secrets.token_urlsafe(9)  # only the operator URL can press buttons
         stage = self
@@ -324,13 +335,27 @@ class WebStage:
             def do_POST(self):  # noqa: N802
                 url = urlparse(self.path)
                 q = parse_qs(url.query)
-                if url.path != "/control":
+                if url.path not in ("/control", "/upload"):
                     return self._send(404, "text/plain", b"not found")
                 if not stage._control:
                     return self._send(403, "application/json", b'{"msg": "buttons are not active yet: start a performance"}')
                 if not hmac.compare_digest(q.get("key", [""])[0], stage.key):
                     return self._send(403, "application/json",
                                       b'{"msg": "old operator link: open the Operator page link printed in the terminal"}')
+                if url.path == "/upload":
+                    size = int(self.headers.get("Content-Length") or 0)
+                    if not stage._upload or not 0 < size <= MAX_UPLOAD_BYTES:
+                        return self._send(400, "application/json", b'{"msg": "no picture (or larger than 15 MB)"}')
+                    data = self.rfile.read(size)
+                    fn, loop = stage._upload, stage._control[1]
+
+                    async def take():
+                        return fn(data)  # decode only; its pose is read later, off the loop
+                    try:
+                        ok, msg = asyncio.run_coroutine_threadsafe(take(), loop).result(timeout=30)
+                    except Exception as exc:
+                        ok, msg = False, f"error: {type(exc).__name__}"
+                    return self._send(200, "application/json", json.dumps({"ok": ok, "msg": msg}).encode())
                 cmd = q.get("cmd", [""])[0]
                 if cmd not in CONTROL_COMMANDS:
                     return self._send(400, "application/json", b'{"msg": "unknown command"}')
@@ -460,9 +485,9 @@ class WebStage:
             self._state["live"] = feeds
             self._state["updated"] = time.time()
 
-    def enable_controls(self, callback, loop) -> None:
-        """callback(cmd) -> (ok, msg), run on the show's event loop."""
-        self._control = (callback, loop)
+    def enable_controls(self, callback, loop, upload=None) -> None:
+        """callback(cmd) -> (ok, msg), run on the show's event loop; upload(bytes) -> (ok, msg) likewise."""
+        self._control, self._upload = (callback, loop), upload
 
     @property
     def control_url(self) -> str:

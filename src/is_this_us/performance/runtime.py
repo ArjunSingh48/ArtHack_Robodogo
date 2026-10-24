@@ -66,6 +66,51 @@ class SyntheticParticipant:
         pass
 
 
+STANDIN_DIR = Path(__file__).resolve().parents[3] / "data" / "standins"
+
+
+class PhotoParticipant:
+    """A still picture as camera + pose source: an uploaded photo, or a sample stand-in (data/standins, from
+    Unsplash). Unlike the drawn figure, the real pose estimator reads it (also in 3-D, for the avatar)."""
+
+    name = "photo"
+    reads_paintings = False
+
+    def __init__(self, image: Image.Image, estimator, label: str = ""):
+        image = image.convert("RGB")
+        image.thumbnail((1280, 1280))
+        self._rgb = np.asarray(image)
+        if label:
+            d = ImageDraw.Draw(image)
+            d.text((12, image.height - 22), label, fill=(240, 236, 228))
+        self._shown = np.asarray(image)
+        self.estimator, self._people = estimator, None
+
+    @classmethod
+    def from_bytes(cls, data: bytes, estimator, label: str = "uploaded picture") -> "PhotoParticipant":
+        import io
+
+        return cls(Image.open(io.BytesIO(data)), estimator, label)
+
+    def read(self) -> Frame:
+        return Frame(image=self._shown, source="photo")
+
+    def estimate(self, rgb):
+        if self._people is None:  # a still picture: read it once
+            self._people = self.estimator.estimate(self._rgb)
+        return self._people
+
+    def close(self) -> None:
+        pass
+
+
+def sample_photo(posture: str, estimator) -> PhotoParticipant | None:
+    path = STANDIN_DIR / f"{posture}.jpg"
+    if estimator is None or not path.exists():
+        return None
+    return PhotoParticipant(Image.open(path), estimator, f"sample stand-in ({posture}) · photo: Unsplash")
+
+
 class NoPersonEstimator:
     def estimate(self, rgb):
         return []
@@ -91,7 +136,7 @@ class ParticipantScript:
                 cmd = Cmd.READY if self.takes_part else Cmd.SKIP
             elif st is ShowState.READINESS:
                 cmd = Cmd.READY if self.takes_part else Cmd.DECLINE
-            elif st is ShowState.CONSENT:
+            elif st in (ShowState.CONSENT, ShowState.LOBBY):
                 cmd = Cmd.CONSENT_YES if self.consent else Cmd.CONSENT_NO
             elif st is ShowState.DELIVERY:
                 cmd = Cmd.SEND_YES if self.send else Cmd.SEND_NO
@@ -113,9 +158,10 @@ KEYS = {
     "": "next", "n": "next", "next": "next", "p": "pause", "pause": "pause", "r": "resume", "resume": "resume",
     "a": "repeat", "again": "repeat", "repeat": "repeat", "s": "skip", "skip": "skip", "c": "cancel", "q": "cancel",
     "cancel": "cancel", "pose": "pose", "ready": "ready", "capture": "ready", "d": "decline", "decline": "decline",
-    "l": "listen", "listen": "listen",
+    "l": "listen", "listen": "listen", "sample": "sample", "start": "consent_yes",
 }
-HELP = ("keys: Enter=next · p=pause · r=resume · a=repeat · s=skip · pose · ready · y/n (consent/send) · "
+HELP = ("start: y = camera (they agreed to photos) · sample = sample photo · n = no photos — then "
+        "keys: Enter=next · p=pause · r=resume · a=repeat · s=skip · pose · ready · y/n (consent/send) · "
         "d=decline · l=listen (push-to-talk) · ?=status · q=cancel")
 
 
@@ -127,7 +173,7 @@ def keyboard_command(director: StoryDirector, line: str) -> tuple[bool, str]:
         return True, HELP
     if key in ("y", "yes", "n", "no"):
         yes = key.startswith("y")
-        if director.state is ShowState.CONSENT:
+        if director.state in (ShowState.CONSENT, ShowState.LOBBY):
             return director.command(Cmd.CONSENT_YES if yes else Cmd.CONSENT_NO)
         if director.state is ShowState.DELIVERY:
             return director.command(Cmd.SEND_YES if yes else Cmd.SEND_NO)
@@ -182,6 +228,7 @@ class ShowOptions:
     finale: str | None = None  # encounter | imitate (default SHOW_FINALE)
     programme: str | None = None  # presentation | show (default SHOW_PROGRAMME)
     sim_robot: bool = False  # no Go2: a simulated dog (poses + walking) drawn in the interface
+    wait_for_start: bool = False  # begin in the lobby: Start + photo consent before any voice or camera
 
 
 _WEB_STAGES: dict = {}
@@ -326,6 +373,14 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         stand_in = SyntheticParticipant(posture, head_tilt_deg=14 if posture == "sitting" else 0)
         frame_factory = lambda: stand_in  # noqa: E731
         reader = PoseReader(stand_in, mirrored=settings.show_camera_mirrored)
+    elif source and source.startswith("photo:"):  # a still picture: photo:<posture> (sample) or photo:<path>
+        spec = source.partition(":")[2] or "sitting"
+        est = estimator if estimator is not None else build_estimator(settings)
+        pic = (PhotoParticipant(Image.open(spec), est, Path(spec).name) if Path(spec).is_file() and est is not None
+               else sample_photo(spec, est))
+        if pic is None:
+            sys.exit(f"--source {source}: no such picture (or the pose model is missing: `itu setup`)")
+        frame_factory, reader = (lambda: pic), PoseReader(pic)
     elif source and source != "none":
         from ..vision.frame_sources import make_frame_source
 
@@ -373,6 +428,16 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
 
     approacher = sim.approacher if sim is not None else build_approacher(settings, opts, guard, estimator)
 
+    def photo_factory(data: bytes | None):
+        """Lobby: an uploaded picture, or (None) the sample stand-in for SHOW_POSE_PREFERENCE."""
+        est = estimator if estimator is not None else build_estimator(settings)
+        if est is None:
+            return None
+        if data is not None:
+            return PhotoParticipant.from_bytes(data, est)
+        posture = settings.show_pose_preference if settings.show_pose_preference in ("sitting", "standing") else "sitting"
+        return sample_photo(posture, est)
+
     director = StoryDirector(
         approacher=approacher,
         script=script, catalog=catalog, lines=lines, voice=voice, stage=stage, store=store, pose_reader=reader,
@@ -387,14 +452,15 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         rescue_wake_s=20.0 * opts.fast, flash_s=settings.show_montage_flash_seconds * opts.fast,
         live_always=settings.show_live_always,
         robot_frame_source_factory=robot_factory, pose_from=settings.show_pose_camera, sim_robot=sim, font_path=settings.card_font_path, rng=rng,
-        photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery))
+        photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery),
+        wait_for_start=opts.wait_for_start, photo_factory=photo_factory)
     if delivery is None:
         log.info("Telegram not configured: photos stay on the local display")
     web = getattr(stage, "web", None)
     if web is not None:  # the operator page's buttons work however the show was started (CLI or Telegram)
         try:
             loop = asyncio.get_running_loop()
-            web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop)
+            web.enable_controls(lambda cmd: keyboard_or_cmd(director, cmd), loop, upload=director.use_picture)
             print(f"Operator page (buttons): {web.control_url}")
         except RuntimeError:
             pass

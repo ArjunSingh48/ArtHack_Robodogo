@@ -389,7 +389,7 @@ def cmd_show(args) -> int:
                        fast=args.fast if args.fast else 1.0, motion=args.motion,
                        out_dir=Path(args.out) if args.out else (Path("./data/runtime/rehearsal") if args.dry_run else None),
                        seed=args.seed, walk=args.walk, finale=args.finale, programme=args.programme,
-                       sim_robot=getattr(args, "sim_robot", False))
+                       sim_robot=getattr(args, "sim_robot", False), wait_for_start=not args.auto)
     if args.telegram:
         if args.dry_run:
             sys.exit("--telegram cannot be combined with --dry-run (rehearsals never contact Telegram).")

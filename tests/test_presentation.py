@@ -478,3 +478,28 @@ def test_simulated_person_follows_the_camera_like_a_mirror(monkeypatch):
     now = sr.time.monotonic()
     monkeypatch.setattr(sr.time, "monotonic", lambda: now + sr.SKELETON_MAX_AGE_S + 1)
     assert sim.skeleton() is None  # stale readings fall back to the preset
+
+
+async def test_lobby_waits_for_start_and_opens_no_camera_without_consent(tmp_path, pres, catalog, lines):
+    opened = []
+    d = director(tmp_path, pres, catalog, lines, wait_for_start=True)
+    inner = d.frame_source_factory
+    d.frame_source_factory = lambda: opened.append(1) or inner()
+    answer(d, {ShowState.LOBBY: Cmd.CONSENT_NO, ShowState.RESCUE: Cmd.READY,
+               ShowState.READINESS: Cmd.READY, ShowState.CONSENT: Cmd.CONSENT_YES})
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert d.transitions[0] == ("idle", "lobby")  # nothing before the Start
+    assert not opened and not d.photo_consent  # declined at the start: the camera never opened
+    assert "consent" not in [b for _, b in d.transitions]  # and nobody is asked again later
+
+
+async def test_lobby_can_start_with_a_picture_instead_of_the_camera(tmp_path, pres, catalog, lines):
+    from is_this_us.performance.runtime import SyntheticParticipant
+
+    pic = SyntheticParticipant("standing")
+    d = director(tmp_path, pres, catalog, lines, camera=False, wait_for_start=True, photo_factory=lambda data: pic)
+    answer(d, {ShowState.LOBBY: Cmd.SAMPLE, **YES})
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert d.photo_consent and d._open_camera() is pic and d.pose_reader is not None

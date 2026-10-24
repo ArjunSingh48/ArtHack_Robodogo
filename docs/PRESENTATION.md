@@ -54,7 +54,17 @@ walking on.
 ```bash
 itu present --sim-robot                 # real laptop camera + voice + projector; the dog is simulated
 itu show --dry-run --sim-robot --display web --source synthetic:sitting   # fully simulated rehearsal
+itu show --dry-run --sim-robot --display web --source photo:sitting      # …with a real photo instead of the drawn figure
 ```
+The simulated room is drawn in 3-D (three.js, loaded from jsDelivr): the Unitree Go2 from its official
+URDF, trotting and taking its poses, and a rigged avatar posed from the photo camera's pose estimate
+(mirrored, facing the audience; joints out of frame come from the posture preset). Drag to rotate,
+right-drag to pan, scroll to zoom, double-click to return to auto-framing. Offline, the flat map is drawn instead.
+
+**Start screen.** `itu show` / `itu present` (without `--auto`) wait on the operator page before anything
+plays: ▶ *they agreed to photos* (only now does the camera open) · ▶ *an uploaded picture* · ▶ *a sample
+photo* (`data/standins/`, Unsplash) · ▶ *without photos* (no camera at all; poses are confirmed by hand).
+Keyboard: `y` / `sample` / `n`. The photo question later in the intro is then not asked again.
 A drawn top-down room appears in the camera column ("SIMULATED DOG"). It shows where the dog walks, where the
 person is, and what the dog is doing (sitting down, giving a paw, walking…). The same pose and walking logic
 runs as with the real robot, through the same safety guard, but with a mock robot: nothing real moves.

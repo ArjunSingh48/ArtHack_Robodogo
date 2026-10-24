@@ -39,6 +39,7 @@ log = logging.getLogger(__name__)
 
 class ShowState(StrEnum):
     IDLE = "idle"
+    LOBBY = "lobby"  # waiting for the operator's Start (and how photos are taken); nothing plays, no camera
     INTRODUCTION = "introduction"
     NARRATION = "narration"
     ARTWORK = "artwork_display"  # holding on a picture (guided mode)
@@ -78,9 +79,10 @@ class Cmd(StrEnum):
     SEND_YES = "send_yes"  # /send
     SEND_NO = "send_no"
     LISTEN = "listen"  # push-to-talk toggle in a conversation window
+    SAMPLE = "sample"  # start with a photo instead of the camera (a sample, or one just uploaded)
 
 
-RUNNING = {ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
+RUNNING = {ShowState.LOBBY, ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
            ShowState.PARTICIPATION, ShowState.APPROACH, ShowState.SENDING, ShowState.FINAL_POSE,
            ShowState.REMEMBERING, ShowState.RESCUE,
            ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT, ShowState.CAPTURE,
@@ -98,8 +100,9 @@ VALID: dict[Cmd, set[ShowState]] = {
     Cmd.READY: {ShowState.READINESS, ShowState.PARTICIPATION, ShowState.RESCUE},
     # (APPROACH accepts only PAUSE / SKIP / CANCEL — all of which stop the walk at once)  # in a moment: "yes, they did it"
     Cmd.DECLINE: {ShowState.INVITATION, ShowState.READINESS, ShowState.CONSENT, ShowState.RESCUE},
-    Cmd.CONSENT_YES: {ShowState.CONSENT},
-    Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO},
+    Cmd.CONSENT_YES: {ShowState.CONSENT, ShowState.LOBBY},
+    Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO, ShowState.LOBBY},
+    Cmd.SAMPLE: {ShowState.LOBBY},
     Cmd.SEND_YES: {ShowState.DELIVERY},
     Cmd.SEND_NO: {ShowState.DELIVERY},
     Cmd.LISTEN: {ShowState.CONVERSATION},
@@ -137,6 +140,7 @@ class StoryDirector:
                  rescue_wake_s: float = 20.0, flash_s: float = 1.4, live_always: bool = True,
                  robot_frame_source_factory: Callable | None = None, pose_from: str = "robot",
                  photo_view_timeout_s: float | None = None, sim_robot=None,
+                 wait_for_start: bool = False, photo_factory: Callable | None = None,
                  clock=time.monotonic):
         self.script, self.catalog, self.lines, self.voice, self.stage = script, catalog, lines, voice, stage
         self.store, self.pose_reader, self.frame_source_factory = store, pose_reader, frame_source_factory
@@ -170,6 +174,10 @@ class StoryDirector:
         self.robot_frame_source_factory = robot_frame_source_factory
         # after a photo appears, it stays until the operator presses Next (None = wait; a number = at most that long)
         self.photo_view_timeout_s = photo_view_timeout_s
+        # wait_for_start: begin in LOBBY; the camera opens only after the operator confirms photo consent there.
+        # photo_factory(bytes | None) → a camera + estimator for one picture (None = the sample stand-in)
+        self.wait_for_start, self.photo_factory = wait_for_start, photo_factory
+        self._consent_decided, self._picture = False, None
         self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
         self._robot_cam = None
@@ -226,6 +234,20 @@ class StoryDirector:
         self._inbox.append(cmd)
         self._has_cmd.set()
         return True, f"ok: {cmd.value}"
+
+    def use_picture(self, data: bytes) -> tuple[bool, str]:
+        """Start (from the lobby) with an uploaded picture instead of the camera."""
+        if self.state is not ShowState.LOBBY or self.photo_factory is None:
+            return False, "a picture can only be chosen before the start"
+        try:
+            pic = self.photo_factory(data)
+        except Exception as exc:
+            log.warning("uploaded picture unusable: %s", exc)
+            pic = None
+        if pic is None:
+            return False, "could not read that picture (JPEG or PNG)"
+        self._picture = pic
+        return self.command(Cmd.SAMPLE)
 
     def supply_photo(self, data: bytes, session_id: str | None = None) -> tuple[bool, str]:
         """A consented photo from another input (e.g. Telegram) when the camera failed."""
@@ -527,6 +549,8 @@ class StoryDirector:
             return self._camera
         if self.frame_source_factory is None or self._camera_failed:
             return None
+        if self.wait_for_start and not self.photo_consent:  # no camera until the visitor agreed (lobby)
+            return None
         try:
             self._camera = self.frame_source_factory()
         except Exception as exc:
@@ -753,7 +777,7 @@ class StoryDirector:
     def _mirror(self, frame) -> bool:
         """Show and keep images like a mirror, so left/right match what the participant saw while
         posing — and the painting. Not if the camera already mirrors, nor for the drawn stand-in."""
-        return not getattr(self.pose_reader, "mirrored", False) and getattr(frame, "source", "") != "synthetic"
+        return not getattr(self.pose_reader, "mirrored", False) and getattr(frame, "source", "") not in ("synthetic", "photo")
 
     async def _ambient_live(self) -> None:
         """The camera view stays up for the whole show; moments with their own checklist take over while they
@@ -1394,9 +1418,35 @@ class StoryDirector:
         finally:
             self.stage.subtitle(None)
 
+    async def _lobby(self) -> None:
+        """Nothing plays and no camera opens until the operator starts — choosing how photos are taken."""
+        self._set_state(ShowState.LOBBY, "waiting for Start — nothing plays, no camera until then")
+        self.stage.show(View("title"))
+        while True:
+            cmd = await self._await_cmd({Cmd.CONSENT_YES, Cmd.CONSENT_NO, Cmd.SAMPLE})
+            if cmd is not Cmd.SAMPLE:
+                break
+            pic = self._picture or (self.photo_factory(None) if self.photo_factory else None)
+            if pic is not None:
+                self._camera = None
+                self.frame_source_factory = lambda: pic  # noqa: E731
+                self.pose_reader = PoseReader(pic)
+                break
+            self._note("no sample photo available — choose another start")
+        self.photo_consent, self._consent_decided = cmd is not Cmd.CONSENT_NO, True
+        if self.photo_consent and self.delivery is not None:
+            self._set_state(ShowState.DELIVERY, "send this presentation's photos to the Telegram chat too? "
+                                                "(otherwise: big screen only)")
+            self.send_ok = await self._await_cmd({Cmd.SEND_YES, Cmd.SEND_NO, Cmd.SKIP},
+                                                 timeout=self.send_timeout_s) is Cmd.SEND_YES
+        source = "an uploaded picture" if self._picture else "a sample photo" if cmd is Cmd.SAMPLE else "the camera"
+        self._note(f"start: {'photos from ' + source if self.photo_consent else 'no photos, no camera'}")
+
     async def _consent_cue(self, ch: Chapter, cue: Cue) -> str:
         """Asked once, in the intro. Consent to photos (for the visitor), then — separately — whether the
         operator allows sending them to the Telegram chat. Without consent no photo is ever taken."""
+        if self._consent_decided:  # already answered at the start
+            return "done"
         self.photo_consent, self.send_ok = False, False
         if not self.photos_possible:  # no laptop camera (or only the robot's): no photos, so nothing to ask
             self._note("no photos in this presentation — " + ("the pose camera is on the robot" if self._robot_camera
@@ -1747,6 +1797,7 @@ class StoryDirector:
         self.tries = []
         self._jump_to_pose = False
         self.photo_consent, self.send_ok, self.rounds = False, False, []
+        self._consent_decided = False
         self.rounds_only = False
         if self.script.is_presentation and start_at in ("invitation", "interactive"):
             self.rounds_only, start_at = True, None  # every chapter: straight to its round (consent first)
@@ -1761,11 +1812,15 @@ class StoryDirector:
                 raise ValueError(f"unknown chapter {start_at!r}; one of {', '.join(ids)}")
             idx = ids.index(start_at)
         jumped_to_pose = False
-        ambient = (asyncio.ensure_future(self._ambient_live())
-                   if self.live_always and self._live is not None
-                   and (self.frame_source_factory is not None or self.robot_frame_source_factory is not None) else None)
+        ambient = None
         simview = asyncio.ensure_future(self._sim_feed()) if self.sim_robot is not None else None
         try:
+            if self.wait_for_start:
+                await self._lobby()
+            ambient = (asyncio.ensure_future(self._ambient_live())
+                       if self.live_always and self._live is not None
+                       and (self.frame_source_factory is not None or self.robot_frame_source_factory is not None)
+                       else None)
             while idx < len(chapters):
                 ch = chapters[idx]
                 if ch.interactive and self.artifact is None and self.finale == "imitate":
