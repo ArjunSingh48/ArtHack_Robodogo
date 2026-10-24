@@ -204,7 +204,7 @@ export function start(el) {
   new GLTFLoader().load(AVATAR, (g) => { avatar = makeAvatar(g); scene.add(avatar.holder); },
     undefined, (e) => console.warn('avatar failed to load', e));
 
-  // --- minimap: the room from above, top-right; north = the dog's starting direction, like the main view
+  // --- minimap: the room from above, top-right (dog heading + where it started); north = the dog's starting direction
   const mapCam = new THREE.OrthographicCamera(-2, 2, 2, -2, 0.1, 30);
   mapCam.up.set(0, 0, -1);
   mapCam.layers.enable(1);
@@ -214,7 +214,6 @@ export function start(el) {
   };
   const dogMark = marker(new THREE.ConeGeometry(0.13, 0.32, 3), 0x8fc7d9);  // points the way the dog faces
   dogMark.rotation.order = 'YXZ';
-  const personMark = marker(new THREE.CircleGeometry(0.17, 24), 0xb7a6d6);
   const startMark = marker(new THREE.RingGeometry(0.1, 0.14, 24), 0x9c958c);
 
   let state = null, pitch = 0, phase = 0, last = performance.now();
@@ -282,7 +281,7 @@ export function start(el) {
     if (state) {
       const d = W(state.robot[0], state.robot[1]), p = W(state.person[0], state.person[1]), o = W(0, 0);
       dogMark.position.set(d.x, 1.9, d.z); dogMark.rotation.set(-Math.PI / 2, state.robot[2], 0);
-      personMark.position.set(p.x, 1.9, p.z); startMark.position.set(o.x, 1.9, o.z);
+      startMark.position.set(o.x, 1.9, o.z);
       const box = new THREE.Box3().setFromPoints([d, p, o]), c = box.getCenter(new THREE.Vector3());
       const half = Math.max(1.4, (Math.max(box.max.x - box.min.x, box.max.z - box.min.z)) / 2 + 0.6);
       Object.assign(mapCam, { left: -half, right: half, top: half, bottom: -half });

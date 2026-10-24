@@ -184,7 +184,7 @@ KEYS = {
     "": "next", "n": "next", "next": "next", "p": "pause", "pause": "pause", "r": "resume", "resume": "resume",
     "a": "repeat", "again": "repeat", "repeat": "repeat", "s": "skip", "skip": "skip", "c": "cancel", "q": "cancel",
     "cancel": "cancel", "pose": "pose", "ready": "ready", "capture": "ready", "d": "decline", "decline": "decline",
-    "l": "listen", "listen": "listen", "sample": "sample", "start": "consent_yes",
+    "l": "listen", "listen": "listen", "sample": "sample", "start": "consent_yes", "camera": "camera", "webcam": "camera",
 }
 HELP = ("start: y = camera (they agreed to photos) · sample = sample photo · n = no photos — then "
         "keys: Enter=next · p=pause · r=resume · a=repeat · s=skip · pose · ready · y/n (consent/send) · "

@@ -28,7 +28,7 @@ from .catalog import ShowArtifact
 log = logging.getLogger(__name__)
 
 CONTROL_COMMANDS = {"next", "pause", "resume", "repeat", "skip", "pose", "ready", "decline", "consent_yes",
-                    "consent_no", "send_yes", "send_no", "cancel", "listen", "sample"}
+                    "consent_no", "send_yes", "send_no", "cancel", "listen", "sample", "camera"}
 MAX_UPLOAD_BYTES = 15_000_000
 AI_VOICE_NOTICE = "The robot's voice is AI-generated. Its words are written by the artists."
 
@@ -241,7 +241,7 @@ const ASK={lobby:[['consent_yes','▶ Start — they agreed to photos (camera)']
  artwork_display:[['next','▸ Continue (photo seen)']],
  participation:[['ready','✓ They did it'],['next','Move on']],
  awaiting_photo:[['consent_no','✗ No photo']]};
-const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['cancel','End']];
+const BASE=[['repeat','↺ Repeat'],['pause','Pause'],['resume','Resume'],['next','Next ▸'],['pose','✦ Go to interactive'],['camera','📷 Switch to the webcam'],['cancel','End']];
 async function upload(){  // lobby: a picture instead of the camera
  const f=document.createElement('input');f.type='file';f.accept='image/jpeg,image/png';
  f.onchange=async()=>{if(!f.files.length)return;document.getElementById('msg').textContent='uploading…';

@@ -80,6 +80,7 @@ class Cmd(StrEnum):
     SEND_NO = "send_no"
     LISTEN = "listen"  # push-to-talk toggle in a conversation window
     SAMPLE = "sample"  # start with a photo instead of the camera (a sample, or one just uploaded)
+    CAMERA = "camera"  # back from a photo to the real camera (= they agreed to photos); any time
 
 
 RUNNING = {ShowState.LOBBY, ShowState.INTRODUCTION, ShowState.NARRATION, ShowState.ARTWORK, ShowState.CONVERSATION,
@@ -103,6 +104,7 @@ VALID: dict[Cmd, set[ShowState]] = {
     Cmd.CONSENT_YES: {ShowState.CONSENT, ShowState.LOBBY},
     Cmd.CONSENT_NO: {ShowState.CONSENT, ShowState.AWAITING_PHOTO, ShowState.LOBBY},
     Cmd.SAMPLE: {ShowState.LOBBY},
+    Cmd.CAMERA: (RUNNING - {ShowState.LOBBY}) | {ShowState.PAUSED},
     Cmd.SEND_YES: {ShowState.DELIVERY},
     Cmd.SEND_NO: {ShowState.DELIVERY},
     Cmd.LISTEN: {ShowState.CONVERSATION},
@@ -178,6 +180,7 @@ class StoryDirector:
         # photo_factory(bytes | None) → a camera + estimator for one picture (None = the sample stand-in)
         self.wait_for_start, self.photo_factory = wait_for_start, photo_factory
         self._consent_decided, self._picture, self._shown_pictures = False, None, set()
+        self._real_camera = (frame_source_factory, pose_reader)  # kept while a picture stands in for it
         self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
         self._robot_cam = None
@@ -229,11 +232,26 @@ class StoryDirector:
             return False, "that belongs to an earlier performance — ignored"
         if self.state not in VALID[cmd]:
             return False, f"'{cmd.value}' does nothing while {self.state.value}"
+        if cmd is Cmd.CAMERA:
+            return self._switch_to_camera()
         if cmd is Cmd.POSE:
             self._jump_to_pose = True  # sticky: honoured at the next safe point, whatever is playing
         self._inbox.append(cmd)
         self._has_cmd.set()
         return True, f"ok: {cmd.value}"
+
+    def _switch_to_camera(self) -> tuple[bool, str]:
+        """Operator: the visitor is here now and agreed — the real camera instead of the sample/uploaded picture."""
+        factory, reader = self._real_camera
+        if factory is None or reader is None:
+            return False, "no camera configured for this show (--source)"
+        if self.frame_source_factory is factory:
+            return False, "already using the camera"
+        self.frame_source_factory, self.pose_reader = factory, reader
+        self._camera, self._camera_failed, self._picture = None, False, None
+        self.photo_consent = self._consent_decided = True
+        self._note("switched to the camera (they agreed to photos)")
+        return True, "ok: camera"
 
     def use_picture(self, data: bytes) -> tuple[bool, str]:
         """Start (from the lobby) with an uploaded picture instead of the camera."""
@@ -785,10 +803,12 @@ class StoryDirector:
         from .live_view import checks_for as _checks
 
         try:
-            cams = [c for c in (self._open_camera(), self._open_robot_camera()) if c is not None]
-            if not cams or self.pose_reader is None:
-                return
             while True:
+                # looked up every time: the operator may switch from a picture to the camera mid-show
+                cams = [c for c in (self._open_camera(), self._open_robot_camera()) if c is not None]
+                if not cams or self.pose_reader is None:
+                    await asyncio.sleep(0.5)
+                    continue
                 for camera in cams:
                     if self.state is ShowState.PAUSED:
                         break
@@ -1839,7 +1859,8 @@ class StoryDirector:
                 await self._lobby()
             ambient = (asyncio.ensure_future(self._ambient_live())
                        if self.live_always and self._live is not None
-                       and (self.frame_source_factory is not None or self.robot_frame_source_factory is not None)
+                       and (self._real_camera[0] is not None or self.frame_source_factory is not None
+                            or self.robot_frame_source_factory is not None)
                        else None)
             while idx < len(chapters):
                 ch = chapters[idx]

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import random
 import re
 from io import BytesIO
@@ -1022,7 +1023,10 @@ def test_robot_walks_to_the_painted_side_and_keeps_its_distance(side, person, po
     assert world.min_distance >= 0.55  # never closer than the safety gap
     assert all(abs(vx) <= 0.3 and abs(vyaw) <= 0.6 for vx, vy, vyaw in robot.velocities)
     assert robot.velocities[-1] == (0.0, 0.0, 0.0)  # halted
+    out = len(robot.velocities)
     assert a.go_home() == "done"
+    assert all(vx >= 0 for vx, vy, vyaw in robot.velocities[out:])  # turns round: never walks backwards
+    assert abs(math.atan2(math.sin(world.pose[2]), math.cos(world.pose[2]))) < 0.1  # faces the audience again
     assert abs(world.pose[0]) < 0.05 and abs(world.pose[1]) < 0.05  # back where it started
 
 

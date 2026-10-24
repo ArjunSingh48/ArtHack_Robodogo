@@ -10,13 +10,14 @@ How it works (one loop, ~8 Hz):
    started (the audience side), or in FRONT — never closer than `min_gap_m`; then turn to face them.
    If the person suddenly looks very large in the camera, it stops at once.
 5. Remember: every velocity command actually sent is kept (`path`) together with a dead-reckoned
-   estimate of where the robot and the person are. `go_home()` replays the path backwards.
+   estimate of where the robot and the person are. `go_home()` turns round, walks straight back to the
+   start (dead reckoning) and turns to face the audience again — like a dog, never backwards.
 
 Safety (in addition to the operator's physical remote):
 * only with `--walk` (and `--motion --i-have-physical-estop`), SHOW_WALK_ENABLED=true, every motion
   gate open and the robot armed; re-checked every step (/disarm, /cancel, End stop it at once);
 * velocities are clamped twice (here and in the adapter): ≤ 0.25 m/s forward, ≤ 0.5 rad/s turning;
-  the robot never walks backwards toward people except when retracing its own path home;
+  the robot never walks backwards;
 * limits on time, distance and turning; losing the person for more than a second stops it;
 * the bridge's own heartbeat zeroes velocity if commands stop arriving; its obstacle avoidance
   stays on (bridge default);
@@ -319,20 +320,36 @@ class Approacher:
         self._halt(res)
 
     def go_home(self, *, should_stop=lambda: False) -> str:
-        """Retrace the remembered path backwards (open loop). → done | stopped | nothing"""
+        """Turn towards the start, walk straight there, turn to face the audience again (open loop, dead
+        reckoning from the remembered pose). → done | stopped | nothing"""
         mem = self.memory
         if mem is None or not mem.path:
             return "nothing"
         ok, why = self.guard.walk_allowed()
         if not ok or not self._standing():
             return "stopped"
-        back = ApproachResult("home")
+        back = ApproachResult("home", robot_pose=mem.robot_pose)
+        wrap = lambda a: math.atan2(math.sin(a), math.cos(a))  # noqa: E731
         try:
-            for vx, vy, vyaw, dt in reversed(mem.path):
-                if should_stop() or not self._allowed_now()[0]:
-                    return "stopped"
-                self._send(back, -vx, -vy, -vyaw, dt)
-                self.sleep(dt)
+            x, y, yaw = back.robot_pose
+            dt = 1.0 / self.s.rate_hz
+            if math.hypot(x, y) > 0.05:
+                self._turn(back, wrap(math.atan2(-y, -x) - yaw), should_stop)
+                for _ in range(int(3 * math.hypot(x, y) / (self.s.speed * dt)) + 10):  # steer on the way
+                    x, y, yaw = back.robot_pose
+                    dist = math.hypot(x, y)
+                    if dist < 0.01:
+                        break
+                    if should_stop() or not self._allowed_now()[0]:
+                        return "stopped"
+                    err = wrap(math.atan2(-y, -x) - yaw)
+                    step = min(dt, dist / self.s.speed)  # the last step is shorter
+                    self._send(back, self.s.speed, 0.0, _clamp(2 * err, self.s.turn_speed), step)
+                    self.sleep(step)
+                self._halt(back)
+            self._turn(back, wrap(-back.robot_pose[2]), should_stop)  # face where it started facing
+            if should_stop() or not self._allowed_now()[0]:
+                return "stopped"
             self.memory = None
             return "done"
         finally:

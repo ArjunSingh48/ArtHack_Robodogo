@@ -503,3 +503,24 @@ async def test_lobby_can_start_with_a_picture_instead_of_the_camera(tmp_path, pr
     res = await d.run()
     assert res.final_state is ShowState.FINISHED
     assert d.photo_consent and d._open_camera() is pic and d.pose_reader is not None
+
+
+async def test_operator_can_switch_from_a_sample_picture_to_the_camera(tmp_path, pres, catalog, lines):
+    from is_this_us.performance.runtime import SyntheticParticipant
+
+    pic, cam = SyntheticParticipant("standing"), SyntheticParticipant("sitting")
+    d = director(tmp_path, pres, catalog, lines, wait_for_start=True, photo_factory=lambda data: pic)
+    d.frame_source_factory = d._real_camera = None  # set below: the "real" camera
+    d.frame_source_factory, d._real_camera = (lambda: cam), ((lambda: cam), d.pose_reader)
+    switched = []
+
+    def on_state(director, st):
+        if st is ShowState.LOBBY:
+            asyncio.get_running_loop().call_later(0.01, lambda: director.command(Cmd.SAMPLE))
+        elif st is ShowState.INTRODUCTION and not switched:
+            switched.append(director.command(Cmd.CAMERA))
+    d.listeners.append(on_state)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert switched == [(True, "ok: camera")] and d._open_camera() is cam and d.photo_consent
