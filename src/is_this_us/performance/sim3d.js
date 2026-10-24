@@ -162,9 +162,11 @@ export function start(el) {
   renderer.domElement.addEventListener('dblclick', () => { manual = false; });
   function follow(a, b) {  // keep the dog and the person framed
     if (manual) return;
-    const want = a.clone().add(b).multiplyScalar(0.5).setY(0.45);
+    const want = a.clone().add(b).multiplyScalar(0.5).setY(0.85);  // mid-height of a standing person
     look.lerp(want, 0.05);
-    const dist = Math.max(2.2, a.distanceTo(b) * 1.3 + 1.6);
+    // far enough that a whole person (≈1.9 m, head included) fits the height and both fit the width
+    const tanV = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2), tanH = tanV * camera.aspect;
+    const dist = Math.max(1.15 / tanV, (a.distanceTo(b) / 2 + 0.7) / tanH, 2.2) + 0.4;
     camera.position.lerp(look.clone().addScaledVector(BEHIND, dist), 0.05);
     controls.target.copy(look);
   }
