@@ -47,7 +47,7 @@ const ASK = {
   readiness: [['ready', '▶ Start the round now'], ['skip', '⏭ Skip this round']],
   rescue_down: [['ready', '✓ Someone is lying down'], ['skip', 'Skip']],
   rescue_up: [['ready', '✓ They are up again']],
-  photo: [['next', 'Next ▸']],
+  photo: [['next', '✓ Continue (photo seen)']],
 };
 function controls(st) {
   state = st;
