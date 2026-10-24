@@ -265,9 +265,9 @@ async function waitForPose(g, targets, label) {  // steady pose (or a target pos
 }
 function card(a, img, heading) {
   const when = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
-  return `<div class="card">${a ? `<div class="row"><div class="col"><b>THEN</b><img src="${a.image}" alt=""><i>${a.title}</i><span>${a.artist}${a.date ? ', ' + a.date : ''} · ${a.museum}</span></div>
+  return `<div class="card${a ? '' : ' solo-card'}">${a ? `<div class="row"><div class="col"><b>THEN</b><img src="${a.image}" alt=""><i>${a.title}</i><span>${a.artist}${a.date ? ', ' + a.date : ''} · ${a.museum}</span></div>
     <div class="col"><b>NOW</b><img src="${img}" alt=""><i>A participant and a robot dog</i><span>Made together, ${when}</span></div></div>`
-    : `<div class="col" style="align-items:center"><img src="${img}" alt="" style="max-height:52vh"></div>`}
+    : `<div class="solo"><img src="${img}" alt=""></div>`}
     <h2>${heading}</h2><p>is this us? · a collaboration</p></div>`;
 }
 function meme(img, group) {
