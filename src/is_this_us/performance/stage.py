@@ -443,7 +443,8 @@ class WebStage:
             figs = "".join(f"<figure data-id='{html.escape(a.id)}'><img src='{self._img(a.image_path, keep=True)}' alt=''>"
                            f"<figcaption>{html.escape(a.title)}, {html.escape(a.date)}</figcaption></figure>"
                            for a in view.memes if a.displayable)
-            body = f"<div class='consider'><b>REMEMBERING…</b><div class='cgrid'>{figs}</div></div>"
+            body = (f"<div class='consider'><b>{html.escape((view.heading or 'remembering…').upper())}</b>"
+                    f"<div class='cgrid'>{figs}</div></div>")
             self._set(view_html=body, focus="")
             return
         if view.kind == "flash" and view.artifact and view.artifact.displayable:

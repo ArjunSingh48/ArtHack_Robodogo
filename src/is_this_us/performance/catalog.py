@@ -86,6 +86,7 @@ class ShowArtifact:
     human: str = ""  # the main person's posture (sitting | standing | kneeling | lying) — for the rounds
     dog: str = ""  # a RobotBehavior that echoes the painted dog (sit, lie_down, stand, greet, stretch)
     dog_side: str = ""  # where the dog is next to the person, as the viewer sees it (left | right | front)
+    in_rounds: bool = True  # false: shown in the story only — no visible dog/pose to answer in a round
     dog_facing: str = ""  # which way the painted dog looks, as the viewer sees it (viewer | left | right | person | away)
 
     @property
@@ -151,7 +152,8 @@ class PerformanceCatalog:
                       canine=str(e.get("canine", "certain")), description=str(e.get("description", "")).strip(),
                       pose_tags=tuple(e.get("pose_tags") or ()), interactive=_spec(e.get("interactive")),
                       human=str(e.get("human", "") or ""), dog=str(e.get("dog", "") or ""),
-                      dog_side=str(e.get("dog_side", "") or ""), dog_facing=str(e.get("dog_facing", "") or ""))
+                      dog_side=str(e.get("dog_side", "") or ""), dog_facing=str(e.get("dog_facing", "") or ""),
+                      in_rounds=bool(e.get("in_rounds", True)))
         if key.startswith("meme:"):
             meme = self.meme_repo.get(key) if self.meme_repo else None
             if meme is None:

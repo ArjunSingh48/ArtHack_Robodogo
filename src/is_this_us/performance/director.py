@@ -198,6 +198,7 @@ class StoryDirector:
         self._camera = None
         self._camera_failed = False
         self._robot_camera = False
+        self._walk_cmd: Cmd | None = None  # how the last walk ended (None = by itself)
         self._camera_lock = threading.Lock()  # one camera read at a time (OpenCV is not thread-safe)
         self._jump_to_pose = False
         self.moment_hold_s = moment_hold_s  # a moment counts once the pose is held this long
@@ -1072,6 +1073,9 @@ class StoryDirector:
         if camera is None or self.pose_reader is None:
             self._note("no camera / pose reading: the encounter cannot match a picture — skipped")
             return None
+        still = getattr(camera, "is_still", False)
+        if still:
+            self._set_state(ShowState.READINESS, "a photo stands in for the person — press ✓ Ready to go on")
         tracker = StabilityTracker(self.stable_s)
         deadline = self.clock() + self.readiness_timeout_s
         last_hint = -1e9
@@ -1085,7 +1089,7 @@ class StoryDirector:
                 self.last_reading = reading
             checks = checks_for(reading) + [Check("holding still", steady or tracker.progress(now) >= 1.0)]
             await self._publish_live(frame, reading, checks)
-            if steady:
+            if steady and not still:  # a photo is always "steady": with one, Ready decides
                 return reading
             hint = None
             if reading is None or not reading.person_visible:
@@ -1331,6 +1335,7 @@ class StoryDirector:
         if self.motion is not None:
             await asyncio.to_thread(self.motion.perform, "stand")  # walking starts from standing
         res, cmd = await self._walk(self.approacher.approach, side=side, posture=posture, facing=facing)
+        self._walk_cmd = cmd
         self.walk_log.append(f"approach: {getattr(res, 'status', 'interrupted')} {getattr(res, 'detail', '')}".strip())
         if cmd is Cmd.CANCEL:
             raise ShowCancelled()
@@ -1561,11 +1566,15 @@ class StoryDirector:
         """One era: any pose → the closest picture of this era → the robot remembers while it walks over and
         takes the painted dog's pose → the picture → hold + photo → beamer + Telegram → back to its place."""
         from .live_view import checks_for as _checks
-        from .rounds import MEME_BEHAVIOR, behavior_for, facing_for, pick_for_round, pose_group, side_for
+        from .rounds import (MEME_BEHAVIOR, behavior_for, candidates, facing_for, pick_for_round, pose_group,
+                             side_for)
 
         era = cue.target
         camera = self._open_camera()  # the laptop camera: the photo of the two together
         await self._fit_picture(camera, era)
+        collage = [a for a in candidates(self.catalog, era) if a.displayable]
+        if collage:  # the era's pictures stay up while the person poses (not the last narration picture)
+            self.stage.show(View("consider", memes=collage, heading=ch.title))
         eyes = self._pose_camera()  # the dog's own camera reads the pose (laptop camera if it has none)
         looking = eyes is not None and self.pose_reader is not None
         self._set_state(ShowState.READINESS, f"{era}: waiting for a steady pose — starts by itself; Ready = now, "
@@ -1672,10 +1681,21 @@ class StoryDirector:
         from ..domain import ExecutionStatus
 
         if self.approacher is not None:
-            arrived = await self._walk_to_person_at(side, posture or "sitting", speak=False, facing=facing)
-            if not arrived:
-                self._note("could not reach the person — pose skipped")
-                return False
+            # nothing moves on until the dog is at its spot: a paused or failed walk is walked again;
+            # only the operator's Skip goes on without it
+            tries = 0
+            while not await self._walk_to_person_at(side, posture or "sitting", speak=False, facing=facing):
+                if self._walk_cmd is Cmd.SKIP:
+                    self._note("walk skipped by the operator — pose skipped")
+                    return False
+                tries += 1
+                if self._walk_cmd is not Cmd.PAUSE and tries >= 2:
+                    self._set_state(ShowState.READINESS, "the dog has not reached its spot — Ready = walk again, "
+                                                         "Skip = go on without it")
+                    if await self._await_cmd({Cmd.READY, Cmd.SKIP}) is not Cmd.READY:
+                        self._note("could not reach the person — pose skipped")
+                        return False
+                self._note("the dog has not reached its spot yet — walking again")
         if self.motion is None or not getattr(self.motion, "enabled", False):
             self._note(f"pose '{behavior}' not performed (show motion off)")
             return False

@@ -100,7 +100,7 @@ class Pick:
 
 def candidates(catalog: PerformanceCatalog, era: str) -> list[ShowArtifact]:
     """Pictures of this era the robot may pick and send: open-access art with a local image."""
-    return [a for a in catalog.for_chapter(era) if a.kind == "art" and a.displayable]
+    return [a for a in catalog.for_chapter(era) if a.kind == "art" and a.displayable and a.in_rounds]
 
 
 def _score(catalog: PerformanceCatalog, a: ShowArtifact, group, gestures: set[str],

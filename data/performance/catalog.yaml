@@ -65,10 +65,7 @@ artifacts:
     canine: certain
     description: An early clay tablet recording barley rations, rolled with a seal showing a man, hunting dogs and boars.
     pose_tags: [hunting, running]
-    human: standing
-    dog: stretch
-    dog_side: left
-    dog_facing: right
+    in_rounds: false  # the dogs are too small to see: shown in the story, never a round's picture
   met:323707:
     fetch: true
     chapter: prehistory
