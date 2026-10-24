@@ -772,6 +772,81 @@
    "dog": "stand",
    "side": "left",
    "facing": "person"
+  },
+  "meme:doge": {
+   "kind": "meme",
+   "title": "Doge",
+   "artist": "stand-in photo by @mpetrucho",
+   "date": "2010",
+   "museum": "Unsplash",
+   "rights": "Unsplash License — not the original meme",
+   "image": "memes/doge.jpg",
+   "chapter": "internet",
+   "subject": "dog_only",
+   "human": "",
+   "dog": "stand",
+   "side": "left",
+   "facing": "person"
+  },
+  "meme:this-is-fine": {
+   "kind": "meme",
+   "title": "This Is Fine",
+   "artist": "stand-in photo by @ciabattespugnose",
+   "date": "2013",
+   "museum": "Unsplash",
+   "rights": "Unsplash License — not the original meme",
+   "image": "memes/this-is-fine.jpg",
+   "chapter": "internet",
+   "subject": "dog_only",
+   "human": "",
+   "dog": "sit",
+   "side": "left",
+   "facing": "person"
+  },
+  "meme:side-eye-dog": {
+   "kind": "meme",
+   "title": "Side Eye Dog",
+   "artist": "stand-in photo by @evgeny_karp97",
+   "date": "2015",
+   "museum": "Unsplash",
+   "rights": "Unsplash License — not the original meme",
+   "image": "memes/side-eye-dog.jpg",
+   "chapter": "internet",
+   "subject": "dog_only",
+   "human": "",
+   "dog": "stand",
+   "side": "left",
+   "facing": "person"
+  },
+  "meme:long-nose-borzoi": {
+   "kind": "meme",
+   "title": "Long Nose Borzoi",
+   "artist": "stand-in photo by @karolinawv",
+   "date": "2016 (Vines), 2020 (memes)",
+   "museum": "Unsplash",
+   "rights": "Unsplash License — not the original meme",
+   "image": "memes/long-nose-borzoi.jpg",
+   "chapter": "internet",
+   "subject": "dog_only",
+   "human": "",
+   "dog": "stand",
+   "side": "left",
+   "facing": "person"
+  },
+  "meme:cheems": {
+   "kind": "meme",
+   "title": "Cheems",
+   "artist": "stand-in photo by @kobi_kadosh",
+   "date": "2017 (photo), 2019 (meme)",
+   "museum": "Unsplash",
+   "rights": "Unsplash License — not the original meme",
+   "image": "memes/cheems.jpg",
+   "chapter": "internet",
+   "subject": "dog_only",
+   "human": "",
+   "dog": "stand",
+   "side": "left",
+   "facing": "person"
   }
  },
  "eras": {
@@ -798,7 +873,13 @@
   ],
   "internet": []
  },
- "memes": [],
+ "memes": [
+  "meme:doge",
+  "meme:this-is-fine",
+  "meme:side-eye-dog",
+  "meme:long-nose-borzoi",
+  "meme:cheems"
+ ],
  "lines": {
   "round": {
    "waiting": [

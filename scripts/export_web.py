@@ -25,6 +25,9 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 SPOKEN = ("round", "rescue")  # runtime line sections the web show says
+# the internet round's memes, online: free Unsplash photos of similar dogs (web/memes/<slug>.jpg) — photographer
+MEME_STANDINS = {"meme:doge": "mpetrucho", "meme:cheems": "kobi_kadosh", "meme:long-nose-borzoi": "karolinawv",
+                 "meme:side-eye-dog": "evgeny_karp97", "meme:this-is-fine": "ciabattespugnose"}
 
 
 def main() -> None:
@@ -47,7 +50,7 @@ def main() -> None:
     data_dir = Path(s.show_data_dir)
     script = load_script(data_dir, "en", "presentation")
     lib = build_library(s)
-    art_repo, meme_repo = lib if isinstance(lib, tuple) else (lib, None)
+    art_repo, meme_repo = lib.art, lib.memes
     catalog = PerformanceCatalog(data_dir, art_repo, meme_repo)
     lines = Lines.load(data_dir, "en")
     for d in ("img", "audio", "samples", "data"):
@@ -72,6 +75,9 @@ def main() -> None:
         return f"audio/{name}"
 
     def picture(a) -> str | None:
+        if a.kind == "meme":  # never the presentation-use originals online: a free Unsplash stand-in instead
+            slug = a.id.split(":", 1)[1]
+            return f"memes/{slug}.jpg" if (WEB / "memes" / f"{slug}.jpg").exists() else None
         if not a.displayable:
             return None
         name = a.id.replace(":", "_") + ".jpg"
@@ -86,8 +92,11 @@ def main() -> None:
         img = picture(a)
         if img is None:
             continue
-        art[a.id] = {"kind": a.kind, "title": a.title, "artist": a.artist, "date": a.date, "museum": a.museum,
-                     "rights": a.rights_status, "image": img, "chapter": a.chapter, "subject": a.subject,
+        meme = a.kind == "meme"
+        art[a.id] = {"kind": a.kind, "title": a.title,
+                     "artist": f"stand-in photo by @{MEME_STANDINS[a.id]}" if meme else a.artist, "date": a.date,
+                     "museum": "Unsplash" if meme else a.museum,
+                     "rights": "Unsplash License — not the original meme" if meme else a.rights_status, "image": img, "chapter": a.chapter, "subject": a.subject,
                      "human": human_pose(a, catalog.art_repo), "dog": behavior_for(a, catalog.art_repo),
                      "side": side_for(a, catalog.art_repo), "facing": facing_for(a)}
     eras = {era: [a.id for a in candidates(catalog, era)] for era in ROUND_ERAS}

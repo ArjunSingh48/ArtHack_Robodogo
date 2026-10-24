@@ -87,8 +87,16 @@ async function say(text, url, g) {
   lastSaid = [text, url];
   for (;;) {
     subtitle(text);
-    const ended = url ? new Promise((r) => { audio.onended = r; audio.onerror = r; }) : sleep(Math.max(1500, text.split(/\s+/).length * 380), g);
-    if (url) { audio.src = url; audio.play().catch(() => {}); }
+    const estimate = Math.max(1500, text.split(/\s+/).length * 380);
+    let ended = sleep(estimate, g);
+    if (url) {  // the clip; if it cannot play (blocked, missing), the subtitle stays for an estimated time
+      audio.src = url;
+      const played = audio.play();
+      ended = Promise.race([
+        new Promise((r) => { audio.onended = r; audio.onerror = () => sleep(estimate, g).then(r); played.catch(() => sleep(estimate, g).then(r)); }),
+        sleep(estimate * 3 + 4000, g),  // never stuck on a clip
+      ]);
+    }
     const cmd = await Promise.race([ended.then(() => 'done'), nextCmd(['next', 'repeat', 'skip'])]);
     alive(g);
     await whilePaused(g);
