@@ -44,7 +44,7 @@ from a painting, and (with consent) makes a new picture with them: **THEN / NOW 
 
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
-Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite · Pillow
+Python · MediaPipe · aiogram 3 · ElevenLabs · Unitree SDK2 · SQLite · Pillow
 
 ## Documentation
 
@@ -52,7 +52,7 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 |---|---|
 | [`docs/PRESENTATION.md`](docs/PRESENTATION.md) | **the presentation** (beamer + robot): intro → a pose round per era → rescue finale; run sheet, buttons, safety |
 | [`docs/PERFORMANCE.md`](docs/PERFORMANCE.md) | **the performance**: rehearsal, live show, Telegram controls, consent, **operator run sheet** |
-| [`docs/VOICE.md`](docs/VOICE.md) | OpenAI voice: one voice, narration cache, audition, GPT-Live conversation windows |
+| [`docs/VOICE.md`](docs/VOICE.md) | ElevenLabs English speech, setup, cache and audition; legacy Azure experiments |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | pipeline, state machine, matching, risks |
 | [`docs/TALK.md`](docs/TALK.md) | talk mode: live conversation, the dog's story, setup step by step, privacy |
 | [`docs/MEMES.md`](docs/MEMES.md) | meme memory: schema, rights policy, adding a meme, Imgflip discovery |
@@ -69,7 +69,7 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 - Relationship matching across paintings, memes, both, or a surprise, on one comparable 0–1 scale.
 - A closed, operator-controlled movement vocabulary with a safety guard; a mock robot that simulates the
   exact SDK call sequences; a Go2 adapter (hardware-unverified).
-- The robot's character in English, Russian and German; a voice from the OpenAI Realtime API with caching, a word-for-word fidelity check and text fallback.
+- English-only ElevenLabs presentation speech with local caching and silent fallback; legacy dialogue templates and Azure talk experiments remain available.
 - A Telegram bot: QR pairing, `/observe`, photo mode without the robot, `/art` `/meme` `/surprise`,
   ♡ / ↻ / ✧ buttons, memory gallery, memory cards, consented imitation photos, `/forget`, operator controls.
 - Talk mode: a live spoken conversation with the dog, which tells its own story.
@@ -137,24 +137,32 @@ Never commit `.env` (already in `.gitignore`).
 
 ## 4. Voice (optional)
 
-```
-AZURE_OPENAI_API_KEY=…
-AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com/
-OPENAI_VOICE=marin                 # ONE voice for everything — choose with `itu voice audition`
-OPENAI_NARRATION_MODEL=gpt-realtime-2.1-mini   # performance narration (pre-generated, cached)
-OPENAI_REALTIME_MODEL=gpt-realtime-2.1         # free-play lines + talk mode
-LOCAL_AUDIO_PLAYBACK=true          # play on the laptop / a Bluetooth speaker
+The presentation uses **ElevenLabs, English only**, with cached WAV clips and
+laptop playback. Put these settings in the local `.env`:
+
+```dotenv
+VOICE_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=your_private_key
+ELEVENLABS_VOICE_ID=your_selected_voice_id
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+VOICE_CACHE_ENABLED=true
+LOCAL_AUDIO_PLAYBACK=true
+VOICE_PRESET=off
+OPENAI_ENABLE_LIVE_CONVERSATION=false
 ```
 
-The robot's voice is AI-generated (OpenAI); say so at the installation — the projector page shows it.
-Full details: [`docs/VOICE.md`](docs/VOICE.md).
+Run `itu voice audition` to hear the selected voice, then `itu show voice status`
+to see missing clips and character totals. `itu show voice pregenerate` prepares
+both programmes and their fixed runtime lines using your account credits. Cached
+speech can play offline. `VOICE_PROVIDER=none` disables speech and sound cues.
 
-Each phrase opens a short Realtime session that is told to *read the text aloud exactly*, in the visitor's
-language, in a soft, shy voice. The model's own transcript is compared with the script; if it improvised,
-the audio is discarded (one retry, then text). Only the sentence to be spoken is sent to OpenAI — never
-images or body data — and nothing the model returns is used for anything but playback. Audio is cached as
-WAV and converted to OGG/Opus for Telegram voice notes. Without a key, or when the API fails, everything
-continues as text.
+Only spoken text and voice settings go to ElevenLabs; visitor images and pose data
+stay local. Voice failure continues silently with presentation subtitles. The
+projector identifies the voice as AI-generated. The adapter does not provide the
+old Azure transcript fidelity check: review generated clips by listening.
+See [voice setup and verification](docs/VOICE.md). Explicit Azure speech remains
+available with `VOICE_PROVIDER=openai`; live conversation below remains a separate
+Azure experiment requiring its own credentials.
 
 ## 5. Talk to the dog (live conversation)
 
@@ -181,7 +189,7 @@ itu show validate                                    # script, lines, catalog
 itu show --dry-run --auto --fast 0.05                # whole show, unattended, no hardware/keys/Telegram
 itu show --dry-run --display web                     # rehearse with the projector page; you press Enter
 itu show --dry-run --interactive --display web --source webcam   # straight to the pose part
-itu show voice pregenerate                           # needs AZURE_OPENAI_API_KEY; then the show plays offline
+itu show voice pregenerate                           # needs ElevenLabs key + voice ID; caches speech for offline playback
 itu show --display web --source webcam               # the real thing (guided: you advance each chapter)
 itu show --display web --source webcam --telegram    # + operator controls /show /next /pause … in Telegram
 ```
@@ -236,7 +244,7 @@ src/is_this_us/
   motion/           planner (scene → approved behavior) · guard (safety)
   robot/            step sequences · mock · Go2 adapter · shared DDS init
   dialogue/         engine + locales (en, ru, de)
-  speech/           OpenAI Realtime voice, cache, FFmpeg, local speaker
+  speech/           ElevenLabs + legacy Azure voice, cache, FFmpeg, local speaker
   talk/             live conversation: persona, tools, audio, Realtime session
   performance/      StoryDirector · script · catalog · voice cache · stage (terminal/web) · pose guide ·
                     composer · delivery · conversation windows (GPT-Live) · motion cues · CLI

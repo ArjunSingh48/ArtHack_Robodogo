@@ -41,7 +41,7 @@ needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg
 
 
 def settings(**kw) -> Settings:
-    base = {"azure_openai_api_key": "", "openai_voice": "marin"}
+    base = {"voice_provider": "openai", "azure_openai_api_key": "", "openai_voice": "marin"}
     base.update(kw)
     return Settings(_env_file=None, **base)
 

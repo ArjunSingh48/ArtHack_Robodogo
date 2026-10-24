@@ -91,6 +91,6 @@ person lying across the robot's view, not along it. Keep the remote in hand.
 | --- | --- |
 | Software sequence (simulation, tests) | `tests/test_presentation.py`: full presentation with/without consent and send confirmation, no camera, cancel, rounds-only, simulated walking there and back, keeping distance from a lying person, meme drawing |
 | Telegram live delivery | not verified here (needs your bot token and chat) |
-| Voice | not verified here (needs your Azure key); see [VOICE.md](VOICE.md) |
+| Voice | English-only ElevenLabs; live API and offline cache checked. Listening approval and full audio rehearsal remain; see [VOICE.md](VOICE.md). |
 | Robot poses, walking, rescue approach | **not verified on the robot**; rehearse with the remote in hand |
 | Lying-person detection with the laptop camera | MediaPipe posture classifier; not verified in the room. The operator's **✓ Yes, now** is the fallback |

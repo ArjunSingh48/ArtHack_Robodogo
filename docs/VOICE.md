@@ -1,7 +1,192 @@
-# Voice — one character, OpenAI only
+# Voice — ElevenLabs English speech and legacy Azure experiments
 
-ElevenLabs is gone from the project (no code, dependency or setting refers to it). Every spoken word
-uses OpenAI. The robot's voice is **AI-generated** — the projector page says so, and so should a sign.
+**Decision, 2026-10-24:** replace Azure OpenAI as the dog's speech provider with
+ElevenLabs. **Status: implemented for scripted speech; live API and offline cache
+checks passed.** English-only presentation speech uses the selected ElevenLabs
+voice. The Azure reference below applies only when explicitly selected and to
+the separate live conversation experiments.
+
+## Recommended solution
+
+Use ElevenLabs text-to-speech for the approved presentation script and short
+runtime lines, **in English only** (user clarification). Generate clips before
+the show, cache them locally as WAV, and reuse the existing laptop playback,
+pauses, subtitles, and stop handling.
+This changes the voice heard during the intro, era rounds, and rescue finale;
+it introduces no visitor choice. The script, consent steps, Telegram captions,
+and guarded motion remain governed by [UX.md](UX.md).
+
+Start with **`eleven_multilingual_v2`**, using one selected voice ID for narration
+and reactions. The reason for this baseline is stable delivery, not multilingual
+coverage; the model's name does not require multilingual use. Compare an
+expressive `eleven_v4` take during audition if needed; Flash v2.5 is a later
+option for latency-sensitive lines. These are model
+choices, separate from the voice's identity. The recommendation prioritizes a
+repeatable, rehearsed performance; it is not a claim that this voice has been
+heard or validated. [Official model comparison](https://elevenlabs.io/docs/overview/models).
+
+```text
+Approved spoken text → ElevenLabs TTS → local WAV cache → existing laptop speaker
+                                            ↓
+                                  optional existing local FX
+```
+
+Only spoken text and synthesis settings go to ElevenLabs. No visitor photo,
+camera frame, pose landmarks, or microphone recording is needed for this path.
+An unavailable voice continues silently with the existing presentation subtitles;
+it must not add explanatory Telegram messages or delay safety controls.
+
+## Setup for the operator
+
+1. Sign in to ElevenLabs. Open [API keys](https://elevenlabs.io/app/api/api-keys)
+   and create a project key with Text to Speech access. Allow voice/model read
+   access if using API discovery; set a small credit quota for the first trials.
+   Save the key only in the local, git-ignored `.env`, never in chat or the
+   projector frontend. [Authentication and key restrictions](https://elevenlabs.io/docs/api-reference/authentication).
+2. Audition voices in the [Voice Library](https://elevenlabs.io/app/voice-library)
+   using English lines: “Hello. I am a dog.”, “Please wake up”, and “Am I a good boy
+   already?”. Add the chosen voice to your account and copy its voice ID. The
+   [official quickstart](https://elevenlabs.io/docs/eleven-api/quickstart) shows how
+   the key and voice ID are used; no Azure deployment is needed for this TTS path.
+3. If stock voices miss the character, use Voice Design, audition its previews,
+   and save the chosen preview to the library to obtain a reusable voice ID.
+   [Voice Design workflow](https://elevenlabs.io/docs/eleven-api/guides/how-to/voices/voice-design).
+   Suggested design prompt, retaining the existing robot-voice experiment:
+
+   > A small robot dog with a low-mid, slightly nasal, gently buzzy voice.
+   > Dry, deadpan articulation, awkward pauses, shy curiosity and quiet warmth.
+   > Clear and intelligible, with subtle mechanical character. No booming bass
+   > or high cartoon squeak.
+
+4. Try a few short clips before generating the whole programme. Start with the
+   account's available allowance; compare the chosen model's character cost in
+   [API pricing](https://elevenlabs.io/pricing/api). Budget for alternate takes.
+   Playback of a locally cached clip makes no synthesis request.
+
+**Working `.env` configuration:**
+
+```dotenv
+VOICE_PROVIDER=elevenlabs
+ELEVENLABS_API_KEY=<local secret>
+ELEVENLABS_VOICE_ID=<chosen voice ID>
+ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+ELEVENLABS_OUTPUT_FORMAT=pcm_24000
+ELEVENLABS_STABILITY=0.5
+ELEVENLABS_SIMILARITY_BOOST=0.75
+ELEVENLABS_STYLE=0.0
+VOICE_CACHE_ENABLED=true
+LOCAL_AUDIO_PLAYBACK=true
+VOICE_PRESET=off
+OPENAI_ENABLE_LIVE_CONVERSATION=false
+```
+
+The numeric voice settings are audition starting points, not an approved sound.
+Begin with raw audio; compare existing local Hertz FX separately. Voice selection
+must use `ELEVENLABS_VOICE_ID`, even if a local FX preset is enabled later.
+[ElevenLabs voice-settings reference](https://github.com/elevenlabs/skills/blob/main/text-to-speech/references/voice-settings.md).
+
+## Implemented behavior and commands
+
+The REST adapter uses the existing `httpx` dependency, receives `pcm_24000`, and
+writes validated, complete WAV files atomically. No additional Python SDK is
+needed for ElevenLabs. `VOICE_PROVIDER=elevenlabs` takes precedence over the old
+`OPENAI_VOICE_PROVIDER`; without the new setting, an explicitly configured old
+provider still works. Otherwise the default is ElevenLabs. `VOICE_CACHE_ENABLED`
+similarly overrides `OPENAI_AUDIO_CACHE_ENABLED`.
+
+```bash
+itu show voice status                     # provider, missing clips and character count
+itu voice audition --no-play --text "Hello. I am a dog."
+itu voice audition                        # listen to the configured voice
+itu show voice pregenerate                # generate missing clips (uses account credits)
+itu show voice regenerate rescue.01       # use an actual cue ID listed by status
+itu show voice prune                      # selected provider's unused clips only
+itu show --dry-run --display web           # mock rehearsal; cached speech can play
+```
+
+`status`, `pregenerate`, and `prune` cover both the presentation and historical
+show plus fixed runtime lines. Audition accepts `--voices ID1,ID2` for ElevenLabs.
+Use `itu voice-demo --engine elevenlabs` to compare existing local Hertz FX on the
+same selected voice; `--engine azure`, `espeak`, `piper`, and `--offline-input`
+remain explicit alternatives. Automated previews do not approve a final sound.
+
+For ElevenLabs, show loading and CLI tools select English source files even when
+another `--lang` was requested. The adapter rejects non-English language codes;
+it does not translate text. Legacy locale templates remain available to other
+modes. Captions remain separate from the speech cache.
+
+Cache files live in `AUDIO_CACHE_DIR/elevenlabs/narration/`, `lines/`, and
+`dialogue/`. Keys include provider, text, language, voice ID, model, audio format,
+and effective voice settings. FX use a separate fingerprint and reuse raw takes.
+A missing API key still permits cache playback. `VOICE_PROVIDER=none` and
+`--no-voice` disable speech playback and character cues. Disabling persistent
+caching uses a temporary cache for that synthesizer's lifetime; it can reuse clips
+within the session and cleans up when released. Keep persistent caching enabled
+for show preparation.
+
+The adapter maps approved script directions and `scene:` IDs to small stability
+adjustments. These are **audition starting points, not verified emotional delivery**.
+Unknown free-text directions warn the operator and use base settings; directions
+never become spoken words. Script pauses remain in the director. Existing Hertz
+presets affect local audio processing without replacing the ElevenLabs voice ID.
+Model-specific controls differ: v4 omits the v2 `style` field. The supported and
+live-tested baseline is Multilingual v2.
+
+Network generation has an overall deadline (`ELEVENLABS_TIMEOUT_SECONDS`, default
+18 seconds), one bounded retry for transient errors, and no retries for rejected
+credentials, permissions, or exhausted quota. The show's preparation wait is also
+bounded. Stop/skip cancels playback and prevents late worker results from playing;
+a cancelled worker can still finish caching its result. No failure can trigger
+robot movement or explanatory Telegram messages. Errors avoid logging secrets or
+response bodies.
+
+ElevenLabs returns audio, not the old Azure self-transcript. This provider does
+**not** claim a transcript fidelity check. Listen to generated clips to check the
+words, tone, pronunciation, and intelligibility before the presentation.
+
+## Verification and remaining rehearsal
+
+A live request with the configured voice produced a valid 24 kHz mono WAV for
+“Hello. I am a dog. Am I a good boy already?” (2.6 seconds). The same clip passed
+cache-only show integration with credentials removed and generation disabled.
+This establishes API access and cache integration, not a listening judgment.
+Mock HTTP and runtime tests cover provider selection, English source loading,
+cache invalidation, concurrent requests, invalid/partial audio, FX reuse, request
+failures/deadlines, and no late playback after stop/skip. Run the relevant suites
+with `.venv/bin/python -m pytest`.
+
+The full regression run passed 380 tests with two skips; four legacy Azure
+schema/tool tests could not run because the optional `openai` package is absent.
+Localhost projector tests passed with sandbox permission. The complete synthetic
+presentation finished with voice, robot motion, and real Telegram sending off.
+`itu show voice status` reported 262 missing programme clips / 9,737 text
+characters; the live smoke-test clip is separate from those programme cues.
+
+Still required for the presentation: listen to and approve the selected voice,
+pregenerate/review the complete programme, and rehearse sound on the actual
+laptop/beamer setup. No physical robot verification is implied by speech tests.
+
+## Experimental live conversation
+
+`itu talk` and show conversation windows currently use Azure Realtime/GPT-Live
+for microphone input, turn handling, and audio output. A TTS adapter does not
+replace those sessions. Keep them explicitly labeled Azure experiments and keep
+show conversation windows off for the ElevenLabs presentation; do not delete
+them or claim that all Azure dependencies are removed.
+
+If those modes also need the new voice, schedule a separate migration: microphone
+→ speech recognition → existing character/context and guarded tool routing → text
+answer → ElevenLabs TTS, with interruption and echo handling. Evaluate an
+ElevenLabs conversation service against that alternative before implementation.
+Preserve talk's existing tool guards and the show conversation's no-tool boundary.
+This follow-up needs its own privacy/latency checks; it adds no conversation step
+to the approved presentation.
+
+## Legacy Azure implementation (reference)
+
+The following applies to `VOICE_PROVIDER=openai` and the separate Azure live
+conversation experiments. The projector describes the voice as AI-generated
+without naming a provider. These Azure settings do not configure ElevenLabs.
 
 ## Models (checked 2026-10-24 against the installed `openai` 3.37 SDK)
 

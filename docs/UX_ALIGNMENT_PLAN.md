@@ -7,8 +7,9 @@ background and does not override the agreed experience or this work order.
 
 ## Execution boundary
 
-Steps 1 and 2 were authorized and completed separately. The current request
-authorizes **step 3**, delegated to a subagent and reviewed in the main thread.
+Steps 1–3 were authorized and completed separately, as recorded below. The latest
+request (2026-10-24) authorizes implementation of the ElevenLabs migration with
+subagents, following the English-only clarification and supplied credentials.
 Steps 4–6 for the single encounter remain planned; the presentation programme's
 separate implementation is recorded below. Documentation changes do not establish that the runtime
 implements the new experience. The presentation clarification defines the setup
@@ -24,6 +25,10 @@ in this noncommercial presentation with accurate credits and provenance.
   the audience view and operator/debug tools have separate roles.
 - The computer plays the dog's voice; onboard robot audio integration is not
   required.
+- ElevenLabs replaces Azure OpenAI for cached presentation narration and short lines in
+  **English only**; multilingual speech is not a requirement for this migration.
+  Experimental live conversation is a separate follow-up. See [the researched
+  setup and verification](VOICE.md). Legacy Azure experiments remain available.
 - The final pose is a supported pose based on the selected image, not one fixed
   good-boy pose. Hold it for 10 seconds after reaching/settling into it, unless
   interrupted by stop or safety controls.
@@ -147,6 +152,34 @@ Acceptance: a complete rehearsal follows the UX contract; launch instructions an
 relevant checks pass. Rehearse the main scenario with the computer and beamer.
 Record simulated, live-service, presentation-setup, and hardware verification
 separately. Preserve unrelated existing work.
+
+## Voice migration workstream (implemented, 2026-10-24)
+
+Implemented [the speech adapter and tools](VOICE.md#implemented-behavior-and-commands):
+provider configuration, REST synthesis, provider-neutral controls, cache
+integration, character/scene mapping, CLI and failure handling. Single-encounter
+steps 4–5 remain separate work; step 6 retains full presentation rehearsal. This
+changes speech in the intro, era rounds, and rescue finale and adds no visitor
+choice or narration.
+
+Recommended baseline: one selected ElevenLabs voice reading English only,
+Multilingual v2 for stable delivery, pregenerated local WAV clips, and existing
+laptop playback. Preserve silence on voice failure,
+stop controls, spoken/caption separation, photo privacy, and motion guards.
+Keep Azure talk/live experiments available but outside the presentation migration;
+their audio requires a separate conversation integration.
+
+Acceptance: presentation synthesis needs no Azure credentials; cache playback
+works offline; all required lines are covered; provider/settings changes invalidate
+the right clips; errors and cancellation cannot start late playback or repeat
+motion. Audition and approve actual audio before the full beamer rehearsal.
+Verification: focused mocked speech/runtime tests, a live ElevenLabs request
+producing valid 24 kHz audio, and credential-free cache-only show integration.
+Full suite: 380 passed, two skipped; four legacy Azure checks blocked by the
+missing optional `openai` package. Complete synthetic presentation finished;
+localhost projector checks passed with sandbox permission.
+Listening approval, full programme pregeneration/review, and physical robot
+verification remain outstanding. Scene settings are audition starting points.
 
 ## Progress
 

@@ -125,6 +125,18 @@ Onboard robot audio is unavailable in this setup. Computer playback is the
 accepted presentation arrangement; the voice still expresses the dog's character.
 No onboard speaker integration or concealed sound source is required.
 
+**Voice provider decision, 2026-10-24:** replace Azure OpenAI speech with
+ElevenLabs. The presentation's scripted narration and short spoken lines will be
+**English only**, as clarified by the user. The implementation can generate them
+in advance and plays them from the local cache; visitor locale does not change
+the spoken language.
+The journey, wording, captions, consent, and safety controls stay as defined here;
+no visitor choice is introduced. [Setup and verification](VOICE.md).
+ElevenLabs synthesis and offline cache integration are implemented and live API
+access has been verified. Listening approval and full presentation rehearsal
+remain outstanding. Existing Azure live conversation experiments stay separate
+and are not added to the presentation by this provider decision.
+
 ## Primary encounter
 
 1. The visitor meets the robot. The operator has prepared the installation and

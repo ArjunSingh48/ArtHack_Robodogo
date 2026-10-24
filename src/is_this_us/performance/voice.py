@@ -1,8 +1,7 @@
 """The show's voice: cached narration clips, short dynamic lines, cancellable playback.
 
-* Narration cues are pre-generated (`itu show voice pregenerate`) with the OpenAI
-  Realtime API (`OPENAI_NARRATION_MODEL`, default gpt-realtime-2.1-mini) and stored as
-  WAV under `<AUDIO_CACHE_DIR>/narration/`. The cache key covers text, voice, model,
+* Narration cues are pre-generated (`itu show voice pregenerate`) with the selected
+  speech provider and stored as WAV in its narration cache. The cache key covers text, voice, model,
   language and delivery direction, so editing a line or changing the voice simply makes
   a new clip; `--prune` removes clips no longer referenced.
 * Dynamic lines (pose hints, consent) use a separate cache (`.../lines/`).
@@ -10,7 +9,7 @@
   timeout; if that fails, the line is shown as a subtitle for its reading time.
 * Playback runs as a subprocess that is terminated on pause / skip / cancel.
 * Voice character (VOICE_PRESET, docs/VOICE.md): the synthesizers apply the preset's
-  instructions + audio processing to every kind of line; `ShowVoice.cue(name)` plays the
+  provider-supported direction + audio processing to every kind of line; `ShowVoice.cue(name)` plays the
   preset's short procedural sound cues (startup, boop, chirp, puzzled, chime).
 """
 
@@ -98,7 +97,7 @@ class ShowVoice:
         self.allow_generation = allow_generation
         self.generation_timeout_s = generation_timeout_s
         self.time_scale = time_scale
-        self._prefetching: set[str] = set()
+        self._prefetching: set[tuple[str, str, str]] = set()
         self.log: list[Spoken] = []
         # Sound cues: given explicitly, or derived from the narration synthesizer's voice preset.
         self.cues = cues if cues is not None else _cues_for(narration)
@@ -107,6 +106,19 @@ class ShowVoice:
         return self.narration if kind == "narration" else self.lines
 
     async def audio_for(self, text: str, *, kind: str = "narration", direction: str = "") -> Path | None:
+        try:
+            return await asyncio.wait_for(self._audio_for(text, kind=kind, direction=direction),
+                                          self.generation_timeout_s)
+        except asyncio.TimeoutError:
+            log.warning("voice preparation timed out; showing the line as text")
+        except Exception as exc:
+            # Provider exceptions may contain request headers or server bodies: log only the type.
+            log.warning("voice preparation failed (%s); showing the line as text", type(exc).__name__)
+        return None
+
+    async def _audio_for(self, text: str, *, kind: str, direction: str) -> Path | None:
+        # Cancellation propagates through this coroutine. A worker may finish caching a clip,
+        # but only the awaiting speak() call can play it; cancelled calls never play late audio.
         synth = self._synth(kind)
         cached = getattr(synth, "cached", None)
         if cached is not None:
@@ -120,29 +132,27 @@ class ShowVoice:
                 return hit
         if not self.allow_generation or not getattr(synth, "available", False):
             return None
-        try:
-            result = await asyncio.wait_for(asyncio.to_thread(synth.synthesize, text, self.lang, direction),
-                                            self.generation_timeout_s)
-        except asyncio.TimeoutError:
-            log.warning("voice generation timed out; showing the line as text")
-            return None
+        result = await asyncio.to_thread(synth.synthesize, text, self.lang, direction)
         return result.audio_path if result else None
 
     def prefetch(self, text: str, *, kind: str = "narration", direction: str = "") -> None:
         """Generate the next clip in the background while the current one plays."""
         synth = self._synth(kind)
-        if not self.allow_generation or not getattr(synth, "available", False) or text in self._prefetching:
+        key = (kind, text, direction)
+        if not self.allow_generation or not getattr(synth, "available", False) or key in self._prefetching:
             return
         cached = getattr(synth, "cached", None)
         if cached is not None and cached(text, self.lang, direction):
             return
-        self._prefetching.add(text)
+        self._prefetching.add(key)
 
         def work():
             try:
                 synth.synthesize(text, self.lang, direction)
+            except Exception as exc:
+                log.warning("voice prefetch failed (%s)", type(exc).__name__)
             finally:
-                self._prefetching.discard(text)
+                self._prefetching.discard(key)
 
         asyncio.get_running_loop().run_in_executor(None, work)
 

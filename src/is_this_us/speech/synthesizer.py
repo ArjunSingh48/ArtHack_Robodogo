@@ -1,4 +1,5 @@
-"""The robot's voice.
+"""The robot's voice. ElevenLabs TTS is the primary English presentation provider;
+the Azure OpenAI implementation below remains available for legacy experiments.
 
 * `OpenAIRealtimeSynthesizer` — OpenAI Realtime API over WebSocket (official `openai`
   SDK, `client.realtime.connect`). It receives ONLY the sentence to speak: never
@@ -85,6 +86,8 @@ class SpeechSynthesizer(Protocol):
     available: bool
 
     def synthesize(self, text: str, lang: str = "en", direction: str = "") -> SpeechAudio | None: ...
+
+    def cached(self, text: str, lang: str = "en", direction: str = "") -> Path | None: ...
 
 
 class AudioCache:
@@ -407,26 +410,38 @@ class LocalSpeakerPlayer:
                          daemon=True).start()
 
 
-class _NoCache(AudioCache):
-    """OPENAI_AUDIO_CACHE_ENABLED=false: audio goes to a throw-away folder that is emptied per run."""
+class _TransientCache(AudioCache):
+    """Per-instance scratch cache, cleaned when the synthesizer releases it."""
 
-    def __init__(self, directory: Path):
-        super().__init__(directory)
-        for f in self.dir.rglob("*"):
-            if f.is_file():
-                f.unlink(missing_ok=True)
+    def __init__(self):
+        import tempfile
+        self._temporary = tempfile.TemporaryDirectory(prefix="itu-voice-")
+        super().__init__(Path(self._temporary.name))
 
 
 def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesizer:
     """purpose: "dialogue" (free-play lines, Telegram voice notes) or "narration" / "lines" (`itu show`)."""
+    provider = settings.voice_provider
+    if provider == "none":
+        return NullSynthesizer()
     base = Path(settings.audio_cache_dir)
-    directory = base if purpose == "dialogue" else base / purpose
-    if not getattr(settings, "openai_audio_cache_enabled", True):
-        cache: AudioCache = _NoCache(base / "_uncached" / purpose)
+    directory = (base / "elevenlabs" / purpose if provider == "elevenlabs"
+                 else base if purpose == "dialogue" else base / purpose)
+    if not settings.voice_cache_enabled:
+        # A private temporary cache prevents one instance from deleting another's playback.
+        cache: AudioCache = _TransientCache()
     else:
         cache = AudioCache(directory)
+    character = resolve_preset(settings)
+    if provider == "elevenlabs":
+        from .elevenlabs import ElevenLabsSynthesizer
+        return ElevenLabsSynthesizer(
+            settings.elevenlabs_api_key, settings.elevenlabs_model_id, settings.elevenlabs_voice_id, cache,
+            timeout_s=settings.elevenlabs_timeout_seconds, output_format=settings.elevenlabs_output_format,
+            stability=settings.elevenlabs_stability, similarity_boost=settings.elevenlabs_similarity_boost,
+            style=settings.elevenlabs_style, character=character, voice_notes=(purpose == "dialogue"),
+        )
     model = settings.openai_realtime_model if purpose == "dialogue" else settings.openai_narration_model
-    character = resolve_preset(settings)  # VOICE_PRESET (+ overrides); "off" = previous voice
     voice = voice_for(settings, character) or settings.openai_realtime_voice
     if settings.voice_configured:
         try:
@@ -438,7 +453,7 @@ def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesize
         return OpenAIRealtimeSynthesizer(settings.azure_openai_api_key, model, voice, cache,
                                          voice_notes=(purpose == "dialogue"), character=character)
     if purpose != "dialogue":
-        # no key (or provider=none): previously generated cues still play offline
+        # No key: previously generated cues still play offline.
         return OpenAIRealtimeSynthesizer("", model, voice, cache, voice_notes=False, character=character)
     log.info("OpenAI voice not configured; text-only voice")
     return NullSynthesizer()

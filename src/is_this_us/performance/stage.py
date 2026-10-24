@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 CONTROL_COMMANDS = {"next", "pause", "resume", "repeat", "skip", "pose", "ready", "decline", "consent_yes",
                     "consent_no", "send_yes", "send_no", "cancel", "listen"}
-AI_VOICE_NOTICE = "The robot's voice is AI-generated (OpenAI). Its words are written by the artists."
+AI_VOICE_NOTICE = "The robot's voice is AI-generated. Its words are written by the artists."
 
 
 @dataclass

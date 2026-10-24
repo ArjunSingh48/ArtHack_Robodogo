@@ -6,9 +6,9 @@ from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
-from typing import Annotated
+from typing import Annotated, Literal
 
 
 class AppMode(StrEnum):
@@ -46,8 +46,20 @@ class Settings(BaseSettings):
     pairing_token_ttl_minutes: int = 10
     session_ttl_minutes: int = 30
 
-    # Azure OpenAI (v1 API). Model settings below are Azure deployment names.
-    azure_openai_api_key: str = ""
+    # English scripted speech; explicit legacy settings remain supported.
+    voice_provider: Literal["elevenlabs", "openai", "none"] | None = None
+    voice_cache_enabled: bool | None = None
+    elevenlabs_api_key: str = Field(default="", repr=False)
+    elevenlabs_voice_id: str = ""
+    elevenlabs_model_id: str = "eleven_multilingual_v2"
+    elevenlabs_output_format: Literal["pcm_24000"] = "pcm_24000"
+    elevenlabs_stability: float = Field(default=0.5, ge=0, le=1)
+    elevenlabs_similarity_boost: float = Field(default=0.75, ge=0, le=1)
+    elevenlabs_style: float = Field(default=0.0, ge=0, le=1)
+    elevenlabs_timeout_seconds: float = Field(default=18.0, gt=0, le=60)
+
+    # Azure OpenAI experiments. Model settings below are Azure deployment names.
+    azure_openai_api_key: str = Field(default="", repr=False)
     azure_openai_endpoint: str = ""
     # openai = OpenAI voice; none = text-only everywhere (no audio requests at all)
     openai_voice_provider: str = "openai"
@@ -142,6 +154,17 @@ class Settings(BaseSettings):
     audio_cache_dir: Path = Path("./data/runtime/audio_cache")
     card_font_path: str = ""
 
+    @model_validator(mode="after")
+    def _resolve_voice_settings(self):
+        if self.voice_provider is None:
+            legacy = self.openai_voice_provider.strip().lower()
+            self.voice_provider = legacy if "openai_voice_provider" in self.model_fields_set else "elevenlabs"
+            if self.voice_provider not in ("elevenlabs", "openai", "none"):
+                raise ValueError("Voice provider must be elevenlabs, openai, or none")
+        if self.voice_cache_enabled is None:
+            self.voice_cache_enabled = self.openai_audio_cache_enabled
+        return self
+
     @field_validator("telegram_operator_ids", mode="before")
     @classmethod
     def _parse_ids(cls, value: object) -> list[int]:
@@ -171,7 +194,14 @@ class Settings(BaseSettings):
 
     @property
     def voice_configured(self) -> bool:
-        return bool(self.azure_openai_api_key) and self.openai_voice_provider.strip().lower() == "openai"
+        if self.voice_provider == "elevenlabs":
+            return bool(self.elevenlabs_api_key.strip() and self.elevenlabs_voice_id.strip())
+        return self.voice_provider == "openai" and self.azure_voice_configured
+
+    @property
+    def azure_voice_configured(self) -> bool:
+        """Credentials for the separate Azure conversation experiments."""
+        return bool(self.azure_openai_api_key.strip())
 
     def openai_client(self):
         from openai import AsyncOpenAI

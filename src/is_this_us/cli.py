@@ -37,10 +37,14 @@ def cmd_setup(args) -> None:
         print("  " + line)
     Storage(s.database_path).close()
     print("Database ready:", s.database_path)
-    print("Voice:", f"OpenAI — voice {s.primary_voice}; lines {s.openai_realtime_model}, "
-                    f"show narration {s.openai_narration_model}, conversation "
-                    f"{s.openai_live_model if s.openai_enable_live_conversation else 'off'}"
-          if s.voice_configured else "text-only (no AZURE_OPENAI_API_KEY)")
+    if s.voice_provider == "elevenlabs":
+        print("Voice: ElevenLabs — English;", s.elevenlabs_model_id,
+              "(configured)" if s.voice_configured else "(generation unavailable; cached clips can play)")
+    elif s.voice_provider == "openai":
+        print("Voice: Azure OpenAI —", s.openai_narration_model,
+              "(configured)" if s.voice_configured else "(generation unavailable; cached clips can play)")
+    else:
+        print("Voice: disabled")
 
 
 # ---------------------------------------------------------------------- simulate
@@ -299,8 +303,8 @@ def main(argv: list[str] | None = None) -> None:
     vd.add_argument("--preset", default="all",
                     help="all (default) or comma-separated: hertz_deadpan,hertz_buzzy,hertz_tin_can")
     vd.add_argument("--engine", default="auto",
-                    help="base voice: azure (real show voice, needs key) | espeak | piper; comma-separated for "
-                         "several; auto = azure if a key is set, else espeak")
+                    help="base voice: elevenlabs | azure | espeak | piper; comma-separated for "
+                         "several; auto uses the configured speech provider")
     vd.add_argument("--out", default="voice_previews", help="output folder (default voice_previews/, git-ignored)")
     vd.add_argument("--play", action="store_true", help="play the processed previews on this computer")
     vd.add_argument("--offline-input", metavar="WAV",

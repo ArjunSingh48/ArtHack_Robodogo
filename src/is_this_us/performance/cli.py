@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import sys
 from pathlib import Path
 
@@ -22,13 +23,36 @@ def audition_text(script) -> str:
 REALTIME_VOICES = ("alloy", "ash", "ballad", "coral", "echo", "sage", "shimmer", "verse", "marin", "cedar")
 
 
+def _voice_language(s, lang: str) -> str:
+    if s.voice_provider == "elevenlabs" and lang != "en":
+        log.info("ElevenLabs presentation speech uses English; ignoring requested language")
+        return "en"
+    return lang
+
+
+def _voice_description(s) -> str:
+    if s.voice_provider == "none":
+        return "provider none (speech disabled)"
+    model = s.elevenlabs_model_id if s.voice_provider == "elevenlabs" else s.openai_narration_model
+    voice = s.elevenlabs_voice_id if s.voice_provider == "elevenlabs" else s.character_voice
+    return f"provider {s.voice_provider}, model {model}, voice {voice or '(not configured)'} (preset {s.voice_preset})"
+
+
+def _voice_setup_message(s) -> str:
+    if s.voice_provider == "elevenlabs":
+        return "Set ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID to generate audio."
+    if s.voice_provider == "none":
+        return "VOICE_PROVIDER=none: speech and generation are disabled."
+    return "Set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT to generate Azure audio."
+
+
 def _parts(s, lang: str, programme: str | None = None):
     from ..bot.app import build_library
     from .catalog import PerformanceCatalog
     from .lines import Lines
     from .script import load_script
 
-    script = load_script(Path(s.show_data_dir), lang, programme or s.show_programme)
+    script = load_script(Path(s.show_data_dir), _voice_language(s, lang), programme or s.show_programme)
     lib = build_library(s)
     catalog = PerformanceCatalog(Path(s.show_data_dir), lib.art, lib.memes)
     lines = Lines.load(Path(s.show_data_dir), script.lang)
@@ -104,13 +128,17 @@ def _show_voice(s, lang: str):
     from .voice import ShowVoice, Speaker
 
     return ShowVoice(make_synthesizer(s, purpose="narration"), make_synthesizer(s, purpose="lines"),
-                     Speaker(enabled=False), lang=lang)
+                     Speaker(enabled=False), lang=_voice_language(s, lang))
 
 
 def cmd_voice(args) -> int:
     s = get_settings()
     from .voice import all_utterances, cache_status, prune
 
+    if args.action in {"pregenerate", "regenerate"} and not s.voice_cache_enabled:
+        print("VOICE_CACHE_ENABLED=false: pregeneration would be discarded when this command exits. "
+              "Set VOICE_CACHE_ENABLED=true before generating presentation clips.")
+        return 2
     script, catalog, lines = _parts(s, args.lang, "show")
     other, _, _ = _parts(s, args.lang, "presentation")
     voice = _show_voice(s, script.lang)
@@ -122,8 +150,9 @@ def cmd_voice(args) -> int:
     items = cache_status(utterances, voice)
     if args.action == "status":
         missing = [i for i in items if not i.cached]
-        print(f"narration model {s.openai_narration_model}, voice {s.character_voice} (preset {s.voice_preset}), language {script.lang}")
+        print(f"{_voice_description(s)}, language {script.lang}")
         print(f"{len(items) - len(missing)}/{len(items)} clips cached")
+        print(f"missing {len(missing)} clip(s), {sum(len(i.text) for i in missing)} text characters")
         for i in missing[: args.limit]:
             print(f"  missing  {i.cue_id:<22} {i.text.splitlines()[0][:60]}")
         return 0
@@ -131,7 +160,7 @@ def cmd_voice(args) -> int:
         print(f"removed {prune(items, voice)} unused clip(s)")
         return 0
     if not s.voice_configured:
-        print("AZURE_OPENAI_API_KEY is not set (or OPENAI_VOICE_PROVIDER is not 'openai'): cannot generate audio.")
+        print(_voice_setup_message(s))
         return 2
     targets = items
     if args.action == "regenerate":
@@ -139,6 +168,9 @@ def cmd_voice(args) -> int:
             print("give one or more cue ids (see `itu show voice status`; e.g. paintings.07 or pose.got_it.1)")
             return 2
         targets = [i for i in items if i.cue_id in args.cues or i.cue_id.split("~")[0] in args.cues]
+        if not targets:
+            print("No matching cue ids; see `itu show voice status`.")
+            return 2
         for i in targets:
             synth = voice._synth(i.kind)
             getattr(synth, "forget", lambda *a: None)(i.text, script.lang, i.direction)  # raw take + processed
@@ -147,7 +179,8 @@ def cmd_voice(args) -> int:
                 i.cached.with_suffix(".ogg").unlink(missing_ok=True)
                 i.cached = None
     todo = [i for i in targets if not i.cached]
-    print(f"generating {len(todo)} clip(s) with {s.openai_narration_model} / {s.character_voice} (preset {s.voice_preset}) …")
+    print(f"generating {len(todo)} clip(s), {sum(len(i.text) for i in todo)} text characters; "
+          f"{_voice_description(s)} …")
     failed = 0
     for n, i in enumerate(todo, 1):
         synth = voice._synth(i.kind)
@@ -156,7 +189,7 @@ def cmd_voice(args) -> int:
         failed += not ok
         print(f"  [{n}/{len(todo)}] {'ok  ' if ok else 'FAIL'} {i.cue_id:<22} {i.text.splitlines()[0][:50]}")
         if not getattr(synth, "available", True):
-            print("voice disabled (credentials rejected) — stopping")
+            print("voice generation unavailable (check provider credentials/quota) — stopping")
             return 1
     print("done" + (f" — {failed} failed (they will show as text, or retry later)" if failed else ""))
     return 1 if failed else 0
@@ -165,35 +198,58 @@ def cmd_voice(args) -> int:
 def cmd_audition(args) -> int:
     """Same sample in several voices, so the team can choose ONE voice for the whole show."""
     s = get_settings()
+    if s.voice_provider == "elevenlabs" and args.voices:
+        s = s.model_copy(update={"elevenlabs_voice_id": args.voices.split(",")[0].strip()})
+    if args.model:
+        field = "elevenlabs_model_id" if s.voice_provider == "elevenlabs" else "openai_narration_model"
+        s = s.model_copy(update={field: args.model})
     if not s.voice_configured:
-        print("Set AZURE_OPENAI_API_KEY first.")
+        print(_voice_setup_message(s))
         return 2
-    from ..speech.synthesizer import AudioCache, OpenAIRealtimeSynthesizer
+    from ..speech.synthesizer import AudioCache, OpenAIRealtimeSynthesizer, make_synthesizer
     from .voice import Speaker
 
-    voices = [v.strip() for v in (args.voices or ",".join(REALTIME_VOICES)).split(",") if v.strip()]
+    default_voices = s.elevenlabs_voice_id if s.voice_provider == "elevenlabs" else ",".join(REALTIME_VOICES)
+    voices = [v.strip() for v in (args.voices or default_voices).split(",") if v.strip()]
     out = Path(s.audio_cache_dir) / "audition"
     speaker = Speaker(enabled=not args.no_play)
     from .script import load_script
 
-    text = args.text or audition_text(load_script(Path(s.show_data_dir), args.lang))
-    print(f"model {args.model or s.openai_narration_model}; voices usable for BOTH narration (Realtime) and GPT-Live: "
-          + ", ".join(REALTIME_VOICES))
+    lang = _voice_language(s, args.lang)
+    text = args.text or audition_text(load_script(Path(s.show_data_dir), lang, "show"))
+    print(f"{_voice_description(s)}; language {lang}; {len(voices)} audition(s), {len(text) * len(voices)} text characters")
+    failed = 0
     for v in voices:
-        if v not in REALTIME_VOICES:
+        if s.voice_provider == "elevenlabs":
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", v):
+                print("Invalid ElevenLabs voice ID — skipped")
+                failed += 1
+                continue
+            selection = s.model_copy(update={"elevenlabs_voice_id": v,
+                                             "elevenlabs_model_id": args.model or s.elevenlabs_model_id,
+                                             "audio_cache_dir": out, "voice_preset": "off"})
+            synth = make_synthesizer(selection, purpose="narration")
+        elif v not in REALTIME_VOICES:
             print(f"  {v}: not a Realtime voice — skipped")
+            failed += 1
             continue
-        synth = OpenAIRealtimeSynthesizer(s.azure_openai_api_key, args.model or s.openai_narration_model, v,
-                                          AudioCache(out / v), voice_notes=False)
-        res = synth.synthesize(text, args.lang, "shy curiosity; soft, young in spirit but not childish")
+        else:
+            synth = OpenAIRealtimeSynthesizer(s.azure_openai_api_key, args.model or s.openai_narration_model, v,
+                                              AudioCache(out / v), voice_notes=False)
+        res = synth.synthesize(text, lang, "" if s.voice_provider == "elevenlabs" else
+                               "shy curiosity; soft, young in spirit but not childish")
         if res is None:
             print(f"  {v}: failed")
+            failed += 1
+            if not synth.available:
+                break
             continue
         print(f"  {v}: {res.audio_path}")
         if speaker.available:
             asyncio.run(speaker.play(res.audio_path))
-    print("Set the chosen one as OPENAI_VOICE in .env (used by narration, free-play lines and conversation).")
-    return 0
+    setting = "ELEVENLABS_VOICE_ID" if s.voice_provider == "elevenlabs" else "OPENAI_VOICE"
+    print(f"Set the chosen voice as {setting} in .env.")
+    return 1 if failed else 0
 
 
 def cmd_purge(args) -> None:
@@ -306,7 +362,7 @@ def cmd_show(args) -> int:
     source = args.source
     if source is None and args.dry_run:
         source = "synthetic:sitting"
-    opts = ShowOptions(lang=args.lang, dry_run=args.dry_run, mode="automatic" if args.auto else args.mode,
+    opts = ShowOptions(lang=_voice_language(s, args.lang), dry_run=args.dry_run, mode="automatic" if args.auto else args.mode,
                        display=args.display, source=source, voice=not args.no_voice,
                        fast=args.fast if args.fast else 1.0, motion=args.motion,
                        out_dir=Path(args.out) if args.out else (Path("./data/runtime/rehearsal") if args.dry_run else None),
@@ -439,10 +495,11 @@ def register(sub) -> None:
 
     va = sub.add_parser("voice", help="voice tools")
     vsub = va.add_subparsers(dest="voice_action", required=True)
-    au = vsub.add_parser("audition", help="play the same sample in several OpenAI voices")
-    au.add_argument("--voices", help=f"comma-separated (default: {','.join(REALTIME_VOICES)})")
+    au = vsub.add_parser("audition", help="play the same sample using the selected voice provider")
+    au.add_argument("--voices", help="comma-separated ElevenLabs voice IDs (default: configured ID), "
+                    "or Azure voice names (default: all Realtime voices)")
     au.add_argument("--text")
-    au.add_argument("--model", help="default OPENAI_NARRATION_MODEL")
+    au.add_argument("--model", help="default ELEVENLABS_MODEL_ID or OPENAI_NARRATION_MODEL")
     au.add_argument("--lang", default="en")
     au.add_argument("--no-play", action="store_true")
     au.set_defaults(fn=cmd_audition)

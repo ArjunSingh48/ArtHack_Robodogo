@@ -226,7 +226,10 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     from ..bot.app import build_estimator, build_library
 
     data_dir = Path(settings.show_data_dir)
-    script = load_script(data_dir, opts.lang, opts.programme or settings.show_programme)
+    lang = "en" if settings.voice_provider == "elevenlabs" else opts.lang
+    if lang != opts.lang:
+        log.info("ElevenLabs presentation speech uses English; ignoring the requested language")
+    script = load_script(data_dir, lang, opts.programme or settings.show_programme)
     if art_repo is None or meme_repo is None:
         lib = build_library(settings)
         art_repo, meme_repo = lib.art, lib.memes
@@ -234,13 +237,12 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     rng = random.Random(opts.seed)
     lines = Lines.load(data_dir, script.lang, rng=rng)
 
-    narration = make_synthesizer(settings, purpose="narration")
-    short = make_synthesizer(settings, purpose="lines")
-    speaker = Speaker(enabled=opts.voice and opts.fast >= 1.0)
+    voice_enabled = opts.voice and settings.voice_provider != "none"
+    narration = make_synthesizer(settings, purpose="narration") if voice_enabled else _Silent()
+    short = make_synthesizer(settings, purpose="lines") if voice_enabled else _Silent()
+    speaker = Speaker(enabled=voice_enabled and opts.fast >= 1.0)
     voice = ShowVoice(narration, short, speaker, lang=script.lang,
-                      allow_generation=opts.voice and not opts.dry_run, time_scale=opts.fast)
-    if not opts.voice:
-        voice.narration = voice.lines = _Silent()
+                      allow_generation=voice_enabled and not opts.dry_run, time_scale=opts.fast)
 
     # camera + pose reading (existing MediaPipe pipeline), or a rehearsal stand-in
     source = opts.source if opts.source is not None else (settings.show_camera_source or settings.camera_source)
@@ -267,7 +269,8 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     motion = MotionCues(guard, planner, enabled=bool(opts.motion and settings.show_motion_enabled and not opts.dry_run))
 
     conversation = None
-    if settings.openai_enable_live_conversation and settings.voice_configured and not opts.dry_run:
+    if (voice_enabled and settings.voice_provider == "openai" and settings.openai_enable_live_conversation
+            and settings.azure_voice_configured and not opts.dry_run):
         def client_factory():
             return settings.openai_client()
 

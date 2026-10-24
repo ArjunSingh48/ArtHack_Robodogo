@@ -2,6 +2,8 @@
 
 Base voices ("engines"):
 
+* ``elevenlabs`` — the selected English ElevenLabs voice, cached locally. Presets compare
+  local FX on that same voice; their Azure base voices and reader instructions are not used.
 * ``azure``  — the real show voice: each preset's base voice reads each line with the preset's
   character instructions (Azure OpenAI Realtime; needs AZURE_OPENAI_API_KEY). Raw takes are
   cached under AUDIO_CACHE_DIR/voice_demo/, so re-running after FX changes costs no API call.
@@ -62,7 +64,7 @@ PAUSES = {"pause": 0.7, "short pause": 0.7, "long pause": 1.8}
 LINE_GAP_S = 0.35
 LEAD_S, TAIL_S = 0.25, 0.5
 PITCH_COMPARE = (-2.0, -3.0, -4.0)
-ENGINES = ("azure", "espeak", "piper")
+ENGINES = ("elevenlabs", "azure", "espeak", "piper")
 
 Segment = str | float  # a line to speak, or seconds of silence
 
@@ -174,6 +176,23 @@ def azure_engine(settings, preset: VoicePreset, lang: str = "en",
     return speak
 
 
+def elevenlabs_engine(settings, direction: str = "") -> Callable[[str], np.ndarray]:
+    """The selected English voice, raw; local presets never change its voice ID."""
+    from .synthesizer import make_synthesizer
+
+    selected = settings.model_copy(update={"voice_provider": "elevenlabs", "voice_preset": "off",
+                                          "audio_cache_dir": Path(settings.audio_cache_dir) / "voice_demo"})
+    synth = make_synthesizer(selected, purpose="narration")
+
+    def speak(text: str) -> np.ndarray:
+        res = synth.synthesize(text, "en", direction)
+        if res is None:
+            raise RuntimeError("ElevenLabs synthesis failed (see provider status in log)")
+        x, _ = read_wav(res.audio_path)
+        return x
+    return speak
+
+
 # ---------------------------------------------------------------------- output helpers
 def _fmt(x: np.ndarray) -> str:
     m = measure(x)
@@ -208,15 +227,21 @@ def _engine_names(settings, engines: str, offline_input) -> list[str] | str:
     if offline_input is not None:
         return ["input"]
     if engines == "auto":
+        if settings.voice_provider == "none":
+            return "VOICE_PROVIDER=none: automatic voice generation is disabled. Select an explicit demo engine to audition."
         if settings.voice_configured:
-            return ["azure"]
+            return ["elevenlabs" if settings.voice_provider == "elevenlabs" else "azure"]
         if shutil.which("espeak-ng") or shutil.which("espeak"):
             return ["espeak"]
-        return ("No AZURE_OPENAI_API_KEY and no espeak-ng: nothing to synthesize with.\n"
+        return ("Selected voice provider is not configured and no espeak-ng is installed.\n"
                 "Use --engine espeak|piper, or --offline-input some_recording.wav")
     names = [e.strip() for e in engines.split(",") if e.strip()]
-    if "azure" in names and not settings.voice_configured:
-        return ("--engine azure needs AZURE_OPENAI_API_KEY (and OPENAI_VOICE_PROVIDER=openai).\n"
+    if not names or any(n not in ENGINES for n in names):
+        return f"Choose an engine: {', '.join(ENGINES)}"
+    if "elevenlabs" in names and not (settings.elevenlabs_api_key and settings.elevenlabs_voice_id):
+        return "--engine elevenlabs needs ELEVENLABS_API_KEY and ELEVENLABS_VOICE_ID."
+    if "azure" in names and not settings.azure_voice_configured:
+        return ("--engine azure needs AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT.\n"
                 "Without a key: --engine espeak / --engine piper --piper-model …onnx / --offline-input FILE")
     return names
 
@@ -280,6 +305,10 @@ def run_demo(settings, *, presets: str | None = None, out: Path = Path("voice_pr
 
                 def speak_for(p):
                     return assemble(segments, azure_engine(settings, p, lang, direction))
+            elif engine == "elevenlabs":
+                if lang != "en":
+                    printer("ElevenLabs reads English only; ignoring requested language.")
+                base_raw = assemble(segments, elevenlabs_engine(settings, direction))
             else:
                 raise RuntimeError(f"unknown engine (choose {', '.join(ENGINES)})")
         except Exception as exc:  # noqa: BLE001

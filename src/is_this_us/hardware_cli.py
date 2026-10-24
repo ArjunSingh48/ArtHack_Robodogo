@@ -279,7 +279,7 @@ def cmd_live(args) -> None:
         notifier=ConsoleNotifier(), synthesizer=make_synthesizer(s), planner=build_planner(s, robot),
         player=LocalSpeakerPlayer(True), default_lang=lang, default_archive=args.archive or s.default_archive,
     )
-    print(f"  camera: {source.name}   voice: {'OpenAI Realtime' if s.voice_configured else 'text-only'}")
+    print(f"  camera: {source.name}   voice: {s.voice_provider if s.voice_configured else 'text-only'}")
     try:
         while True:
             cmd = input("\n  Enter = observe   q = quit   s = stop  > ").strip().lower()

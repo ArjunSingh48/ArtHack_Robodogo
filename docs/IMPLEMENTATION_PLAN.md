@@ -5,6 +5,9 @@ the encounter and its presentation. The intended setup includes the dog and a
 computer connected to a beamer, with the presentation following the main dog
 interaction scenario. This earlier plan remains technical integration background;
 presentation work and verification are tracked in alignment step 6.
+The implemented Azure-to-ElevenLabs scripted speech migration is tracked in the
+[alignment plan's voice workstream](UX_ALIGNMENT_PLAN.md#voice-migration-workstream-implemented-2026-10-24)
+and [voice setup/verification](VOICE.md); full audio rehearsal remains outstanding.
 
 Build on the existing `is_this_us` application. The target experience is: the Go2 notices a
 participant, finds a dataset image whose **human pose** resembles theirs, attempts the dog's
