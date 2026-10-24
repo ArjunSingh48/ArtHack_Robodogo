@@ -87,6 +87,11 @@ conversation:
   closing: ["Let's look at the next pictures."]
 
 # ---------------------------------------------------------------- the presentation (presentation.en.md)
+consent_where:
+  # fills {where} in the intro's photo question (presentation.en.md); "telegram" only if Telegram is configured
+  screen: ["here, on the big screen"]
+  telegram: ["here, on the big screen, and in your Telegram"]
+
 presentation_consent:
   # after the @consent question in the intro; the operator presses yes/no for the visitor
   thanks: ["Thank you. I will try to make good ones."]

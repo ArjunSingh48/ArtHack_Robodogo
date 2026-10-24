@@ -184,6 +184,77 @@ class ShowOptions:
 _WEB_STAGES: dict = {}
 
 
+class _RobotView:
+    """Wraps a camera so its frames are labelled as the robot's ("robot:…") — for rehearsal stand-ins."""
+
+    is_robot_camera = True
+
+    def __init__(self, inner, label: str):
+        self.inner, self.name = inner, label
+
+    def read(self):
+        f = self.inner.read()
+        return None if f is None else Frame(f.image, self.name)
+
+    def close(self):
+        pass
+
+
+def robot_camera_factory(settings: Settings, opts: "ShowOptions", source: str | None, reader):
+    """The dog's own camera as a second feed (and the pose camera with SHOW_POSE_CAMERA=robot).
+    Real: the bridge stream (SHOW_WALK_CAMERA, default zhaw_bridge). Rehearsal: the drawn stand-in, labelled robot."""
+    if reader is None:
+        return None
+    if source and source.startswith("synthetic"):
+        stand_in = getattr(reader, "estimator", None)
+        return (lambda: _RobotView(stand_in, "robot:rehearsal")) if stand_in is not None else None
+    if opts.dry_run or settings.robot_model.value != "zhaw_bridge" or not settings.show_walk_camera:
+        return None
+    from ..vision.frame_sources import make_frame_source
+
+    def make():
+        src = make_frame_source(settings.show_walk_camera, network_interface=settings.robot_network_interface)
+        src.is_robot_camera = True
+        return src
+    return make
+
+ROBOT_CAMERAS = ("zhaw_bridge", "unitree")
+
+
+def explain_camera_error(spec: str, exc: Exception) -> str:
+    text = str(exc)
+    if spec.startswith("webcam") and ("not authorized" in text or "Cannot open webcam" in text):
+        return (f"{spec}: macOS did not allow the camera. System Settings → Privacy & Security → Camera → allow "
+                f"your terminal app (Terminal / iTerm / VS Code), then QUIT and reopen it and start again.")
+    return f"{spec}: {text}"
+
+
+class CameraOpener:
+    """Opens the show camera once. If it fails and SHOW_CAMERA_FALLBACK is set (e.g. zhaw_bridge), uses that
+    instead — marked as a ROBOT camera, so the director reads poses with it but takes no "you two" photos
+    (the robot cannot photograph itself). A failure is remembered: a denied camera is not retried."""
+
+    def __init__(self, primary: str, fallback: str, make):
+        self.primary, self.fallback, self.make = primary, (fallback or "").strip(), make
+        self.failures: list[str] = []
+
+    def __call__(self):
+        for spec in [self.primary] + ([self.fallback] if self.fallback and self.fallback != self.primary else []):
+            try:
+                src = self.make(spec)
+            except Exception as exc:
+                self.failures.append(explain_camera_error(spec, exc))
+                log.warning("camera %s failed: %s", spec, exc)
+                continue
+            try:
+                src.is_robot_camera = spec.split(":")[0] in ROBOT_CAMERAS
+                src.fallback_from = "; ".join(self.failures) if spec != self.primary else ""
+            except AttributeError:
+                pass
+            return src
+        raise OSError(" | ".join(self.failures) or f"camera {self.primary} unavailable")
+
+
 def operator_key(settings: Settings) -> str:
     """The operator page's key: SHOW_OPERATOR_KEY, else one kept in data/runtime/ (git-ignored) so a
     bookmarked operator link keeps working after a restart."""
@@ -254,15 +325,17 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         from ..vision.frame_sources import make_frame_source
 
         est = estimator if estimator is not None else build_estimator(settings)
-        frame_factory = lambda: make_frame_source(source, network_interface=settings.robot_network_interface)  # noqa: E731
+        frame_factory = CameraOpener(source, settings.show_camera_fallback,
+                                     lambda spec: make_frame_source(spec, network_interface=settings.robot_network_interface))
         reader = PoseReader(est, mirrored=settings.show_camera_mirrored) if est is not None else None
 
+    robot_factory = robot_camera_factory(settings, opts, source, reader)
     out_root = Path(opts.out_dir) if opts.out_dir else Path(settings.show_output_dir)
     store = PhotoStore(out_root, retention_minutes=settings.show_photo_retention_minutes)
     if stage is None:
         stage, _ = build_stage(settings, opts.display or settings.show_display)
-    if delivery is None and opts.dry_run:
-        delivery = PreviewDelivery(out_root)
+    if delivery is None and opts.dry_run and settings.show_telegram_chat_id:
+        delivery = PreviewDelivery(out_root)  # rehearsal of a configured Telegram: writes what WOULD be sent
 
     motion = MotionCues(guard, planner, enabled=bool(opts.motion and settings.show_motion_enabled and not opts.dry_run))
 
@@ -298,8 +371,11 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         final_hold_s=settings.show_final_hold_seconds * opts.fast, photo_in_encounter=settings.show_encounter_photo,
         round_hold_s=settings.show_round_hold_seconds * opts.fast, rescue_wait_s=settings.show_rescue_wait_seconds * opts.fast,
         rescue_wake_s=20.0 * opts.fast, flash_s=settings.show_montage_flash_seconds * opts.fast,
-        live_always=settings.show_live_always, font_path=settings.card_font_path, rng=rng,
+        live_always=settings.show_live_always,
+        robot_frame_source_factory=robot_factory, pose_from=settings.show_pose_camera, font_path=settings.card_font_path, rng=rng,
         photo_upload_allowed=delivery is not None and not isinstance(delivery, PreviewDelivery))
+    if delivery is None:
+        log.info("Telegram not configured: photos stay on the local display")
     web = getattr(stage, "web", None)
     if web is not None:  # the operator page's buttons work however the show was started (CLI or Telegram)
         try:
@@ -357,6 +433,10 @@ def build_approacher(settings: Settings, opts: "ShowOptions", guard, estimator=N
         return simulated_approacher(settings, opts.fast)
     if not settings.show_walk_enabled:
         log.warning("--walk ignored: SHOW_WALK_ENABLED is false")
+        return None
+    if not settings.show_walk_calibrated:
+        log.warning("--walk ignored: distances are not calibrated — run `itu show walk-test --calibrate 2 "
+                    "--posture sitting` and `--posture standing`, put the k values in .env, then SHOW_WALK_CALIBRATED=true")
         return None
     robot = getattr(guard, "robot", None)
     if robot is None or not getattr(robot, "can_walk", False):

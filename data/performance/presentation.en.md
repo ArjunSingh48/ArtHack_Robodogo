@@ -47,7 +47,7 @@ I want to learn how to be a good dog.
 [pause 1]
 
 @consent
-Will you help me? I would like to take pictures of us. They will appear here, on the big screen, and in your Telegram.
+Will you help me? I would like to take pictures of us. They will appear {where}.
 
 ## prehistory | A very long time ago
 @voice: fascinated, curious, slightly confused, like reading very old handwriting

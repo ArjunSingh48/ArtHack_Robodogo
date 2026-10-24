@@ -250,6 +250,7 @@ def cmd_walk_test(args) -> int:
         k = heights[len(heights) // 2] * args.calibrate
         name = "SHOW_WALK_K_STANDING" if args.posture == "standing" else "SHOW_WALK_K_SITTING"
         print(f"{name}={k:.2f}    # put this in .env ({len(heights)} readings)")
+        print("When both SHOW_WALK_K_SITTING and SHOW_WALK_K_STANDING are calibrated, also set SHOW_WALK_CALIBRATED=true.")
         return 0
     if not (s.real_robot_possible and s.show_walk_enabled):
         sys.exit("Needs APP_MODE=installation, ROBOT_MODEL=zhaw_bridge, ROBOT_MOTION_ENABLED=true, SHOW_WALK_ENABLED=true.")
@@ -283,6 +284,22 @@ def cmd_walk_test(args) -> int:
 
 
 # ---------------------------------------------------------------------- run
+def capability_lines(s, opts, director) -> list[str]:
+    """Poses and walking are SEPARATE capabilities; say exactly which are on and why not."""
+    poses = ("ON — supported poses in place (sit, lie down, stand, paw, stretch), armed guard"
+             if director.motion.enabled else "off — add --motion --i-have-physical-estop (SHOW_MOTION_ENABLED=true)")
+    if director.approacher is not None:
+        walk = "ON — " + ("simulated room" if opts.dry_run else "camera-guided approach with the robot's camera")
+    else:
+        missing = [why for ok, why in (
+            (opts.walk, "--walk"), (opts.motion or opts.dry_run, "--motion"),
+            (s.show_walk_enabled or opts.dry_run, "SHOW_WALK_ENABLED=true"),
+            (s.show_walk_calibrated or opts.dry_run, "calibration (walk-test --calibrate, SHOW_WALK_CALIBRATED=true)"))
+            if not ok]
+        walk = "off" + (f" — needs {', '.join(missing)}" if missing else "")
+    return [f"poses:   {poses}", f"walking: {walk}  (a successful pose never enables walking by itself)"]
+
+
 def cmd_show(args) -> int:
     action = getattr(args, "show_action", None)
     if action == "validate":
@@ -349,8 +366,9 @@ async def _run_local(s, opts, args) -> int:
         start_keyboard(director, asyncio.get_running_loop())
     print(f"{'REHEARSAL (dry run) — ' if opts.dry_run else ''}mode {director.mode}; "
           f"voice {'cached/generated' if opts.voice else 'off (text only)'}; "
-          f"camera {opts.source or s.show_camera_source or s.camera_source}; robot motion "
-          f"{'ON (armed cues only)' if director.motion.enabled else 'off'}")
+          f"camera {opts.source or s.show_camera_source or s.camera_source}")
+    for line in capability_lines(s, opts, director):
+        print("  " + line)
     start_at = "invitation" if args.interactive else args.start_at
     try:
         result = await director.run(start_at=start_at)

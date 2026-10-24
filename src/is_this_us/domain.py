@@ -225,6 +225,9 @@ class ExecutionResult(BaseModel):
     status: ExecutionStatus
     detail: str = ""
     duration_s: float = 0.0
+    # why, in one word (for logs/operators): confirmed | sdk_error | rpc_timeout_unknown | transport_timeout |
+    # rejected | stopped | guard_timeout | "" (not reported by this adapter)
+    diagnostic: str = ""
 
 
 def utcnow() -> datetime:

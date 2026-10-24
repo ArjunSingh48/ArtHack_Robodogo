@@ -59,12 +59,13 @@ class ApproachSettings:
     max_seconds: float = 40.0
     max_distance_m: float = 3.5
     lost_seconds: float = 6.0  # without seeing the person again, give up
+    camera_lost_seconds: float = 0.6  # no camera FRAME at all for this long: stop at once (blind)
     rate_hz: float = 8.0
 
 
 @dataclass
 class ApproachResult:
-    status: str  # arrived | not_found | lost | timeout | too_far | stopped | refused | error
+    status: str  # arrived | not_found | lost | camera_lost | timeout | too_far | stopped | refused | error
     detail: str = ""
     travelled_m: float = 0.0
     path: list[tuple[float, float, float, float]] = field(default_factory=list)  # (vx, vy, vyaw, seconds)
@@ -100,17 +101,45 @@ class Approacher:
             return False, "disarmed"
         return True, ""
 
+    def _integrate(self, res: ApproachResult, vx: float, vy: float, vyaw: float, t: float) -> None:
+        x, y, yaw = res.robot_pose
+        x += (vx * math.cos(yaw) - vy * math.sin(yaw)) * t
+        y += (vx * math.sin(yaw) + vy * math.cos(yaw)) * t
+        res.robot_pose = (x, y, yaw + vyaw * t)
+        res.travelled_m += abs(vx) * t + abs(vy) * t
+
+    def _catch_up(self, res: ApproachResult) -> None:
+        """The previous velocity kept running until now (camera + pose estimate can take longer than one tick;
+        the bridge keeps a velocity alive for at most `coast_s`). Count that real time in the dead reckoning and
+        in the remembered path, so the robot never believes it is further from the person than it is."""
+        last = getattr(self, "_last_cmd", None)
+        if last is None:
+            return
+        t0, (vx, vy, vyaw), assumed = last
+        coast = float(getattr(self.robot, "coast_s", 0.3))
+        extra = min(self.clock() - t0, max(assumed, coast)) - assumed
+        if extra > 1e-3 and (vx or vy or vyaw):
+            self._integrate(res, vx, vy, vyaw, extra)
+            if res.path:
+                pvx, pvy, pvyaw, pdt = res.path[-1]
+                res.path[-1] = (pvx, pvy, pvyaw, pdt + extra)
+        self._last_cmd = (t0, (vx, vy, vyaw), assumed + max(0.0, extra))
+
     def _send(self, res: ApproachResult, vx: float, vy: float, vyaw: float, dt: float) -> None:
         vx = _clamp(vx, self.s.speed)
         vy = _clamp(vy, self.s.speed)
         vyaw = _clamp(vyaw, max(self.s.turn_speed, self.s.search_speed))
+        self._catch_up(res)
         self.robot.walk(vx, vy, vyaw)
+        self._last_cmd = (self.clock(), (vx, vy, vyaw), dt)
         res.path.append((vx, vy, vyaw, dt))
-        x, y, yaw = res.robot_pose
-        x += (vx * math.cos(yaw) - vy * math.sin(yaw)) * dt
-        y += (vx * math.sin(yaw) + vy * math.cos(yaw)) * dt
-        res.robot_pose = (x, y, yaw + vyaw * dt)
-        res.travelled_m += abs(vx) * dt + abs(vy) * dt
+        self._integrate(res, vx, vy, vyaw, dt)
+
+    def _halt(self, res: ApproachResult | None = None) -> None:
+        if res is not None:
+            self._catch_up(res)
+        self._last_cmd = None
+        self.robot.halt()
 
     def _standing(self) -> bool:
         body = getattr(self.robot, "body", None)
@@ -119,7 +148,9 @@ class Approacher:
     def _look(self, camera):
         frame = camera.read()
         if frame is None:
+            self._no_frame = True
             return None
+        self._no_frame = False
         people = self.estimator.estimate(frame.image)
         person, _ = select_primary_person(people)
         if person is None:
@@ -177,6 +208,7 @@ class Approacher:
         person: tuple[float, float] | None = None
         estimates: list[tuple[float, float]] = []
         last_seen = None
+        blind_since = None
         try:
             camera = self.camera_factory()
             while True:
@@ -195,6 +227,15 @@ class Approacher:
                     return res
                 seen = self._look(camera)
                 now = self.clock()
+                if getattr(self, "_no_frame", False):
+                    blind_since = blind_since if blind_since is not None else now
+                    self._halt(res)  # never keep walking blind, not even for one step
+                    if now - blind_since >= self.s.camera_lost_seconds:
+                        res.status, res.detail = "camera_lost", "no camera frame from the robot — stopped"
+                        return res
+                    self.sleep(dt)
+                    continue
+                blind_since = None
                 if seen is not None:
                     last_seen = now
                     if seen["clipped_x" if lying else "clipped"]:
@@ -202,11 +243,11 @@ class Approacher:
                         # and if memory says we are already close (or we have none), stop right here.
                         x, y, _ = res.robot_pose
                         if person is None:
-                            self.robot.halt()
+                            self._halt(res)
                             res.status, res.detail = "arrived", "already close to the person — stayed"
                             return res
                         if math.hypot(person[0] - x, person[1] - y) < min_gap:
-                            self.robot.halt()
+                            self._halt(res)
                             res.person_at = person
                             res.status, res.detail = "arrived", "close to the person — stopped"
                             return res
@@ -232,7 +273,7 @@ class Approacher:
                 x, y, yaw = res.robot_pose
                 dist = math.hypot(gx - x, gy - y)
                 if dist <= self.s.arrive_tolerance_m:
-                    self.robot.halt()
+                    self._halt(res)
                     self._face(res, person, should_stop)
                     res.status, res.detail = "arrived", "in front of the person (lying)" if lying else f"{side} of the person"
                     return res
@@ -249,7 +290,7 @@ class Approacher:
             return res
         finally:
             try:
-                self.robot.halt()
+                self._halt(res)
             except Exception:
                 pass
             if camera is not None:
@@ -275,7 +316,7 @@ class Approacher:
                 break
             self._send(res, 0.0, 0.0, math.copysign(self.s.turn_speed, angle), dt)
             self.sleep(dt)
-        self.robot.halt()
+        self._halt(res)
 
     def go_home(self, *, should_stop=lambda: False) -> str:
         """Retrace the remembered path backwards (open loop). → done | stopped | nothing"""
@@ -296,6 +337,6 @@ class Approacher:
             return "done"
         finally:
             try:
-                self.robot.halt()
+                self._halt()
             except Exception:
                 pass

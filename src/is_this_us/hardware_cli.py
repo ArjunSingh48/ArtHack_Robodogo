@@ -124,7 +124,8 @@ def _check_bridge(s, args) -> None:
     from .robot.zhaw_bridge import STEP_TO_ACTION, BridgeError, ZhawBridgeAdapter, ZhawBridgeCameraSource
 
     print(f"  connection: ZHAW go2_main bridge at {s.zhaw_bridge_host}:{s.zhaw_bridge_cmd_port}")
-    robot = ZhawBridgeAdapter(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port, timeout_ms=3000)
+    robot = ZhawBridgeAdapter(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port, timeout_ms=3000,
+                              sdk_timeout_s=s.zhaw_bridge_sdk_timeout_s)
     try:
         robot.connect()
     except (BridgeError, Exception) as exc:
@@ -167,7 +168,7 @@ def _real_robot(s, iface, model: str | None = None):
     if model == "zhaw_bridge":
         from .robot.zhaw_bridge import ZhawBridgeAdapter
 
-        robot = ZhawBridgeAdapter(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port)
+        robot = ZhawBridgeAdapter(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port, sdk_timeout_s=s.zhaw_bridge_sdk_timeout_s)
     else:
         from .robot.unitree_go2 import UnitreeGo2Adapter
 
@@ -217,7 +218,7 @@ def cmd_robot_test(args) -> None:
                                          explanation="supervised test"))
             dt = time.monotonic() - t0
             timings.append((b, r.status.value, r.detail, round(dt, 1)))
-            print(f"    {r.status.value}: {r.detail}  ({dt:.1f}s)  body={robot.body}  battery={robot.status().battery_percent}%")
+            print(f"    {r.status.value}{' [' + r.diagnostic + ']' if r.diagnostic else ''}: {r.detail}  ({dt:.1f}s)  body={robot.body}  battery={robot.status().battery_percent}%")
             if b == "look_aside":
                 print("    → did the body turn slightly LEFT or RIGHT? (note it; yaw sign is hardware-unverified)")
             if b == "peer":

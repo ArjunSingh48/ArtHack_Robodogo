@@ -690,6 +690,7 @@ def test_cli_dry_run_end_to_end(tmp_path, monkeypatch):
     monkeypatch.chdir(ROOT)
     monkeypatch.setenv("OPENAI_API_KEY", "")
     monkeypatch.setenv("SHOW_OUTPUT_DIR", str(tmp_path / "perf"))
+    monkeypatch.setenv("SHOW_TELEGRAM_CHAT_ID", "-100123")  # rehearse a configured chat: preview, never sent
     get_settings.cache_clear()
     try:
         cli.main(["show", "--programme", "show", "--dry-run", "--auto", "--fast", "0.002", "--no-voice",
@@ -896,7 +897,10 @@ def test_web_live_frame_is_memory_only_and_hidden_when_off():
         web.live(b"\xff\xd8jpeg", [("sitting", True)])
         assert urllib.request.urlopen(web.url + "live.jpg").read() == b"\xff\xd8jpeg"
         state = json.loads(urllib.request.urlopen(web.url + "state").read())
-        assert state["live"]["on"] and state["live"]["checks"] == [["sitting", True]]
+        assert state["live"]["laptop"]["on"] and state["live"]["laptop"]["checks"] == [["sitting", True]]
+        web.live(b"\xff\xd8robot", [], feed="robot")  # the dog's own camera is a second, separate feed
+        assert urllib.request.urlopen(web.url + "live.jpg?feed=robot").read() == b"\xff\xd8robot"
+        assert urllib.request.urlopen(web.url + "live.jpg").read() == b"\xff\xd8jpeg"
         web.live(None, [])
         with pytest.raises(urllib.error.HTTPError):
             urllib.request.urlopen(web.url + "live.jpg")

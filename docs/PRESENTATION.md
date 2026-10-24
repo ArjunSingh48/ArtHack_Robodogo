@@ -15,6 +15,40 @@ Intro (shy dog, first picture, "may I take pictures of us?")
     it sits beside them → last photo → "Am I a good boy already?" … "Is this us?"
 ```
 
+## 0. The normal way: two terminals
+
+```bash
+# Terminal 1 — the bridge (go2_main). Checks en6 first; calm actions only; SDK timeout 10 s.
+cd ~/Projects/go2-dog/go2_main && ./scripts/start_bridge.sh en6
+
+# Terminal 2 — the presentation (this repo). Checks network, robot, bridge, camera; prints the two URLs.
+cd ~/Projects/go2-dog/Is_this_us && source .venv/bin/activate
+itu present                                               # projector + camera + voice, the robot does not move
+itu present --motion --i-have-physical-estop              # + poses in place (sit, lie down, paw, stretch)
+itu present --motion --walk --i-have-physical-estop       # + walking — only after calibration (section 5)
+```
+Telegram is off unless you add `--telegram`. Without it, photos are shown on the projector only and the dog
+never mentions Telegram. Nothing has to be edited in `.env` for these runs. If the laptop camera fails,
+`--fallback zhaw_bridge` reads poses with the robot's camera instead. Then there are no photos of the
+person with the robot, because the robot cannot photograph itself, and the operator page says so.
+
+**Two cameras, two jobs, both on the projector.** The dog's own camera (via the bridge, "WHAT THE DOG SEES")
+finds the person, reads their pose, and guides the walk. The laptop camera ("THE PHOTO CAMERA") stands at the
+side and takes the photo of the two of them. To read poses with the laptop camera instead, use
+`--pose-camera laptop`. If the dog's camera has no frames, the program says so and falls back to the laptop.
+
+**Poses and walking are separate.** `--motion` only lets the robot change pose where it stands.
+`--walk` additionally lets it walk to the person with its own camera. A successful pose never turns
+walking on.
+
+**If something fails:**
+- `interface en6 does not exist`: the USB-Ethernet adapter is unplugged or got another name (normal on
+  macOS). The message lists the interface that has the 192.168.123.x address.
+- `camera: … macOS did not allow the camera`: System Settings → Privacy & Security → Camera → allow your
+  terminal app, then quit and reopen the terminal.
+- `hello … code 3104 / outcome unknown`: the bridge is still on the old 3 s timeout. Restart it with
+  `start_bridge.sh`, which sets 10 s.
+
 ## 1. Rehearse (no robot, no keys)
 
 ```bash
@@ -76,6 +110,20 @@ the robot does to echo the dog (`dog: sit | lie_down | stand | greet | stretch`)
 participant (same posture, then a close one, plus an arm reaching out or a tilted head). It doesn't
 repeat a picture in the same presentation. `itu show validate` prints this per round. The operator page
 shows why each pick was made; the audience never sees a score.
+
+## 4b. Calibrating the walk (once per room/camera)
+
+```bash
+itu show walk-test --calibrate 2 --posture sitting --i-have-physical-estop    # a person sits 2 m in front
+itu show walk-test --calibrate 2 --posture standing --i-have-physical-estop   # a person stands 2 m in front
+```
+Put the printed `SHOW_WALK_K_SITTING=…` and `SHOW_WALK_K_STANDING=…` into `.env`, add
+`SHOW_WALK_CALIBRATED=true`, and try one walk on its own: `itu show walk-test --side left --i-have-physical-estop`.
+
+While walking, the program sends the current velocity about every 0.1 s. A velocity older than 0.6 s is
+replaced by zero, and the bridge itself zeroes anything older than 250 ms. Every end of a walk (arrival,
+person lost, camera lost for 0.6 s, disarm, End, error) sends an explicit stop. Speed stays at most
+0.22 m/s, and the adapter caps it at 0.3 m/s.
 
 ## 5. Safety in the rescue
 
