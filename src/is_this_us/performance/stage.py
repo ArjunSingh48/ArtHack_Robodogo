@@ -274,6 +274,7 @@ function drawSim(m){
 async function tick(){
  try{const r=await fetch('/state',{cache:'no-store'});const s=await r.json();
   document.getElementById('chapter').textContent=s.chapter||'';
+  if(s.chapter_id&&location.hash.slice(1)!==s.chapter_id)history.replaceState(null,'','#'+s.chapter_id);
   document.getElementById('subtitle').textContent=s.subtitle||'';
   document.getElementById('notice').textContent=s.notice||'';
   const al=document.getElementById('alert');if(key&&s.alert){al.style.display='block';al.textContent='⚠ '+s.alert}else{al.style.display='none'}
@@ -297,6 +298,9 @@ async function tick(){
    if(key&&s.note){document.getElementById('msg').textContent='🐕 '+s.note}}
  }catch(e){}
  setTimeout(tick,document.body.classList.contains('live')?150:350)}
+// every step has a hash (#prehistory, #paintings …): the address follows the show; typing one, or Back,
+// replays that step
+window.addEventListener('hashchange',()=>{const id=location.hash.slice(1);if(key&&id)send('goto:'+id)});
 tick();
 </script></body></html>"""
 
@@ -357,7 +361,7 @@ class WebStage:
                         ok, msg = False, f"error: {type(exc).__name__}"
                     return self._send(200, "application/json", json.dumps({"ok": ok, "msg": msg}).encode())
                 cmd = q.get("cmd", [""])[0]
-                if cmd not in CONTROL_COMMANDS:
+                if cmd not in CONTROL_COMMANDS and not cmd.startswith("goto:"):
                     return self._send(400, "application/json", b'{"msg": "unknown command"}')
                 fn, loop = stage._control
 
@@ -419,7 +423,7 @@ class WebStage:
         return f"/img/{token}"
 
     def chapter(self, chapter_id: str, title: str) -> None:
-        self._set(chapter=title)
+        self._set(chapter=title, chapter_id=chapter_id)
 
     def show(self, view: View) -> None:
         if view.kind == "consider" and view.memes:

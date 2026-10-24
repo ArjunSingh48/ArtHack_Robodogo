@@ -193,6 +193,8 @@ HELP = ("start: y = camera (they agreed to photos) · sample = sample photo · n
 
 def keyboard_command(director: StoryDirector, line: str) -> tuple[bool, str]:
     key = line.strip().lower()
+    if key.startswith("goto:"):
+        return director.goto(key[5:])
     if key in ("?", "status"):
         return True, str(director.snapshot())
     if key in ("h", "help"):

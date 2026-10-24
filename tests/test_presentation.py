@@ -524,3 +524,20 @@ async def test_operator_can_switch_from_a_sample_picture_to_the_camera(tmp_path,
     res = await d.run()
     assert res.final_state is ShowState.FINISHED
     assert switched == [(True, "ok: camera")] and d._open_camera() is cam and d.photo_consent
+
+
+async def test_operator_can_replay_a_step_by_its_hash(tmp_path, pres, catalog, lines):
+    d = director(tmp_path, pres, catalog, lines)
+    jumped = []
+
+    def on_state(director, st):
+        if st is ShowState.READINESS and director.chapter_id == "middle_ages" and not jumped:
+            jumped.append(director.goto("prehistory"))
+    d.listeners.append(on_state)
+    answer(d, YES)
+    res = await d.run()
+    assert res.final_state is ShowState.FINISHED
+    assert jumped == [(True, "ok: going to prehistory")]
+    played = d.chapters_played
+    assert played.index("middle_ages") < len(played) - 1 - played[::-1].index("prehistory")  # replayed after
+    assert d.goto("nowhere")[0] is False

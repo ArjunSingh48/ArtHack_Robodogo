@@ -178,7 +178,11 @@ export function start(el) {
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({ color: 0x302c35 }));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
   const grid = new THREE.GridHelper(14, 14, 0x4a4550, 0x3a363d); grid.position.y = 0.002; scene.add(grid);
+  const TRAIL_MAX = 400;  // SimRobot keeps the last 400 points
   const trailGeo = new THREE.BufferGeometry();
+  trailGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(TRAIL_MAX * 3), 3));
+  trailGeo.setDrawRange(0, 0);
+  let trailKey = '';
   const trail = new THREE.Line(trailGeo, new THREE.LineDashedMaterial({ color: 0x8fc7d9, dashSize: 0.06, gapSize: 0.05 }));
   trail.position.y = 0.01; scene.add(trail);
   const chair = new THREE.Mesh(new THREE.BoxGeometry(0.45, 1, 0.45), new THREE.MeshStandardMaterial({ color: 0x5b4f43 }));
@@ -257,8 +261,13 @@ export function start(el) {
       low = Math.min(low, butt.getWorldPosition(new THREE.Vector3()).y);
       body.position.y = -low + 0.022 + bob;  // foot sphere radius
 
-      const pts = (m.trail || []).map(([x, y]) => W(x, y));
-      if (pts.length > 1) { trailGeo.setFromPoints(pts); trail.computeLineDistances(); }
+      const tr = (m.trail || []).slice(-TRAIL_MAX), key = tr.length + ':' + tr[tr.length - 1];
+      if (key !== trailKey) {  // only when the path grew (fixed buffer: no reallocation every frame)
+        trailKey = key;
+        const pos = trailGeo.attributes.position;
+        tr.forEach(([x, y], i) => { const v = W(x, y); pos.setXYZ(i, v.x, 0, v.z); });
+        pos.needsUpdate = true; trailGeo.setDrawRange(0, tr.length); trail.computeLineDistances();
+      }
     }
     if (state && avatar) {
       const [px, py] = state.person, h = avatar.holder;

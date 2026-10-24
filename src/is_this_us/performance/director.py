@@ -180,6 +180,7 @@ class StoryDirector:
         # photo_factory(bytes | None) → a camera + estimator for one picture (None = the sample stand-in)
         self.wait_for_start, self.photo_factory = wait_for_start, photo_factory
         self._consent_decided, self._picture, self._shown_pictures = False, None, set()
+        self._goto: str | None = None  # a chapter to replay / jump to (operator page hash)
         self._real_camera = (frame_source_factory, pose_reader)  # kept while a picture stands in for it
         self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
@@ -239,6 +240,18 @@ class StoryDirector:
         self._inbox.append(cmd)
         self._has_cmd.set()
         return True, f"ok: {cmd.value}"
+
+    def goto(self, chapter_id: str) -> tuple[bool, str]:
+        """Operator: replay (or jump to) a step. The current step is skipped; the show continues from there."""
+        ids = [c.id for c in self.script.chapters]
+        if chapter_id not in ids:
+            return False, f"no step '{chapter_id}' — one of {', '.join(ids)}"
+        if self.state in (ShowState.IDLE, ShowState.LOBBY) or not self.running:
+            return False, "start the show first"
+        self._goto = chapter_id
+        self._inbox.append(Cmd.CANCEL)  # unwinds the current step like End (a walk stops first) …
+        self._has_cmd.set()  # … but run() continues at the chosen step instead of ending
+        return True, f"ok: going to {chapter_id}"
 
     def _switch_to_camera(self) -> tuple[bool, str]:
         """Operator: the visitor is here now and agreed — the real camera instead of the sample/uploaded picture."""
@@ -471,6 +484,8 @@ class StoryDirector:
             self._jump_to_pose = True
         i = 0
         while i < len(cues):
+            if self._goto is not None:
+                return "goto"
             if self._jump_to_pose and self.script.is_presentation:
                 # "go to interactive": skip the rest of this chapter's narration, straight to its round
                 nxt = next((j for j in range(i, len(cues)) if cues[j].kind in ("round", "rescue", "consent")), None)
@@ -1842,7 +1857,7 @@ class StoryDirector:
         self.tries = []
         self._jump_to_pose = False
         self.photo_consent, self.send_ok, self.rounds = False, False, []
-        self._consent_decided, self._shown_pictures = False, set()
+        self._consent_decided, self._shown_pictures, self._goto = False, set(), None
         self.rounds_only = False
         if self.script.is_presentation and start_at in ("invitation", "interactive"):
             self.rounds_only, start_at = True, None  # every chapter: straight to its round (consent first)
@@ -1875,7 +1890,16 @@ class StoryDirector:
                     cues = [c for c in ch.cues if c.needs_pose_request or c.show == "chosen"]
                 else:
                     cues = ch.cues_for(self.outcome) if ch.id == "present" else ch.cues
-                result = await self._play_chapter(ch, cues)
+                try:
+                    result = await self._play_chapter(ch, cues)
+                except ShowCancelled:
+                    if self._goto is None:
+                        raise
+                    self.stage.subtitle(None)
+                    self._clear_live()
+                if self._goto is not None:  # replay / jump (operator page hash)
+                    idx, self._goto = [c.id for c in chapters].index(self._goto), None
+                    continue
                 if result == "pose":
                     target = next((i for i, c in enumerate(chapters) if c.interactive), None)
                     if self.script.is_presentation or target is None:
