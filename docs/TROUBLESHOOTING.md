@@ -11,7 +11,8 @@
 | `/arm` refused "gates closed" | Need `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOTION_ENABLED=true`. |
 | Robot never moves after `/stop` | By design: re-arm with `/arm`. |
 | "cooldown" in logs | `MOTION_COOLDOWN_SECONDS` between motions (default 8 s). |
-| No voice | ElevenLabs key/voice missing or invalid (log says so); installation continues text-only. |
+| No voice | `OPENAI_API_KEY` missing or invalid (log: "OpenAI rejected credentials"); installation continues text-only. |
+| "voice discarded … model said …" in logs | The Realtime model improvised instead of reading; the moment continues as text. Try another `OPENAI_REALTIME_VOICE`/model if frequent. |
 | Voice file but no voice note | `ffmpeg` missing — install it (`brew install ffmpeg` / `apt install ffmpeg`). |
 | Met API 403 | Missing User-Agent (our client sends one); or Met bot protection — retry later. |
 | Met `/v1/search` message | Retired 2026-10-01; this project uses `/v1.1/search`. |

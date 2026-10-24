@@ -39,6 +39,19 @@ EDU feature over Ethernet. The sport-state topic name has varied across models/f
   `has_image=1`; per-record `share_license_status == "CC0"` is checked again on fetch.
 * **Rijksmuseum**: not yet integrated (optional stage).
 
+## OpenAI Realtime (verified 2026-10-24)
+
+* SDK: `AsyncOpenAI().realtime.connect(model=...)` → `session.update`, `conversation.item.create`,
+  `response.create`, `recv()`.
+* Model `gpt-realtime-2.1` (used in OpenAI's current examples); voices `alloy, ash, ballad, coral, echo,
+  sage, shimmer, verse, marin, cedar` — OpenAI recommends `marin` or `cedar`.
+* Session: `{"type": "realtime", "output_modalities": ["audio"], "audio": {"output": {"format":
+  {"type": "audio/pcm", "rate": 24000}, "voice": ...}}, "instructions": ...}`; audio is 24 kHz mono PCM16.
+* Server events used: `response.output_audio.delta` (base64 audio), `response.output_audio_transcript.done`,
+  `response.done`, `error`.
+* An invalid key closes the WebSocket with code 3000, reason `invalid_request_error.invalid_api_key`
+  (observed); the synthesizer treats it as a credential failure and turns the voice off.
+
 ## Imgflip
 
 `GET https://api.imgflip.com/get_memes` — public, no key, returns ~100 currently popular templates
@@ -46,7 +59,6 @@ EDU feature over Ethernet. The sport-state topic name has varied across models/f
 
 ## Python packages (PyPI, 2026-10-24)
 
-aiogram 3.31.0 · elevenlabs 2.74.1 (`client.text_to_speech.convert(...) -> Iterator[bytes]`,
-`VoiceSettings(stability, similarity_boost, style, use_speaker_boost, speed)`) · mediapipe 1.1.1
+aiogram 3.31.0 · openai 3.37.0 (`openai[realtime]`) · mediapipe 1.1.1
 (`mediapipe.tasks.python.vision.PoseLandmarker`, IMAGE mode, `num_poses`) · pydantic-settings 2.16 ·
 qrcode 8.2. Tested on Python 3.13; requires ≥ 3.11.

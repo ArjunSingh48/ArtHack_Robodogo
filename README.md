@@ -1,10 +1,5 @@
 # Is This Us? — A Dog's Memory
 
-**MCP integration plan:** [Robot, backend, and Telegram implementation plan](docs/IMPLEMENTATION_PLAN.md)
-and [Go2 MCP contract](docs/MCP_INTEGRATION.md). These describe the next implementation steps for
-`zhaw-physical-ai/go2_main`, including pose similarity, robot capability gaps, and delivery behavior.
-The setup guide below describes the existing direct SDK prototype; the proposed MCP adapter is not implemented yet.
-
 [![tests](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
 An interactive installation in which a Unitree robot dog tries to learn how to be a dog from
@@ -19,7 +14,7 @@ The robot has two cultural memories, treated with equal sincerity:
 
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
-Python · MediaPipe · aiogram 3 · ElevenLabs · Unitree SDK2 · SQLite · Pillow
+Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite · Pillow
 
 ## Documentation
 
@@ -40,7 +35,7 @@ Python · MediaPipe · aiogram 3 · ElevenLabs · Unitree SDK2 · SQLite · Pill
 - Relationship matching across paintings, memes, both, or a surprise, on one comparable 0–1 scale.
 - A closed, operator-controlled movement vocabulary with a safety guard; a mock robot that simulates the
   exact SDK call sequences; a Go2 adapter (hardware-unverified).
-- The robot's character in English, Russian and German; ElevenLabs voice with caching and text fallback.
+- The robot's character in English, Russian and German; a voice from the OpenAI Realtime API with caching, a word-for-word fidelity check and text fallback.
 - A Telegram bot: QR pairing, `/observe`, photo mode without the robot, `/art` `/meme` `/surprise`,
   ♡ / ↻ / ✧ buttons, memory gallery, memory cards, consented imitation photos, `/forget`, operator controls.
 - 129 tests, GitHub Actions CI.
@@ -88,14 +83,18 @@ Never commit `.env` (already in `.gitignore`).
 ## 4. Voice (optional)
 
 ```
-ELEVENLABS_API_KEY=…
-ELEVENLABS_VOICE_ID=…              # choose a soft, quiet voice
-ELEVENLABS_MODEL_ID=eleven_multilingual_v2
+OPENAI_API_KEY=sk-…
+OPENAI_REALTIME_MODEL=gpt-realtime-2.1
+OPENAI_REALTIME_VOICE=marin        # or cedar; also alloy, ash, ballad, coral, echo, sage, shimmer, verse
 LOCAL_AUDIO_PLAYBACK=true          # play on the laptop / a Bluetooth speaker
 ```
 
-Only the sentence to be spoken is sent to ElevenLabs — never images or body data. Without a key, or when
-the API fails, everything continues as text.
+Each phrase opens a short Realtime session that is told to *read the text aloud exactly*, in the visitor's
+language, in a soft, shy voice. The model's own transcript is compared with the script; if it improvised,
+the audio is discarded (one retry, then text). Only the sentence to be spoken is sent to OpenAI — never
+images or body data — and nothing the model returns is used for anything but playback. Audio is cached as
+WAV and converted to OGG/Opus for Telegram voice notes. Without a key, or when the API fails, everything
+continues as text.
 
 ## 5. The real robot
 
@@ -136,7 +135,7 @@ src/is_this_us/
   motion/           planner (scene → approved behavior) · guard (safety)
   robot/            step sequences · mock · Go2 adapter · shared DDS init
   dialogue/         engine + locales (en, ru, de)
-  speech/           ElevenLabs, cache, FFmpeg, local speaker
+  speech/           OpenAI Realtime voice, cache, FFmpeg, local speaker
   bot/              flows (network-free logic) · app (aiogram 3)
   orchestrator.py   state machine
   storage.py        SQLite: pairing, sessions, memories, archive choice, /forget

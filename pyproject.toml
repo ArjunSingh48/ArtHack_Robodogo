@@ -22,7 +22,7 @@ dependencies = [
 
 [project.optional-dependencies]
 vision = ["mediapipe>=0.10.30", "opencv-python>=4.10"]
-voice = ["elevenlabs>=2.74,<3"]
+voice = ["openai[realtime]>=3.37,<4"]
 dev = ["pytest>=8", "pytest-asyncio>=1.4"]
 # unitree_sdk2py is not on PyPI in a reliable form; install it from the official
 # GitHub repository (see docs/HARDWARE_SETUP.md).

@@ -1,9 +1,5 @@
 # Architecture
 
-This page describes the existing direct SDK prototype. For the planned integration with
-`zhaw-physical-ai/go2_main`, see the [implementation plan](IMPLEMENTATION_PLAN.md) and
-[MCP contract](MCP_INTEGRATION.md), including the changes needed for pose-based retrieval.
-
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
 ## Pipeline
@@ -14,7 +10,7 @@ FrameSource ──► PoseEstimator ──► SceneInterpreter ──► Artwork
   webcam/Go2)      Pose Landmarker)  HumanObservation)     scoring)           approved behavior) cooldown, stop)
                                                 │
                                                 └──► DialogueEngine ──► SpeechSynthesizer ──► Notifier (Telegram / console)
-                                                     (templates)        (ElevenLabs, cached)
+                                                     (templates)        (OpenAI Realtime, cached)
 ```
 
 Since v0.3 the matcher searches a `SceneLibrary` holding two memories — paintings and memes — through
@@ -67,7 +63,7 @@ Selection uses bounded randomness among near-ties (`tie_margin`, softmax `temper
 | 1 Architecture & compatibility | done — APIs verified 2026-10-24 (see COMPATIBILITY.md) |
 | 2 Telegram simulation | done — bot, storage, mock robot, end-to-end console + Telegram flows |
 | 3 Vision & matching | done — MediaPipe, geometric rules, 24 real curated artworks, weighted matcher |
-| 4 Personality & voice | done — EN/RU/DE templates, ElevenLabs with cache + fallback, OGG voice notes |
+| 4 Personality & voice | done — EN/RU/DE templates, OpenAI Realtime voice (reads the script verbatim, fidelity-checked), cache + fallback, OGG voice notes |
 | 5 Real Unitree | adapter written against official SDK, **hardware-unverified** |
 | 6 Exhibition | QR pairing, memories, cleanup, operator controls, consented imitation diptych |
 | Meme memory (v0.3) | 5 curated memes (reference-only), MemeMatcher, /art /meme /surprise, Imgflip discovery |
@@ -87,7 +83,10 @@ Selection uses bounded randomness among near-ties (`tie_margin`, softmax `temper
    catches up. Pace the dialogue to that.
 6. **Annotation subjectivity.** Interpreting relationships in paintings is a curatorial act. Keep
    annotations reviewed and versioned; low `confidence` lowers a painting's weight.
-7. **Voice costs/limits.** ElevenLabs quotas: lines are cached, but new phrasing costs credits.
+7. **Voice costs/limits.** OpenAI Realtime is billed per audio token; lines are cached, but new phrasing
+   costs credits. Realtime is a conversational model used as a reader: it may occasionally improvise, which
+   the transcript check catches (the line falls back to text). A dedicated TTS model would be cheaper and
+   more literal if that ever becomes a problem.
 8. **Meme rights.** Meme images are copyrighted; the installation shows them only with a recorded licence
    or as team-made recreations. A link preview of the source page is the default way visitors see a meme.
 9. **Euler pose signs.** `look_aside` / `peer` angle signs are unverified; check direction before approving.
