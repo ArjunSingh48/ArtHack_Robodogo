@@ -400,6 +400,16 @@ def cmd_show(args) -> int:
     return asyncio.run(_run_local(s, opts, args))
 
 
+def announce_arming(guard) -> None:
+    """Every change of the robot's arming state, loudly in the operator's terminal — never a silent disarm."""
+    _, event, reason = guard.history[-1]
+    if event == "armed":
+        print(f"\n── ROBOT ARMED ({reason}) ──", flush=True)
+    else:
+        print(f"\n!! ROBOT {event.upper()}: {reason}\n!! poses and walking are skipped until you type `arm` "
+              f"(after checking the dog); `robot` shows the state", flush=True)
+
+
 async def _run_local(s, opts, args) -> int:
     from .runtime import HELP, ParticipantScript, build_director, keyboard_or_cmd, start_keyboard
 
@@ -415,6 +425,7 @@ async def _run_local(s, opts, args) -> int:
         guard = MotionGuard(robot, hardware_gates_open=True, cooldown_s=s.motion_cooldown_seconds,
                             timeout_s=s.motion_timeout_seconds, min_battery=s.min_battery_percent)
         planner = build_planner(s, robot)
+        guard.listeners.append(announce_arming)
         ok, why = guard.arm(operator_id=0)
         print(("ARMED for show cues: " if ok else "NOT armed: ") + why)
     director = build_director(s, opts, guard=guard, planner=planner)

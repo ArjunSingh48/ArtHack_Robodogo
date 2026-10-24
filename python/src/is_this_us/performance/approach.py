@@ -21,7 +21,7 @@ Safety (in addition to the operator's physical remote):
 * limits on time, distance and turning; losing the person for more than a second stops it;
 * the bridge's own heartbeat zeroes velocity if commands stop arriving; its obstacle avoidance
   stays on (bridge default);
-* every exit path sends a halt.
+* every exit path ends the walk: Move(0,0,0) → stop → stop_move, confirmed (the adapter's end_walk).
 Distances are estimates from a single camera — the stop margin is deliberately generous.
 """
 
@@ -141,6 +141,17 @@ class Approacher:
             self._catch_up(res)
         self._last_cmd = None
         self.robot.halt()
+
+    def _end_walk(self, reason: str, res: ApproachResult | None = None) -> None:
+        """Every exit — arrived, timeout, lost camera, cancel, disarm, exception: leave walking for good."""
+        if res is not None:
+            self._catch_up(res)
+        self._last_cmd = None
+        end = getattr(self.robot, "end_walk", None)
+        if end is None:
+            self.robot.halt()
+        elif not end(reason):
+            log.error("walk cleanup after %s was NOT verified — check the dog / use the remote", reason)
 
     def _standing(self) -> bool:
         body = getattr(self.robot, "body", None)
@@ -292,9 +303,9 @@ class Approacher:
             return res
         finally:
             try:
-                self._halt(res)
+                self._end_walk(f"approach {res.status}", res)
             except Exception:
-                pass
+                log.exception("ending the walk failed")
             if camera is not None:
                 try:
                     camera.close()
@@ -360,6 +371,6 @@ class Approacher:
             return "done"
         finally:
             try:
-                self._halt()
+                self._end_walk("walk home ended")
             except Exception:
-                pass
+                log.exception("ending the walk failed")

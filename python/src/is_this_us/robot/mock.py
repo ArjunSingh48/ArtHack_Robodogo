@@ -33,6 +33,9 @@ class MockRobotAdapter:
         self.velocities: list[tuple[float, float, float]] = []
         self.world = None  # optional SimWorld (tests): walking moves the simulated robot
         self.doing = ""  # the SDK step in progress (for the simulated-robot view)
+        self.gait = False
+        self.outcome_unknown: str | None = None
+        self.motion_blocker: str | None = None
 
     def connect(self) -> None:
         self.connected = True
@@ -77,6 +80,7 @@ class MockRobotAdapter:
         from .zhaw_bridge import clamp_velocity
 
         v = clamp_velocity(vx, vy, vyaw)
+        self.gait = True
         self.velocities.append(v)
         if self.world is not None:
             self.world.command(*v)
@@ -86,10 +90,20 @@ class MockRobotAdapter:
         if self.world is not None:
             self.world.command(0.0, 0.0, 0.0)
 
+    def end_walk(self, reason: str = "walk finished") -> bool:
+        """Like the real adapter: Move(0,0,0) → stop → stop_move."""
+        self.halt()
+        self.calls.append("StopMove")
+        self.gait = False
+        return True
+
+    def acknowledge_unknown(self) -> str | None:
+        was, self.outcome_unknown = self.outcome_unknown, None
+        return was
+
     def stop(self) -> None:
         self._stop.set()
-        self.calls.append("StopMove")
-        self.halt()
+        self.end_walk("software stop")
 
     def close(self) -> None:
         self.connected = False

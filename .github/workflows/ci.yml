@@ -24,7 +24,7 @@ jobs:
       - name: Install FFmpeg
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Install package
-        run: pip install -e ".[voice,dev]"
+        run: pip install -e ".[voice,bridge,dev]"
       - name: Validate curated artworks
         run: itu artworks validate
       - name: Run tests (mock robot only — never the real Go2; no network to Telegram/OpenAI)

@@ -281,6 +281,11 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("bot", help="run the Telegram bot").set_defaults(fn=cmd_bot)
 
+    from .web_link import add_arguments as web_link_arguments, cmd_web_link
+    wl = sub.add_parser("web-link", help="relay the browser show (web/, ?robot=…) to the real Go2 via go2_bridge")
+    web_link_arguments(wl)
+    wl.set_defaults(fn=cmd_web_link)
+
     qr = sub.add_parser("qr", help="create a pairing QR code PNG")
     qr.add_argument("--out", default="pairing_qr.png")
     qr.add_argument("--minutes", type=int, default=None)

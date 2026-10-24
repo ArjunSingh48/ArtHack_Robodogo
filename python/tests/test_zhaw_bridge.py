@@ -34,7 +34,8 @@ def free_port() -> int:
 
 
 class FakeBridge:
-    def __init__(self, fail: dict[str, int] | None = None):
+    def __init__(self, fail: dict[str, int] | None = None, patched: bool = True):
+        self.patched = patched  # started by scripts/start_bridge.sh (10 s SDK timeout, reported in status)
         self.cmd_port, self.pub_port = free_port(), free_port()
         self.received: list[dict] = []
         self.fail = fail or {}
@@ -60,6 +61,8 @@ class FakeBridge:
             cmd, params = req.get("cmd"), req.get("params", {})
             if cmd == "status":
                 resp = {"ok": True, "msg": "ok", "data": {"obstacle_avoidance": True, "speed_level": 1, "light_on": False}}
+                if self.patched:
+                    resp["data"].update(sport_timeout_s=10.0, patched_by="is_this_us")
             elif cmd == "list_actions":
                 resp = {"ok": True, "msg": "actions", "data": {"actions": GO2_MAIN_ACTIONS}}
             elif cmd == "action":
@@ -190,6 +193,25 @@ def test_guard_with_bridge_arms_without_battery_and_moves(bridge, fast_steps):
     assert res.status is ExecutionStatus.SUCCESS and bridge.actions()[-1] == "sit"
     g.shutdown()
     a.close()
+
+
+def test_stock_bridge_connects_but_refuses_to_arm():
+    """Stock go2_main (3 s SDK timeout, nothing reported): status and camera work, motion does not."""
+    b = FakeBridge(patched=False)
+    try:
+        a = adapter(b)
+        assert a.status().connected and a.motion_blocker and "start_bridge.sh" in a.motion_blocker
+        g = MotionGuard(a, hardware_gates_open=True, cooldown_s=0)
+        ok, why = g.arm(1)
+        assert not ok and "3 s" in why and g.history[-1][1] == "refused"
+        res = g.execute(MotionPlan(requested=RobotBehavior.SIT, behavior=RobotBehavior.SIT,
+                                   fidelity=Reproducibility.YES, explanation="t"))
+        assert res.status is ExecutionStatus.SKIPPED and "not armed" in res.detail and "not armed yet" in res.detail
+        assert b.actions() == []
+        g.shutdown()
+        a.close()
+    finally:
+        b.close()
 
 
 def test_camera_stream(bridge):

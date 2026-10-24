@@ -183,7 +183,8 @@ KEYS = {
 }
 HELP = ("start: y = camera (they agreed to photos) · sample = sample photos — then "
         "keys: Enter=next · p=pause · r=resume · a=repeat · s=skip · pose · ready · y/n (consent/send) · "
-        "d=decline · l=listen (push-to-talk) · ?=status · q=cancel")
+        "d=decline · l=listen (push-to-talk) · ?=status · q=cancel · "
+        "robot=arming state · arm=re-arm the robot (after checking the dog)")
 
 
 def keyboard_command(director: StoryDirector, line: str) -> tuple[bool, str]:
@@ -194,6 +195,14 @@ def keyboard_command(director: StoryDirector, line: str) -> tuple[bool, str]:
         return True, str(director.snapshot())
     if key in ("h", "help"):
         return True, HELP
+    if key in ("arm", "robot"):
+        guard = getattr(getattr(director, "motion", None), "guard", None)
+        if guard is None:
+            return False, "no robot motion in this show (--motion)"
+        if key == "arm":
+            ok, why = guard.arm(operator_id=0)
+            return ok, ("ARMED: " if ok else "NOT armed: ") + why
+        return True, f"robot: {guard.state_line()}"
     if key in ("y", "yes", "n", "no"):
         yes = key.startswith("y")
         if director.state in (ShowState.CONSENT, ShowState.LOBBY):

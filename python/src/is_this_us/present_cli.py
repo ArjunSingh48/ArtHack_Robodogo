@@ -66,6 +66,7 @@ def _camera_ok(spec: str) -> tuple[bool, str]:
 def run_checks(args, settings) -> bool:
     """→ True if the presentation may start with what was requested."""
     from .netcheck import check_link, ping
+    from .robot.zhaw_bridge import REQUIRED_SDK_TIMEOUT_S
 
     robot_needed = args.motion or args.walk
     good = True
@@ -80,15 +81,20 @@ def run_checks(args, settings) -> bool:
             print(f"{OK if reach else BAD} robot {args.robot_ip} " + ("answers ping" if reach else
                   "does not answer ping — is it on and fully booted (~1 min)? cable in the robot's Ethernet port?"))
         alive, info = _bridge_status(settings.zhaw_bridge_host, settings.zhaw_bridge_cmd_port)
+        start_hint = f"      python/scripts/start_bridge.sh {args.interface}   (from the Is_this_us checkout)"
         if alive:
             t = info.get("sport_timeout_s") if isinstance(info, dict) else None
-            safe = info.get("safe_actions_only") if isinstance(info, dict) else None
-            print(f"{OK} bridge answers on {settings.zhaw_bridge_host}:{settings.zhaw_bridge_cmd_port}"
-                  + (f" (SDK timeout {t:.0f} s{', safe actions only' if safe else ''})" if t else
-                     " — old bridge (no SDK timeout reported): update go2_main, or hello may return 3104"))
+            if t and float(t) >= REQUIRED_SDK_TIMEOUT_S:
+                print(f"{OK} bridge answers on {settings.zhaw_bridge_host}:{settings.zhaw_bridge_cmd_port} "
+                      f"(SDK timeout {float(t):.0f} s)")
+            else:
+                print(f"{BAD} bridge answers, but " + (f"its SDK timeout is {float(t):.0f} s" if t else
+                      "it is stock go2_main (3 s SDK timeout)") + " — hello would return 3104 and the robot "
+                      f"would not arm. Stop it and start it with:\n{start_hint}")
+                if robot_needed:
+                    good = False
         else:
-            print(f"{BAD} bridge: {info}. Start it in another terminal:\n"
-                  f"      cd ~/Projects/go2-dog/go2_main && ./scripts/start_bridge.sh {args.interface}")
+            print(f"{BAD} bridge: {info}. Start it in another terminal:\n{start_hint}")
         if alive:
             dog_ok, dog_msg = _camera_ok(f"zhaw_bridge:{settings.zhaw_bridge_host}:{settings.zhaw_bridge_pub_port}")
             print(f"{OK if dog_ok else BAD} dog's camera: {dog_msg if dog_ok else dog_msg + ' (bridge camera stream)'}"

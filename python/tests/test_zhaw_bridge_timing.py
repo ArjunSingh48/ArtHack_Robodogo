@@ -26,6 +26,8 @@ class FakeBridge:
     def __init__(self, delay=0.0, code=0, sdk_timeout_s=10.0, world=None):
         self.delay, self.code, self.sdk_timeout_s, self.world = delay, code, sdk_timeout_s, world
         self.log: list[tuple[float, str, tuple]] = []  # (time, cmd, velocity or action)
+        self.fail_next: dict[str, int] = {}  # cmd or action name → refuse it this many more times
+        self.answered: list[tuple[float, str]] = []  # (time, action) when each action's answer was sent
         ctx = zmq.Context.instance()
         self.sock = ctx.socket(zmq.REP)
         self.port = self.sock.bind_to_random_port("tcp://127.0.0.1")
@@ -42,14 +44,21 @@ class FakeBridge:
             msg = json.loads(self.sock.recv())
             cmd, p = msg.get("cmd"), msg.get("params") or {}
             now = time.monotonic()
+            key = p.get("name") if cmd == "action" else cmd
+            if self.fail_next.get(key):
+                self.fail_next[key] -= 1
+                self.log.append((now, "refused", (key,)))
+                self.sock.send(json.dumps({"ok": False, "msg": f"{key} failed", "data": {"code": 4001}}).encode())
+                continue
             if cmd == "status":
                 resp = {"ok": True, "msg": "ok", "data": {"sport_timeout_s": self.sdk_timeout_s}}
             elif cmd == "action":
                 self.log.append((now, "action", (p.get("name"),)))
                 time.sleep(self.delay)
-                outcome = "success" if self.code == 0 else "rpc_timeout" if self.code == 3104 else "sdk_error"
-                resp = {"ok": self.code == 0, "msg": f"{p.get('name')} executed",
-                        "data": {"code": self.code, "outcome": outcome}}
+                code = 0 if p.get("name") == "stop_move" else self.code
+                # exactly go2_main's command_handler: ok whenever the SDK call returned, the SDK code in data
+                resp = {"ok": True, "msg": f"{p.get('name')} executed", "data": {"code": code}}
+                self.answered.append((time.monotonic(), p.get("name")))
             elif cmd == "move":
                 v = (p.get("vx", 0.0), p.get("vy", 0.0), p.get("vyaw", 0.0))
                 self.log.append((now, "move", v))
