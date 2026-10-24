@@ -3,7 +3,8 @@
 ## Product direction
 
 Read `docs/UX.md` before changing visitor-facing behavior, dialogue, Telegram
-messages, robot interaction timing, or web UI. It is the canonical UX contract.
+messages, robot interaction timing, presentation flow, or web UI. It is the
+canonical UX and presentation contract.
 Older feature descriptions and implementation plans describe existing or proposed
 capabilities; they do not override that contract. Follow explicit user changes to
 the direction and update the contract in the same change.
@@ -14,8 +15,12 @@ the direction and update the contract in the same change.
 - Telegram receives the robot's selected painting or meme, one short caption,
   and italic image attribution. Keep onboarding minimal and operator controls
   separate from those image messages.
-- The web interface is currently a debugging tool, including substituting for
-  unavailable robot-camera input. It is not a required visitor screen.
+- Presentation is part of the intended experience: a robot dog and a computer
+  connected to a beamer. Build the presentation flow around the main dog
+  interaction scenario, with projection supporting the audience's view of it.
+- Keep the audience presentation view separate from operator/debug tools,
+  including substitute camera input. A web view may serve either role; visitors
+  should not need to operate a screen to take part.
 - The final expressive pose is held for 10 seconds, interruptible by existing
   stop and safety controls. Do not equate command acceptance with reaching a pose.
 - Do not add visitor modes, menus, feedback buttons, narration, or conversation

@@ -2,6 +2,12 @@
 
 > The machine does not learn to imitate commands. It learns to imitate relationships.
 
+The intended setup includes the dog and a computer connected to a beamer. The
+presentation follows the main encounter defined in [UX.md](UX.md), with an
+audience view of its selected archive image and separate operator/debug tools.
+That integration is planned in [alignment step 6](UX_ALIGNMENT_PLAN.md); the
+pipelines and historical performance below describe existing capabilities.
+
 ## Pipeline
 
 ```
@@ -29,6 +35,10 @@ IDLE → OBSERVING → INTERPRETING → MATCHING → PLANNING → MOVING → NAR
 Illegal transitions raise. Every interaction records its trace for the debug log.
 
 ## Performance mode
+
+The existing historical show is a separate experiment. Its projector components
+may support the main encounter's presentation without adopting its narrative or
+participant sequence.
 
 `src/is_this_us/performance/` adds a directed narrative on top of the same services (details in
 `docs/PERFORMANCE.md`): `StoryDirector` (state machine: introduction → narration ⇄ artwork display /

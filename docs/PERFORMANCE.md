@@ -1,5 +1,11 @@
 # The performance — `itu show`
 
+This document covers the existing historical show. The intended presentation
+setup is the dog and a computer connected to a beamer, using the main dog
+encounter in [UX.md](UX.md) and [DEMO_SCRIPT.md](DEMO_SCRIPT.md). Its presentation
+integration is still planned; the projector components described here may be
+reused. The historical show's story and participant flow remain an experiment.
+
 A world with no living dogs. A small robot dog that has only ever seen pictures. Seven chapters of
 humanity's dog images, an invitation to a living person, a picture made together, and one question:
 **Is this us?**

@@ -8,8 +8,10 @@ remaining changes and verification.
 ## Before the visitor begins
 
 The operator prepares the robot, local camera-processing application, archive,
-computer audio playback, and Telegram delivery. The computer plays the dog's
-voice during the presentation; this is the accepted prototype setup.
+computer connected to the beamer, audio playback, and Telegram delivery. The
+computer plays the dog's voice and provides the audience's projected view.
+Rehearse the presentation around the encounter below, checking image visibility
+and audio in the room. Keep operator controls and diagnostics off the audience view.
 Pair the intended recipient before the encounter; keep
 pairing and privacy information brief and separate from the dog's image message.
 The visitor should be able to put the phone aside and attend to the robot.
@@ -30,8 +32,9 @@ visitor does not issue `/observe` or another chat command to begin.
 ## One encounter
 
 1. **Meet the dog.** The visitor stands or takes a posture where the robot camera
-   can see them, holding it steadily. Their attention is on the dog. No web screen
-   is needed. Stable-pose detection starts one encounter automatically.
+   can see them, holding it steadily. Their attention is on the dog; the audience
+   follows the presentation without the visitor operating a screen. Stable-pose
+   detection starts one encounter automatically.
 2. **The dog sees them.** Its camera sends frames to
    the local installation computer. Pose analysis and matching happen there in
    memory. The application selects a painting or meme from the curated archive;
@@ -43,6 +46,8 @@ visitor does not issue `/observe` or another chat command to begin.
    visitor's Telegram chat. A painting says `me and who?🥺` or `us?👉👈`; a meme
    says `hehe or not hehe?`. Image attribution appears below in italics. This is
    one image message, without explanatory paragraphs, voice notes, or buttons.
+   The beamer shows the same selected archive image with credit, giving the
+   audience a shared reference for the dog's physical response.
 5. **The physical finale.** The robot enters a supported, qualified pose based on
    the dog in the selected image. Once it has reached and settled into that pose,
    it holds it for **10 seconds**. The hold remains interruptible. Command
@@ -80,12 +85,14 @@ meme-image experience needs suitable assets and metadata before it can be shown.
 ## Debugging without the robot
 
 Use substitute camera input and a mock robot to inspect the same intended flow.
-The web interface is a debugging aid for the operator/developer, not part of the
-visitor encounter. A simulation should show what would be captured, matched,
-sent, and performed, with simulated actions and delivery labeled clearly.
+Keep the operator/developer debug view separate from the projected presentation.
+Both should follow the same encounter pipeline. A simulation should show what
+would be captured, matched, sent, and performed, with simulated actions and
+delivery labeled clearly.
 
 Today, `run_simulation.sh` launches the historical `itu show` rehearsal. That is
-an existing experiment, not yet a rehearsal of this script. Launcher alignment
+an existing experiment, not yet a rehearsal of this script and its presentation.
+Its projector components may be reused. Launcher and presentation alignment
 belongs to step 6 of the [alignment plan](UX_ALIGNMENT_PLAN.md). Mock timing does
 not verify that the physical robot can reach and hold a pose for 10 seconds.
 

@@ -1,5 +1,11 @@
 # Robodogo integration and implementation plan
 
+The current [UX contract](UX.md) and [alignment plan](UX_ALIGNMENT_PLAN.md) govern
+the encounter and its presentation. The intended setup includes the dog and a
+computer connected to a beamer, with the presentation following the main dog
+interaction scenario. This earlier plan remains technical integration background;
+presentation work and verification are tracked in alignment step 6.
+
 Build on the existing `is_this_us` application. The target experience is: the Go2 notices a
 participant, finds a dataset image whose **human pose** resembles theirs, attempts the dog's
 pose through a reviewed robot behavior, then sends that same image to the participant's

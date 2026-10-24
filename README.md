@@ -2,13 +2,24 @@
 
 [![tests](../../actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
 
-**Current UX direction:** the robot is the main interface: a shy good boy that
-sees a human, occasionally speaks, and finishes with a 10-second pose. Telegram
+**Current UX and presentation direction:** the robot is the main interface: a shy
+good boy that sees a human, occasionally speaks, and finishes with a 10-second pose. Telegram
 receives a painting or meme with one short caption and italic attribution. The
-web interface is for debugging. See [the UX contract](docs/UX.md) for the agreed
-journey and implementation gaps, and [AGENTS.md](AGENTS.md) for contributor rules.
+presentation setup is the dog and a computer connected to a beamer, with the
+presentation flow built around this same encounter. Projection supports the
+audience; operator/debug tools remain separate. See [the UX contract](docs/UX.md)
+for the agreed journey and implementation gaps, and [AGENTS.md](AGENTS.md) for contributor rules.
 The broader modes documented below are existing capabilities and experiments;
 they are not all part of this primary experience.
+
+UX alignment step 2 adds `DialogueEngine.compose_encounter`: approved painting
+and meme captions plus independent optional good-boy speech, with English,
+Russian, and German support. It is silent unless speech is requested; encounter
+speech frequency remains undecided. Existing flows still use the legacy dialogue
+composer. Telegram delivery and automatic encounter wiring remain steps 3 and 5
+of the [alignment plan](docs/UX_ALIGNMENT_PLAN.md).
+The presentation view still needs to be connected to this main scenario; the
+existing historical show provides projector components that may be reused.
 
 An interactive installation in which a Unitree robot dog tries to learn how to be a dog from
 humanity's pictures of dogs. A visitor takes a posture; the robot remembers a scene with a similar

@@ -1,15 +1,17 @@
 # Robodogo: the good boy encounter
 
 Agreed product direction, 2026-10-24. This document defines the intended primary
-experience. It takes precedence over older descriptions of product scope in the
-README, demo scripts, performance documentation, and implementation plans. It
+encounter and its presentation. It takes precedence over older descriptions of
+product scope in the README, demo scripts, performance documentation, and implementation plans. It
 does not claim that all requirements below are already implemented.
 
 The ordered implementation work is recorded in the
 [UX alignment plan](UX_ALIGNMENT_PLAN.md). The [demo script](DEMO_SCRIPT.md)
 describes this same encounter for rehearsal; it must not introduce extra visitor
 steps. Step 1 defines the experience only. Changes to dialogue, delivery, motion,
-and launchers belong to later steps of the plan.
+and launchers belong to later steps of the plan. Step 2 now provides independent
+caption and optional speech outputs in the dialogue engine; existing flows have
+not yet been connected to that API.
 
 ## Character and communication
 
@@ -27,16 +29,29 @@ Leave space for silence and the physical encounter. The questions do not require
 a rating, a chat reply, or a feedback button. Technical status and explanations
 belong in operator/debug tools.
 
-## Roles of the three interfaces
+## Presentation setup and interface roles
+
+Presentation is a significant part of this prototype. The setup is a robot dog
+and a computer connected to a beamer (projector); the computer also plays the
+dog's voice. The presentation flow is built around the main dog interaction
+scenario below. Projection helps the audience follow that encounter, while the
+dog's body and occasional voice remain its expressive center.
+
+The projected view can show the selected archive image and its attribution as
+the dog responds. Its visual design and surrounding presentation material remain
+to be developed. It follows the same encounter state and selected image as the
+robot and Telegram, with operator controls and diagnostics kept separately.
 
 | Interface | Responsibility |
 | --- | --- |
 | Robot | See the human, occasionally speak, and embody its attempt to be a good boy. |
 | Telegram | Display the painting or meme sent by the good boy, with a short message and italic attribution. |
-| Web | Debugging only for now; support inspection and testing when robot-camera input is unavailable. |
+| Computer + beamer | Present the main dog encounter to the audience, including its selected archive image and credit. |
+| Operator/debug view | Support setup, inspection, and testing when robot-camera input is unavailable. |
 
-The encounter must not require the visitor to navigate a web page or operate a
-chat menu. Any Telegram pairing needed to reach the correct recipient is setup,
+Web technology may support both the presentation and debugging views. The
+encounter must not require the visitor to navigate a web page or operate a chat
+menu. Any Telegram pairing needed to reach the correct recipient is setup,
 not the expressive interaction. Operator controls remain available separately.
 
 ## Camera image: where it goes
@@ -49,6 +64,7 @@ against the curated painting and meme collection.
 ```text
 Robot camera → local application → human pose analysis → archive match
                                                         ├→ Telegram image + caption + credit
+                                                        ├→ projected archive image + credit
                                                         └→ guarded robot behavior
 ```
 
@@ -151,6 +167,9 @@ The narrated historical show, open-ended conversation, Telegram photo uploads,
 memory galleries, and consented compositions exist as experiments or other modes.
 Their existence does not make them requirements of this encounter. Preserve them
 unless their removal is explicitly requested; do not add them to the default UX.
+The planned presentation uses the main encounter as its live scenario. Existing
+projector components may be reused without adopting the historical show's story
+or participant flow.
 
 **Confirmed:** the final good-boy pose is based on the selected image. Use its
 curated dog annotation to choose a supported, qualified pose that can be held for
@@ -171,7 +190,12 @@ behavior.
 | --- | --- |
 | Occasional speech | Decide how often a short line is used. A silent encounter is valid; continuous narration is outside this flow. |
 
-## Implementation gaps at the time of this decision
+The step 2 dialogue API accepts an explicit speech request and otherwise returns
+silence. This leaves the frequency decision to the encounter integration. English,
+Russian, and German speech templates are available with English fallback; image
+captions retain the exact approved wording above in all three locales.
+
+## Implementation status and gaps
 
 | Area | Evidence / work remaining |
 | --- | --- |
@@ -179,14 +203,17 @@ behavior.
 | Automatic observation | Stable-pose triggering, one-event-per-held-pose behavior, and reacquisition/reset rules still need implementation and verification. |
 | Telegram | Existing messages include longer dialogue and interaction buttons. A dedicated short caption plus italic-credit format is required. Live delivery remains to be verified. |
 | Meme images | Current meme annotations are reference-only. Image delivery needs eligible licensed or team-made assets and matching metadata; a source link or preview is not proof of the required image message. |
-| Character voice | Existing dialogue/talk modes need alignment with these short, occasional lines. Voice dependencies and live playback require setup/verification. |
+| Character voice | Step 2 adds `DialogueEngine.compose_encounter` with independent approved captions and optional short speech, covered by local tests. Legacy dialogue remains available for experiments; primary delivery/pipeline wiring and speech frequency remain pending. Voice dependencies and live playback require setup/verification. |
 | Physical finale | Existing adapter settle times are not a dedicated 10-second final hold. Implement and verify an interruptible hold and its safe exit on the actual robot. |
-| Web | Existing show/projector capabilities are development tools for this scope, not a visitor requirement. |
+| Presentation and web | The dog + computer + beamer setup is confirmed. Existing show/projector components are available, but a presentation view following the main encounter still needs integration and rehearsal. Keep operator/debug tools separate from the audience view. |
 
 ## Acceptance criteria
 
 - The visitor can experience the encounter by attending to the dog. The web
   page and Telegram commands are not required steps after recipient setup.
+- The presentation follows this same encounter on the computer and beamer,
+  showing the same selected archive image with credit. The audience view stays
+  separate from operator/debug tools and adds no visitor choices.
 - A stable human pose triggers the encounter automatically. A sustained pose
   triggers once; another encounter requires the previous encounter and cooldown
   to finish, plus a pose change or departure and stable reacquisition.
@@ -207,6 +234,7 @@ behavior.
   does not silently trigger another encounter.
 
 Verify the software sequence and message format in simulation, actual delivery
-and playback through their live integrations, and physical pose timing and
-interruption separately on the robot. Passing one level does not establish the
+and playback through their live integrations, the presentation on the computer
+and beamer, and physical pose timing and interruption separately on the robot.
+Passing one level does not establish the
 others. These criteria describe the target, not completed verification.

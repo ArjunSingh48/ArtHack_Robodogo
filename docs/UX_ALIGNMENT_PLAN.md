@@ -7,18 +7,22 @@ background and does not override the agreed experience or this work order.
 
 ## Execution boundary
 
-The user requested saving this plan and using subagents to carry out **step 1
-only**, then stopping for review. Steps 2–6 are planned, not started or authorized
-for automatic continuation in this task. Documentation changes do not establish
-that the runtime implements the new experience.
+The original request authorized **step 1 only**, using subagents, then stopping
+for review. The subsequent request authorizes **step 2**. Steps 3–6 remain planned
+and are not authorized for automatic continuation. Documentation changes do not
+establish that the runtime implements the new experience. The subsequent
+presentation clarification updates the intended setup and future work here;
+it does not authorize implementation of the remaining steps.
 
 ## Confirmed decisions
 
 - The robot is the main interface, with occasional timid speech and a physical
-  finale. Telegram displays its selected archive image and short message; the
-  web interface is for debugging.
-- This is a presentation prototype. The computer plays the dog's voice;
-  onboard robot audio integration is not required.
+  finale. Telegram displays its selected archive image and short message.
+- Presentation is part of the intended experience: the dog and a computer
+  connected to a beamer. The presentation flow uses the main dog encounter;
+  the audience view and operator/debug tools have separate roles.
+- The computer plays the dog's voice; onboard robot audio integration is not
+  required.
 - The final pose is a supported pose based on the selected image, not one fixed
   good-boy pose. Hold it for 10 seconds after reaching/settling into it, unless
   interrupted by stop or safety controls.
@@ -115,22 +119,27 @@ participant loss, stop, delivery failure, reset, and correct recipient routing.
 Retain the existing coarse matcher initially; this step adds temporal observation,
 not a new landmark-similarity retrieval system.
 
-### 6. Align launchers and remaining documentation
+### 6. Align presentation, launchers, and remaining documentation
 
 Files: `run_simulation.sh`, `src/is_this_us/cli.py`,
 `src/is_this_us/hardware_cli.py`, `README.md`, `docs/ARCHITECTURE.md`,
-`docs/IMPLEMENTATION_PLAN.md`; adapt or introduce a small debug view only as needed.
+`docs/IMPLEMENTATION_PLAN.md`; adapt existing projector components in
+`src/is_this_us/performance/stage.py` or add a focused presentation view as needed.
 
 - Make the primary rehearsal launch this encounter with mock hardware and
   substitute camera input. The current launcher runs the historical show.
-- Any web debug view exercises the same encounter pipeline and exposes useful
-  diagnostics; it does not become a visitor interface.
-- Document one clear rehearsal path and one installation path. Label performance,
+- Build the computer-and-beamer presentation around the same encounter pipeline,
+  showing its selected archive image and credit. Reuse existing projector
+  components where useful; keep operator/debug controls in a separate view.
+- Any web debug view exercises the same pipeline and exposes useful diagnostics.
+  Neither view adds screen actions required of the visitor.
+- Document one clear rehearsal path and one installation path. Label the historical show,
   open conversation, and other secondary modes as experiments.
 - Reconcile earlier plans and readiness claims with implemented behavior.
 
 Acceptance: a complete rehearsal follows the UX contract; launch instructions and
-relevant checks pass. Record simulated, live-service, and hardware verification
+relevant checks pass. Rehearse the main scenario with the computer and beamer.
+Record simulated, live-service, presentation-setup, and hardware verification
 separately. Preserve unrelated existing work.
 
 ## Progress
@@ -138,9 +147,23 @@ separately. Preserve unrelated existing work.
 - Step 1: complete — UX contract and demo script aligned by subagents, reviewed,
   and checked for valid local links and whitespace. Automatic triggering and
   image-based final poses are confirmed. No runtime code changed.
-- Steps 2–6: not started.
+- Step 2: implemented — `DialogueEngine.compose_encounter` returns a short caption
+  and independent optional speech. Painting and meme captions remain distinct;
+  English, Russian, and German speech and English fallback are covered by tests.
+  Silence is the default unless the caller requests speech; frequency remains an
+  open integration decision. Legacy `compose` and experimental dialogue remain
+  available. Delivery and orchestrator wiring are deferred to steps 3 and 5.
+  Verification: 75 tests passed across dialogue, memes, flows, and speech. The
+  broader regression run plus the localhost-permitted web rerun passed 169 tests;
+  four talk/show SDK-schema tests remain blocked by the missing optional `openai`
+  package. `git diff --check` passed. No visitor choice was added.
+- Steps 3–6: not started.
+- Presentation clarification: documentation now includes the dog + computer +
+  beamer setup and a presentation flow based on the main encounter. Runtime
+  integration remains planned in step 6; no visitor choice was added.
 
-Work stops here for user review, as requested.
+Work stops after step 2 for review. No live services or robot hardware were used
+to verify this step.
 
 Run tests alongside the code changes they verify. Step 1 needs document review and
 link/whitespace checks, not a new test suite or hardware/API calls.

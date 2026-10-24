@@ -1,4 +1,14 @@
-# Robot voice: soft, shy, curious, uncertain. Short lines. "…" marks a breath.
+# Primary encounter. Captions retain the approved wording across locales.
+encounter:
+  painting_caption:
+    - "me and who?🥺"
+    - "us?👉👈"
+  meme_caption: "hehe or not hehe?"
+  speech:
+    - "Am I a good boy already?"
+    - "A really good boy now?"
+
+# Legacy experimental dialogue. "…" marks a breath.
 robot:
   opening:
     - "Wait…"

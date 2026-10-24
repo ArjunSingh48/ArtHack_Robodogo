@@ -1,3 +1,14 @@
+# Primary encounter. Captions retain the approved wording across locales.
+encounter:
+  painting_caption:
+    - "me and who?🥺"
+    - "us?👉👈"
+  meme_caption: "hehe or not hehe?"
+  speech:
+    - "Я уже хороший мальчик?"
+    - "Теперь я правда хороший мальчик?"
+
+# Legacy experimental dialogue.
 robot:
   opening:
     - "Подожди…"

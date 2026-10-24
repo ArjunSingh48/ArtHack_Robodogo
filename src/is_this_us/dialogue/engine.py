@@ -1,8 +1,8 @@
 """Deterministic dialogue templates for the robot's character.
 
-Combines: observed posture confidence, the painting's relationship, the motion
-outcome, and session history. Variant choice is a stable hash of (session, turn), so
-a given moment always reads the same way, but successive moments vary.
+The primary encounter has independent short captions and optional speech.
+The legacy composer combines posture, relationship, motion outcome, and session
+history for existing experiments. Variant choice uses stable hashes.
 
 The engine only produces *text*. Its output is never parsed into motion commands.
 """
@@ -19,6 +19,7 @@ import yaml
 from ..domain import (
     Artwork, ExecutionResult, ExecutionStatus, HumanObservation, MotionPlan, Reproducibility,
 )
+from ..memes.model import Meme
 
 LOCALE_DIR = Path(__file__).parent / "locales"
 SUPPORTED = ("en", "ru", "de")
@@ -51,10 +52,24 @@ class Texts:
 
 @dataclass
 class Utterance:
-    lines: list[str]  # shown in Telegram
-    spoken: str  # sent to TTS; short, with breathing pauses
+    """Legacy narration for existing interactive experiments."""
+
+    lines: list[str]
+    spoken: str
     outcome_key: str = ""
     extras: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class EncounterText:
+    """Primary encounter text; attribution belongs to the delivery layer.
+
+    A missing caption means there is no selected image. A missing spoken line
+    means silence: callers must skip TTS and must not speak the caption instead.
+    """
+
+    caption: str | None = None
+    spoken: str | None = None
 
 
 def _pick(options: list[str] | str, seed: str) -> str:
@@ -75,6 +90,23 @@ class DialogueEngine:
     def r(self, key: str):
         return self.texts.get("robot", key)
 
+    def compose_encounter(self, *, seed: str, artwork: Artwork | Meme | None,
+                          speak: bool = False) -> EncounterText:
+        """Prepare independent image text and, when requested, one timid line.
+
+        The caller chooses when speech is appropriate; no frequency policy is
+        implied here. Without a match there is no visitor text. Caption variants
+        and speech variants use separate seeds so silence cannot alter a caption.
+        This prepares text only; it does not establish image delivery rights.
+        """
+        if artwork is None:
+            return EncounterText()
+        caption_key = "meme_caption" if artwork.kind == "meme" else "painting_caption"
+        caption = _pick(self.texts.get("encounter", caption_key), f"{seed}:{caption_key}")
+        spoken = (_pick(self.texts.get("encounter", "speech"), f"{seed}:speech")
+                  if speak else None)
+        return EncounterText(caption=caption, spoken=spoken)
+
     @staticmethod
     def outcome_key(plan: MotionPlan, result: ExecutionResult) -> str:
         if result.status is ExecutionStatus.STOPPED:
@@ -92,6 +124,7 @@ class DialogueEngine:
     def compose(self, *, seed: str, observation: HumanObservation, artwork: Artwork | None,
                 plan: MotionPlan | None = None, result: ExecutionResult | None = None,
                 turn: int = 0, is_retry: bool = False, first_meme: bool = False) -> Utterance:
+        """Legacy interactive narration; use compose_encounter for the primary UX."""
         if artwork is not None and getattr(artwork, "kind", "art") == "meme":
             return self._compose_meme(seed=seed, observation=observation, meme=artwork, plan=plan,
                                       result=result, is_retry=is_retry, first_meme=first_meme)
