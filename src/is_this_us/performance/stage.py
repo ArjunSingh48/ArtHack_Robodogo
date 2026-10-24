@@ -233,7 +233,7 @@ let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
 const ASK={lobby:[['consent_yes','▶ Start — they agreed to photos (camera)'],['upload','▶ Start with an uploaded picture'],
   ['sample','▶ Start with sample photos']],
- participant_readiness:[['ready','✓ Ready / start now'],['decline','✗ Declines']],
+ participant_readiness:[['ready','▶ Start the round now'],['skip','⏭ Skip this round']],
  final_pose:[['skip','End the pose now']],
  consent:[['consent_yes','✓ They agreed to a photo'],['consent_no','✗ No photo']],
  delivery:[['send_yes','✓ Send to Telegram'],['send_no',"✗ Don't send"]],

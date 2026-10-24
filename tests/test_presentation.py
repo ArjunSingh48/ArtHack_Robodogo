@@ -272,6 +272,7 @@ async def test_a_still_photo_waits_for_ready_and_shows_the_era_collage(tmp_path,
     pic.is_still = True
     d = director(tmp_path, pres, catalog, lines, photo_factory=lambda data: pic)
     d.frame_source_factory, d.pose_reader = (lambda: pic), PoseReader(pic)
+    d._open_robot_camera, d.pose_from = (lambda: SyntheticParticipant("sitting")), "robot"  # the dog's camera reads it
     waited = []
 
     def on_state(director_, st):
@@ -532,7 +533,7 @@ async def test_lobby_waits_for_start_and_opens_the_camera_only_after_consent(tmp
     opened = []
     d = director(tmp_path, pres, catalog, lines, wait_for_start=True)
     inner = d.frame_source_factory
-    d.frame_source_factory = lambda: opened.append(d.state) or inner()
+    d._real_camera = (lambda: opened.append(d.state) or inner(), d.pose_reader)  # the configured camera
     answer(d, {ShowState.LOBBY: Cmd.CONSENT_YES, **YES})
     res = await d.run()
     assert res.final_state is ShowState.FINISHED

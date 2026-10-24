@@ -433,7 +433,13 @@ async def _run_local(s, opts, args) -> int:
         print("  " + line)
     start_at = "invitation" if args.interactive else args.start_at
     try:
-        result = await director.run(start_at=start_at)
+        while True:
+            result = await director.run(start_at=start_at)
+            if not opts.wait_for_start:
+                break
+            # End (or the end of the show) goes back to the start screen; Ctrl+C quits the program
+            print(f"\n── {result.final_state.value} — back to the start screen (Ctrl+C quits) ──")
+            start_at = None
     finally:
         director.stage.close()
         if guard is not None:

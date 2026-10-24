@@ -1083,7 +1083,8 @@ class StoryDirector:
         if camera is None or self.pose_reader is None:
             self._note("no camera / pose reading: the encounter cannot match a picture — skipped")
             return None
-        still = getattr(camera, "is_still", False)
+        # the person is a photo (also when the dog's own camera reads it): always "steady", so Ready decides
+        still = getattr(camera, "is_still", False) or getattr(self._open_camera(), "is_still", False)
         if still:
             self._set_state(ShowState.READINESS, "a photo stands in for the person — press ✓ Ready to go on")
         tracker = StabilityTracker(self.stable_s)
@@ -1503,6 +1504,9 @@ class StoryDirector:
 
     async def _lobby(self) -> None:
         """Nothing plays and no camera opens until the operator starts — choosing how photos are taken."""
+        self._close_camera()  # a new start: back to the real camera (the photos are chosen again here)
+        self.frame_source_factory, self.pose_reader = self._real_camera
+        self._camera, self._camera_failed, self._picture = None, False, None
         self._set_state(ShowState.LOBBY, "waiting for Start — nothing plays, no camera until then")
         self.stage.show(View("title"))
         while True:
@@ -1590,8 +1594,9 @@ class StoryDirector:
             self.stage.show(View("consider", memes=collage, heading=ch.title))
         eyes = self._pose_camera()  # the dog's own camera reads the pose (laptop camera if it has none)
         looking = eyes is not None and self.pose_reader is not None
-        self._set_state(ShowState.READINESS, f"{era}: waiting for a steady pose — starts by itself; Ready = now, "
-                                             f"Skip = skip this round")
+        start = ("press ✓ Ready once the photo is in place" if getattr(camera, "is_still", False)
+                 else "waiting for a steady pose — starts by itself; Ready = now")
+        self._set_state(ShowState.READINESS, f"{era}: {start}, Skip = skip this round")
         said = "done"
 
         async def invite():
