@@ -157,6 +157,7 @@ class MultiStage:
 
 
 # ---------------------------------------------------------------------- projector page
+SIM3D_JS = Path(__file__).with_name("sim3d.js")  # the 3-D simulated room (three.js); falls back to drawSim
 PAGE = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Is This Us?</title>
 <style>
@@ -172,6 +173,8 @@ font-family:Georgia,'Times New Roman',serif;overflow:hidden}
 #live #cam-laptop img{box-shadow:0 0 0 2px var(--accent)}
 #live #cam-robot img{box-shadow:0 0 0 2px #8fc7d9}
 #simsvg{background:#26232a;box-shadow:0 0 0 2px #8fc7d9}
+#sim3d{display:none;flex:1 1 auto;min-height:0;width:100%;border-radius:6px;overflow:hidden;box-shadow:0 0 0 2px #8fc7d9}
+#cam-sim.three #sim3d{display:block}#cam-sim.three #simsvg{display:none}
 #live .cap{margin-top:.5vh;font:11px system-ui,sans-serif;color:var(--muted);letter-spacing:.15em;white-space:nowrap}
 body.live #view{flex:1 1 auto;max-width:60vw}
 #checks{margin-top:.8vh;display:flex;gap:1.2vw;flex-wrap:wrap;justify-content:center;font:clamp(13px,1.3vw,19px) system-ui,sans-serif}
@@ -214,10 +217,16 @@ border:1px solid #c0525c;border-radius:8px;padding:10px 14px;font:14px/1.35 syst
 </style></head><body>
 <div id="chapter"></div><div id="controls"></div><div id="msg"></div><div id="alert"></div>
 <div id="stage"><div id="view"></div><div id="live">
-<div class="cam" id="cam-sim"><svg id="simsvg" viewBox="0 0 400 260"></svg><div class="cap">SIMULATED DOG · <span id="simdoing"></span></div></div>
+<div class="cam" id="cam-sim"><div id="sim3d"></div><svg id="simsvg" viewBox="0 0 400 260"></svg><div class="cap">SIMULATED DOG · <span id="simdoing"></span></div></div>
 <div class="cam" id="cam-robot"><img id="liveimg-robot" alt="what the robot dog sees"><div class="cap">WHAT THE DOG SEES</div></div>
 <div class="cam" id="cam-laptop"><img id="liveimg" alt="the photo camera"><div class="cap">THE PHOTO CAMERA</div></div>
 <div id="checks"></div></div></div><div id="subtitle"></div><div id="notice"></div>
+<script type="importmap">{"imports":{
+ "three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+ "three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+ "urdf-loader":"https://cdn.jsdelivr.net/npm/urdf-loader@0.13.1/src/URDFLoader.js"}}</script>
+<script type="module">import('/sim3d.js').then(m=>{window.sim3d=m.start(document.getElementById('sim3d'))})
+ .catch(e=>console.warn('3-D view unavailable, using the drawn map',e))</script>
 <script>
 let last="", lastState=null;
 const key=new URLSearchParams(location.search).get('key');
@@ -266,7 +275,10 @@ async function tick(){
     const src='/live.jpg?feed='+f+'&v='+st.v;if(im.dataset.v!==String(st.v)){im.src=src;im.dataset.v=st.v}
     if(st.checks&&st.checks.length&&(!checks||f===feeds.pose))checks=st.checks}else{box.style.display='none'}}
   const sb=document.getElementById('cam-sim');
-  if(s.sim){any=true;sb.style.display='flex';drawSim(s.sim)}else{sb.style.display='none'}
+  if(s.sim){any=true;sb.style.display='flex';
+   if(window.sim3d&&window.sim3d.ready()){sb.classList.add('three');window.sim3d.update(s.sim)}else{sb.classList.remove('three');drawSim(s.sim)}
+   document.getElementById('simdoing').textContent=(s.sim.doing||s.sim.body||'').toUpperCase()}
+  else{sb.style.display='none'}
   lv.style.setProperty('--n',['cam-sim','cam-robot','cam-laptop'].filter(id=>document.getElementById(id).style.display==='flex').length||1);
   if(any){document.body.classList.add('live');lv.style.display='grid';
    document.getElementById('checks').innerHTML=(checks||[]).map(([t,ok])=>`<span class="${ok?'ok':''}">${ok?'✓':'○'} ${t}</span>`).join('');}
@@ -335,6 +347,8 @@ class WebStage:
             def do_GET(self):  # noqa: N802
                 if urlparse(self.path).path in ("/", "/index.html"):
                     return self._send(200, "text/html; charset=utf-8", PAGE.encode())
+                if urlparse(self.path).path == "/sim3d.js":
+                    return self._send(200, "text/javascript; charset=utf-8", SIM3D_JS.read_bytes())
                 if urlparse(self.path).path == "/live.jpg":
                     feed = parse_qs(urlparse(self.path).query).get("feed", ["laptop"])[0]
                     with stage._lock:

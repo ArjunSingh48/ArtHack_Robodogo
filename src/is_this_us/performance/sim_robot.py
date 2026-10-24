@@ -23,6 +23,11 @@ from .sim_world import SimWorld
 DOING = {"StandUp": "standing up", "StandDown": "lying down", "BalanceStand": "standing", "Sit": "sitting down",
          "RiseSit": "getting up", "Hello": "giving a paw", "Stretch": "stretching", "Euler": "tilting"}
 SIM_POSTURES = {"sitting", "standing", "kneeling", "crouching", "lying", "leaning_forward"}
+# MediaPipe left/right landmark pairs, for showing the participant like a mirror
+SWAP_LR = list(range(33))
+for _a, _b in [(1, 4), (2, 5), (3, 6), (7, 8), (9, 10)] + [(i, i + 1) for i in range(11, 33, 2)]:
+    SWAP_LR[_a], SWAP_LR[_b] = _b, _a
+SKELETON_MAX_AGE_S = 1.5
 
 
 class SimRobot:
@@ -38,6 +43,25 @@ class SimRobot:
                                      approach or ApproachSettings())
         self.approacher.world = self.world
         self.trail: collections.deque = collections.deque(maxlen=400)
+        self._seen = None  # (world landmarks, visibility, mirror, when) of the participant, for the 3-D avatar
+
+    def see_person(self, landmarks, mirror: bool) -> None:
+        """The participant as the photo camera last saw them; the 3-D view poses the avatar like this."""
+        world = getattr(landmarks, "world", None)
+        if world is not None:
+            self._seen = (world, landmarks.visibility, mirror, time.monotonic())
+
+    def skeleton(self) -> list | None:
+        """33 × [x, y, z, visibility] in metres: x to the viewer's right, y up, z toward the viewer (the avatar
+        faces the viewer). None when nobody was seen recently: the view then shows the posture preset."""
+        if self._seen is None or time.monotonic() - self._seen[3] > SKELETON_MAX_AGE_S:
+            return None
+        world, vis, mirror, _ = self._seen
+        p = world * [1, -1, -1]  # camera axes (y down, z away) → y up, z toward the viewer
+        if mirror:  # like a mirror: flip left/right, and the avatar's left side follows the person's right
+            p, vis = p[SWAP_LR] * [-1, 1, 1], vis[SWAP_LR]
+        return [[round(float(x), 3), round(float(y), 3), round(float(z), 3), round(float(v), 2)]
+                for (x, y, z), v in zip(p, vis)]
 
     def set_person_posture(self, posture: str | None) -> None:
         p = "lying" if posture == "reclining" else (posture or "sitting")
@@ -53,5 +77,5 @@ class SimRobot:
         doing = DOING.get(self.robot.doing, self.robot.doing.lower())
         body = str(getattr(self.robot.body, "value", self.robot.body))
         return {"robot": [round(x, 3), round(y, 3), round(yaw, 3)], "person": list(self.world.person),
-                "posture": self.world.posture, "body": body,
+                "posture": self.world.posture, "body": body, "action": self.robot.doing, "skeleton": self.skeleton(),
                 "doing": "walking" if walking else doing, "walking": walking, "trail": list(self.trail)}

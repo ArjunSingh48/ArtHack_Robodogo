@@ -739,6 +739,8 @@ class StoryDirector:
 
         try:
             mirror = self._mirror(frame) and feed == "laptop"  # the dog's view is shown as the dog sees it
+            if self.sim_robot is not None and feed == "laptop" and reading is not None and reading.landmarks is not None:
+                self.sim_robot.see_person(reading.landmarks, mirror)
             jpeg = await asyncio.to_thread(render, frame.image, reading, mirror=mirror)
             try:
                 live(jpeg, [(c.label, c.ok) for c in checks], feed=feed)

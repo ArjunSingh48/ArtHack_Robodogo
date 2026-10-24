@@ -33,6 +33,7 @@ class PersonLandmarks:
     xy: np.ndarray  # (33, 2) pixels, y grows downward
     visibility: np.ndarray  # (33,)
     image_size: tuple[int, int]  # (width, height)
+    world: np.ndarray | None = None  # (33, 3) metres, hip-centred, camera axes (x right, y down, z away); MediaPipe only
 
     def vis(self, *idx: int) -> float:
         return float(np.min(self.visibility[list(idx)]))
@@ -99,13 +100,15 @@ class MediaPipePoseEstimator:
         image = mp.Image(image_format=mp.ImageFormat.SRGB, data=np.ascontiguousarray(rgb))
         result = self._landmarker.detect(image)
         people = []
-        for pose in result.pose_landmarks or []:
+        worlds = result.pose_world_landmarks or []
+        for i, pose in enumerate(result.pose_landmarks or []):
+            world = np.array([[lm.x, lm.y, lm.z] for lm in worlds[i]], dtype=np.float32) if i < len(worlds) else None
             xy = np.array([[lm.x * w, lm.y * h] for lm in pose], dtype=np.float32)
             vis = np.array(
                 [min(getattr(lm, "visibility", 1.0) or 0.0, getattr(lm, "presence", 1.0) or 1.0) for lm in pose],
                 dtype=np.float32,
             )
-            people.append(PersonLandmarks(xy=xy, visibility=np.clip(vis, 0, 1), image_size=(w, h)))
+            people.append(PersonLandmarks(xy=xy, visibility=np.clip(vis, 0, 1), image_size=(w, h), world=world))
         return people
 
     def close(self) -> None:

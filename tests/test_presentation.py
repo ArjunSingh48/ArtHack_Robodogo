@@ -458,3 +458,23 @@ async def test_simulated_dog_walks_and_poses_without_a_robot(tmp_path, pres, cat
     assert any(s["walking"] for s in snaps) and any(s["body"] == "sitting" for s in snaps)
     assert sum(w.startswith("approach: arrived") for w in d.walk_log) >= 4
     assert not sim.robot.is_real and "Hello" in sim.robot.calls
+
+
+def test_simulated_person_follows_the_camera_like_a_mirror(monkeypatch):
+    import numpy as np
+
+    from is_this_us.performance import sim_robot as sr
+    from is_this_us.vision.pose import PersonLandmarks
+
+    sim = sr.SimRobot()
+    assert sim.snapshot()["skeleton"] is None  # nobody seen: the view uses the posture preset
+    world = np.zeros((33, 3), dtype=np.float32)
+    world[15] = (0.3, -0.4, -0.1)  # left wrist: image right, raised, toward the camera
+    seen = PersonLandmarks(xy=np.zeros((33, 2)), visibility=np.ones(33), image_size=(640, 480), world=world)
+    sim.see_person(seen, mirror=False)
+    assert sim.skeleton()[15][:3] == [0.3, 0.4, 0.1]  # y up, z toward the viewer
+    sim.see_person(seen, mirror=True)
+    assert sim.skeleton()[16][:3] == [-0.3, 0.4, 0.1]  # mirrored: shown as the avatar's right hand
+    now = sr.time.monotonic()
+    monkeypatch.setattr(sr.time, "monotonic", lambda: now + sr.SKELETON_MAX_AGE_S + 1)
+    assert sim.skeleton() is None  # stale readings fall back to the preset
