@@ -9,6 +9,9 @@ visitor's phone, and quietly asks: **"Is this us?"**
 
 The robot has two cultural memories, treated with equal sincerity:
 
+Visitors can also simply **talk to the dog**: it answers out loud in their language, tells its story, and
+looks at them to find "us" (OpenAI Realtime speech-to-speech, see [`docs/TALK.md`](docs/TALK.md)).
+
 1. **Fine art** — 24 museum paintings of people and dogs (The Met, Cleveland Museum of Art; public domain / CC0).
 2. **Internet culture** — famous dog memes: Doge, Cheems, This Is Fine, Side Eye Dog, Long Nose Borzoi.
 
@@ -21,6 +24,7 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 | | |
 |---|---|
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | pipeline, state machine, matching, risks |
+| [`docs/TALK.md`](docs/TALK.md) | talk mode: live conversation, the dog's story, setup step by step, privacy |
 | [`docs/MEMES.md`](docs/MEMES.md) | meme memory: schema, rights policy, adding a meme, Imgflip discovery |
 | [`docs/HARDWARE_SETUP.md`](docs/HARDWARE_SETUP.md) | first session with a Go2, step by step |
 | [`docs/SAFETY_CHECKLIST.md`](docs/SAFETY_CHECKLIST.md) | **read before any motion near people** |
@@ -38,7 +42,8 @@ Python · MediaPipe · aiogram 3 · OpenAI Realtime · Unitree SDK2 · SQLite ·
 - The robot's character in English, Russian and German; a voice from the OpenAI Realtime API with caching, a word-for-word fidelity check and text fallback.
 - A Telegram bot: QR pairing, `/observe`, photo mode without the robot, `/art` `/meme` `/surprise`,
   ♡ / ↻ / ✧ buttons, memory gallery, memory cards, consented imitation photos, `/forget`, operator controls.
-- 129 tests, GitHub Actions CI.
+- Talk mode: a live spoken conversation with the dog, which tells its own story.
+- 142 tests, GitHub Actions CI.
 
 ## 1. Install
 
@@ -96,7 +101,19 @@ images or body data — and nothing the model returns is used for anything but p
 WAV and converted to OGG/Opus for Telegram voice notes. Without a key, or when the API fails, everything
 continues as text.
 
-## 5. The real robot
+## 5. Talk to the dog (live conversation)
+
+```bash
+pip install -e ".[talk]"          # microphone + speaker support
+itu talk --list-devices           # choose mic/speaker (or use the defaults)
+itu talk                          # webcam + mock robot; press Enter, then just speak
+```
+
+The dog's story is in `data/persona/story.md` — edit it to change what it tells. It cannot move by talking:
+it can only "look and remember", which runs the same curated, guarded pipeline as everything else.
+Microphone audio is streamed to OpenAI during a conversation; put up the sign suggested in `docs/TALK.md`.
+
+## 6. The real robot
 
 ```bash
 pip install -e ../unitree_sdk2_python                          # official SDK, once (see HARDWARE_SETUP)
@@ -114,7 +131,7 @@ The robot moves only when `APP_MODE=installation`, `ROBOT_MODEL=go2`, `ROBOT_MOT
 operator has sent `/arm`. Photos sent to the bot never move the real robot. `/stop`, `s` and Ctrl+C are
 software stops — **not** an emergency stop.
 
-## 6. Curating
+## 7. Curating
 
 Paintings: `itu artworks search|draft|build|validate|cache|list` — museum metadata is fetched from the APIs,
 never typed by hand. Memes: one JSON file per meme in `data/memes/annotations/`; `itu memes discover|validate|list`.
@@ -124,6 +141,7 @@ See [`docs/MEMES.md`](docs/MEMES.md).
 
 ```
 data/artworks/      curation_notes.yaml · annotations.yaml (generated) · images/ (public domain / CC0)
+data/persona/       story.md — the dog's own story (edit freely)
 data/memes/         annotations/*.json (one per meme) · drafts/ (never loaded) · recreations/ (authorised images only)
 docs/               architecture, memes, hardware, safety, compatibility, demo, troubleshooting
 src/is_this_us/
@@ -136,12 +154,13 @@ src/is_this_us/
   robot/            step sequences · mock · Go2 adapter · shared DDS init
   dialogue/         engine + locales (en, ru, de)
   speech/           OpenAI Realtime voice, cache, FFmpeg, local speaker
+  talk/             live conversation: persona, tools, audio, Realtime session
   bot/              flows (network-free logic) · app (aiogram 3)
   orchestrator.py   state machine
   storage.py        SQLite: pairing, sessions, memories, archive choice, /forget
   cards.py          memory cards and diptychs
   cli.py, hardware_cli.py
-tests/              129 tests
+tests/              142 tests
 ```
 
 ## Privacy

@@ -18,7 +18,9 @@ screen that refreshes the QR is better than print). Operator nearby, remote in h
    is exactly as earnest about a meme as about a Fragonard — let the contrast speak.
 8. **The photo (optional).** If an imitation camera is installed, the visitor may press 📷 and agree to one
    photo; they receive a diptych: the memory beside the robot's attempt.
-9. **Goodbye.** Mention `/memory` and `/forget`.
+9. **Talking (optional).** In talk mode the visitor just speaks: "Hello?" The dog answers shyly and offers its
+   story. "Look at me" (after taking a pose) makes it remember a picture and try the pose. "Stop" always stops it.
+10. **Goodbye.** Mention `/memory` and `/forget`.
 
 **Without the robot** (talks, press, rehearsals): anyone can send the bot a photo of themselves.
 The bot answers with a painting and a *simulated* robot pose. The real robot never moves from photos.

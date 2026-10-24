@@ -14,6 +14,9 @@ A Telegram `/stop` is a **software** stop. It is **not** an emergency stop.
 - [ ] `look_aside` and `peer` tested once each (direction noted) before any `/approve`. Leave them off if unsure.
 - [ ] If an imitation camera is used: it watches the robot area only; visitors are told photos happen only on request.
 
+- [ ] Talk mode: microphone sign visible ("your voice is sent to OpenAI to answer you; nothing is recorded here").
+- [ ] Talk mode with the real robot: `itu talk --robot go2 … --i-have-physical-estop`; the operator stays by the robot.
+
 ## During the show
 - [ ] Operator arms with `/arm` only when the area is clear and they are watching.
 - [ ] Visitors interact from the edge of the marked area; the robot never walks (no `Move` in the code).

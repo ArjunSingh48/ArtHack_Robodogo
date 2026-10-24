@@ -13,6 +13,10 @@ FrameSource ──► PoseEstimator ──► SceneInterpreter ──► Artwork
                                                      (templates)        (OpenAI Realtime, cached)
 ```
 
+Talk mode (`talk/`) wraps the same pipeline in a live OpenAI Realtime conversation: the model speaks, and its
+only route to the body is the `look_and_remember` tool, which calls `InteractionOrchestrator` → MotionGuard.
+See [TALK.md](TALK.md).
+
 Since v0.3 the matcher searches a `SceneLibrary` holding two memories — paintings and memes — through
 `SceneMatcher` (`art | meme | both | surprise`). See [MEMES.md](MEMES.md).
 
