@@ -89,7 +89,7 @@ artifacts:
     human: standing
     dog: lie_down
     dog_side: left
-    dog_facing: left
+    dog_facing: right  # lies with its snout towards the shepherd
   met:467641:
     fetch: true
     chapter: middle_ages
@@ -152,7 +152,7 @@ artifacts:
     description: A couple outdoors. A small dog sits on his lap; another dog is in the grass.
     pose_tags: [sitting, on_lap]
     human: sitting
-    dog: sit
+    dog: stand  # stands over the game birds, head down
     dog_side: right
     dog_facing: left
   met:437890:
