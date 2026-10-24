@@ -29,6 +29,17 @@ EDU feature over Ethernet. The sport-state topic name has varied across models/f
 
 **Status of `UnitreeGo2Adapter`: HARDWARE-UNVERIFIED.** Run `itu robot-check` (no motion) first.
 
+## ZHAW go2_main bridge (checked 2026-10-24, commit 6bca98f)
+
+* `python -m go2_bridge` wraps the same official `unitree_sdk2py` (SportClient, ObstaclesAvoidClient,
+  VideoClient, VuiClient) and exposes ZeroMQ: REQ/REP JSON on 5555 (`action`, `move`, `stop`, `status`,
+  `list_actions`, …) and camera JPEGs on PUB 5556 (multipart `[b"camera", jpeg]`).
+* Action names used by our adapter: `stand_up`, `stand_down`, `balance_stand`, `sit`, `hello`, `stretch`,
+  `stop_move`. The bridge has no `RiseSit` (we use `stand_up`) and no `Euler` (no look_aside / peer).
+* No battery or error-code reporting. Default interface `eno1`; lab IP `192.168.123.100`; Python 3.11.
+* With obstacle avoidance on (default), the bridge enables `UseRemoteCommandFromApi(True)`; it restores
+  normal control on Ctrl+C.
+
 ## Museum APIs
 
 * **The Met**: `/public/collection/v1/search` was **retired 2026-10-01** and returns a message. We use

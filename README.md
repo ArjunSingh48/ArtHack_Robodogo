@@ -115,6 +115,12 @@ Microphone audio is streamed to OpenAI during a conversation; put up the sign su
 
 ## 6. The real robot
 
+**In the lab, use the ZHAW bridge** ([zhaw-physical-ai/go2_main](https://github.com/zhaw-physical-ai/go2_main)):
+start `python -m go2_bridge` there, then set `ROBOT_MODEL=zhaw_bridge` and `CAMERA_SOURCE=zhaw_bridge` here
+(`pip install -e ".[bridge]"`). No Unitree SDK needed in this project. Details: `docs/HARDWARE_SETUP.md`.
+
+Direct SDK alternative:
+
 ```bash
 pip install -e ../unitree_sdk2_python                          # official SDK, once (see HARDWARE_SETUP)
 itu robot-check --save-frame test_frame.jpg                    # read-only, no motion
