@@ -32,6 +32,14 @@ The voice model **cannot move the robot**. It has four tools:
 No tool has a parameter that chooses a movement. The model decides *when* to look; the curated annotations decide
 *how* the body moves; the guard decides *whether* it may (operator arming, cooldown, battery, stop latch, approvals).
 
+Recall and selection are separate: `recall_memories` can list the five curated
+solo-dog memes as cultural references and reports their relationship/photo-pose
+eligibility. Recalling a meme does not make it eligible for human–dog pose matching.
+Ordinary `look_and_remember` observations use the approved relationship collection;
+an explicit photographing-robot event uses the random meme photo-pose branch.
+The voice tool cannot assert that event, and automatic photography detection is
+still pending. See [MEMES.md](MEMES.md).
+
 ## Setup, step by step
 
 1. **OpenAI key.** Get one at https://platform.openai.com/api-keys (billing must be enabled). In `.env`:
@@ -58,8 +66,9 @@ No tool has a parameter that chooses a movement. The model decides *when* to loo
    itu talk --no-camera           # just talk
    itu talk --lang ru             # fallback language (the dog follows the visitor anyway)
    ```
-   Press Enter to start a conversation. Say hello. Ask about its story. Then sit down with a cup in both
-   hands and say "look at me" — it should find *This Is Fine*.
+   Press Enter to start a conversation. Say hello. Ask about its story. Then sit down
+   and say "look at me" — it should select an eligible human–dog artwork. Holding a
+   cup does not trigger a meme or establish photography intent.
 5. **With the real robot** (after `docs/HARDWARE_SETUP.md` and `docs/SAFETY_CHECKLIST.md`):
    ```bash
    itu talk --robot go2 --source unitree --i-have-physical-estop

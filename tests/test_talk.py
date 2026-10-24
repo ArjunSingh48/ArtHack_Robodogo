@@ -212,12 +212,14 @@ async def test_tool_call_runs_pipeline_then_answers(orch):
     ConversationItemCreateEvent.model_validate({"type": "conversation.item.create", **out})
     result = json.loads(out["item"]["output"])
     assert out["item"]["call_id"] == "c1"
-    assert result["found"] and result["memory"]["id"] == "meme:this-is-fine"  # sitting + holding a cup
-    assert result["body"]["tried"] == "sit" and result["body"]["status"] == "simulated"
+    assert result["found"] and result["memory"]["kind"] == "painting"
+    assert result["memory"]["id"] in {s.id for s in orch.repo.all("art")}
+    assert result["you_saw"]["intent"] == "pose"  # no photography intent inferred from a cup
+    assert result["body"]["status"] == "simulated"
     names = [n for n, _ in conn.sent]
     assert names.index("conversation.item.create") < len(names) - 1 and names[-1] == "response.create"
     assert c.stats.tool_calls == ["look_and_remember"]
-    assert orch.guard.robot.calls == ["Sit"]  # curated behavior, executed only via MotionGuard (mock robot here)
+    assert orch.guard.robot.calls  # curated behavior, executed only via MotionGuard (mock robot here)
     assert orch.storage.count_interactions(0) == 1
 
 
@@ -267,6 +269,7 @@ async def test_tools_recall_describe_stop_and_bad_input(orch):
     tools = TalkTools(orch, None)
     mem = await tools.call("recall_memories", '{"archive": "meme"}')
     assert mem["count"] == 5 and all(m["kind"] == "meme" for m in mem["memories"])
+    assert all(not m["relationship_eligible"] and m["photo_pose_eligible"] for m in mem["memories"])
     d = await tools.call("describe_memory", {"id": "met:437173"})
     assert d["artist"].startswith("Bartolom") and d["kind"] == "painting"
     assert "error" in await tools.call("describe_memory", {"id": "met:000"})
@@ -279,9 +282,13 @@ async def test_tools_recall_describe_stop_and_bad_input(orch):
 
 async def test_look_and_remember_respects_unapproved_poses(orch):
     """Even in conversation, look_aside stays off until an operator approves it."""
+    # Inject an explicit photography event and isolate the side-eye mapping.
+    # The voice tool itself has no parameter that can assert photography intent.
+    side_eye = orch.repo.get("meme:side-eye-dog")
+    orch.repo.photo_poses = lambda: [side_eye]
     orch.interpreter = NS(interpret=lambda people, source="": __import__(
         "is_this_us.domain", fromlist=["x"]).HumanObservation(
-        posture="standing", posture_confidence=0.9, gestures={"turned_away": 0.9}))
+            posture="standing", posture_confidence=0.9, intent="photographing_robot"))
     r = await TalkTools(orch, StaticSource()).call("look_and_remember", '{"archive": "meme"}')
     assert r["memory"]["id"] == "meme:side-eye-dog"
     assert r["body"]["tried"] == "stand" and r["body"]["fidelity"] == "approximate"
