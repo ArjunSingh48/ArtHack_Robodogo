@@ -27,3 +27,8 @@ test_frame.jpg
 # local secrets copy / macOS junk
 env
 .DS_Store
+
+# archived Python show: runtime data (sessions, visitor photos, audio cache) — never commit
+archive/python/data/runtime/
+archive/python/data/visitor_images/
+archive/python/models/*.task
