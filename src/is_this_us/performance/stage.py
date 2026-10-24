@@ -146,8 +146,11 @@ class MultiStage:
     def __getattr__(self, name):
         def call(*a, **kw):
             for s in self.stages:
+                fn = getattr(s, name, None)
+                if fn is None:  # optional display feature (sim, live …) this stage doesn't have
+                    continue
                 try:
-                    getattr(s, name)(*a, **kw)
+                    fn(*a, **kw)
                 except Exception as exc:  # a broken display must never stop the show
                     log.warning("stage %s.%s failed: %s", type(s).__name__, name, exc)
         return call
