@@ -1,0 +1,25 @@
+.env
+*.env
+!.env.example
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+
+# runtime data: sessions, memories, audio, visitor material — never commit
+data/runtime/
+data/visitor_images/
+debug_frames/
+
+# (data/artworks/images/ IS committed: public-domain / CC0 museum images, see data/artworks/README.md)
+pairing_qr.png
+*.qr.png
+card*.jpg
+
+# models are downloaded with `itu setup`
+models/*.task
+test_frame.jpg
