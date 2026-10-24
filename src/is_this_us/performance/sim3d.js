@@ -204,7 +204,21 @@ export function start(el) {
   new GLTFLoader().load(AVATAR, (g) => { avatar = makeAvatar(g); scene.add(avatar.holder); },
     undefined, (e) => console.warn('avatar failed to load', e));
 
+  // --- minimap: the room from above, top-right; north = the dog's starting direction, like the main view
+  const mapCam = new THREE.OrthographicCamera(-2, 2, 2, -2, 0.1, 30);
+  mapCam.up.set(0, 0, -1);
+  mapCam.layers.enable(1);
+  const marker = (geo, color) => {
+    const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color }));
+    m.rotation.x = -Math.PI / 2; m.position.y = 1.9; m.layers.set(1); scene.add(m); return m;
+  };
+  const dogMark = marker(new THREE.ConeGeometry(0.13, 0.32, 3), 0x8fc7d9);  // points the way the dog faces
+  dogMark.rotation.order = 'YXZ';
+  const personMark = marker(new THREE.CircleGeometry(0.17, 24), 0xb7a6d6);
+  const startMark = marker(new THREE.RingGeometry(0.1, 0.14, 24), 0x9c958c);
+
   let state = null, pitch = 0, phase = 0, last = performance.now();
+  let prev = null, speed = 0;  // forward speed in the dog's own frame (m/s, − = walking backwards)
   const target = {};
 
   function frame(now) {
@@ -217,7 +231,9 @@ export function start(el) {
       }
       let bob = 0;
       if (m.walking && name === 'stand') {  // trot: diagonal pairs swing together
-        phase += dt * 2 * Math.PI * 2.2;
+        // step the way it actually moves: retracing its path home it walks backwards
+        const dir = speed < -0.02 ? -1 : 1;
+        phase += dt * 2 * Math.PI * 2.2 * dir;
         for (const leg of LEGS) {
           const p = phase + (leg === 'FL' || leg === 'RR' ? 0 : Math.PI);
           target[`${leg}_thigh`] = 0.67 - 0.25 * Math.sin(p);
@@ -263,6 +279,15 @@ export function start(el) {
       }
     }
     if (state) follow(W(state.robot[0], state.robot[1]), W(state.person[0], state.person[1]));
+    if (state) {
+      const d = W(state.robot[0], state.robot[1]), p = W(state.person[0], state.person[1]), o = W(0, 0);
+      dogMark.position.set(d.x, 1.9, d.z); dogMark.rotation.set(-Math.PI / 2, state.robot[2], 0);
+      personMark.position.set(p.x, 1.9, p.z); startMark.position.set(o.x, 1.9, o.z);
+      const box = new THREE.Box3().setFromPoints([d, p, o]), c = box.getCenter(new THREE.Vector3());
+      const half = Math.max(1.4, (Math.max(box.max.x - box.min.x, box.max.z - box.min.z)) / 2 + 0.6);
+      Object.assign(mapCam, { left: -half, right: half, top: half, bottom: -half });
+      mapCam.position.set(c.x, 10, c.z); mapCam.lookAt(c.x, 0, c.z); mapCam.updateProjectionMatrix();
+    }
     const w = el.clientWidth, hgt = el.clientHeight;
     if (w && hgt && (renderer.domElement.width !== Math.floor(w * renderer.getPixelRatio()) ||
                      renderer.domElement.height !== Math.floor(hgt * renderer.getPixelRatio()))) {
@@ -271,9 +296,29 @@ export function start(el) {
       camera.aspect = w / hgt; camera.updateProjectionMatrix();
     }
     controls.update();
+    renderer.setViewport(0, 0, w, hgt);
     renderer.render(scene, camera);
+    if (state && w && hgt) {  // the minimap, drawn over the top-right corner
+      const S = Math.floor(Math.min(w, hgt) * 0.36), x = w - S - 8, y = hgt - S - 8;
+      renderer.setScissorTest(true);
+      renderer.setScissor(x - 2, y - 2, S + 4, S + 4); renderer.setClearColor(0x8fc7d9); renderer.clear();
+      renderer.setScissor(x, y, S, S); renderer.setViewport(x, y, S, S);
+      renderer.setClearColor(0x1b191e); renderer.clear();
+      renderer.render(scene, mapCam);
+      renderer.setScissorTest(false);
+    }
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
-  return { ready: () => robot !== null, update: (m) => { state = m; } };
+  function update(m) {
+    const t = performance.now() / 1000;
+    if (prev && t - prev.t > 0.05) {
+      const [x0, y0] = prev.robot, [x1, y1, yaw] = m.robot;
+      const fwd = ((x1 - x0) * Math.cos(yaw) + (y1 - y0) * Math.sin(yaw)) / (t - prev.t);
+      speed += (fwd - speed) * 0.5;
+      prev = { t, robot: m.robot };
+    } else if (!prev) prev = { t, robot: m.robot };
+    state = m;
+  }
+  return { ready: () => robot !== null, update };
 }

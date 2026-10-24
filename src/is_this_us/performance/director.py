@@ -177,7 +177,7 @@ class StoryDirector:
         # wait_for_start: begin in LOBBY; the camera opens only after the operator confirms photo consent there.
         # photo_factory(bytes | None) → a camera + estimator for one picture (None = the sample stand-in)
         self.wait_for_start, self.photo_factory = wait_for_start, photo_factory
-        self._consent_decided, self._picture = False, None
+        self._consent_decided, self._picture, self._shown_pictures = False, None, set()
         self.sim_robot = sim_robot  # SimRobot: a drawn robot in the interface instead of / besides the real one
         self.pose_from = pose_from
         self._robot_cam = None
@@ -1472,6 +1472,25 @@ class StoryDirector:
         await self.say_line("presentation_consent", "thanks" if self.photo_consent else "declined")
         return "done"
 
+    async def _fit_picture(self, camera, era: str) -> None:
+        """Sample stand-ins: put the person whose pose fits this era's pictures best in front of the camera
+        (ones not shown yet first), so the round's match makes sense."""
+        from .rounds import match_score
+
+        if getattr(camera, "pictures", 0) < 2 or self.pose_reader is None:
+            return
+        used = self._shown_pictures
+
+        def fit(i: int) -> float:
+            camera.select(i)
+            frame = camera.read()
+            posture = self.pose_reader.read(frame.image, frame.source).posture
+            return match_score(self.catalog, era, posture) - (2.0 if i in used else 0.0)
+        scores = [await asyncio.to_thread(fit, i) for i in range(camera.pictures)]
+        best = max(range(len(scores)), key=lambda i: scores[i])
+        camera.select(best)
+        used.add(best)
+
     async def _round(self, ch: Chapter, cue: Cue) -> str:
         """One era: any pose → the closest picture of this era → the robot remembers while it walks over and
         takes the painted dog's pose → the picture → hold + photo → beamer + Telegram → back to its place."""
@@ -1480,6 +1499,7 @@ class StoryDirector:
 
         era = cue.target
         camera = self._open_camera()  # the laptop camera: the photo of the two together
+        await self._fit_picture(camera, era)
         eyes = self._pose_camera()  # the dog's own camera reads the pose (laptop camera if it has none)
         looking = eyes is not None and self.pose_reader is not None
         self._set_state(ShowState.READINESS, f"{era}: waiting for a steady pose — starts by itself; Ready = now, "
@@ -1797,7 +1817,7 @@ class StoryDirector:
         self.tries = []
         self._jump_to_pose = False
         self.photo_consent, self.send_ok, self.rounds = False, False, []
-        self._consent_decided = False
+        self._consent_decided, self._shown_pictures = False, set()
         self.rounds_only = False
         if self.script.is_presentation and start_at in ("invitation", "interactive"):
             self.rounds_only, start_at = True, None  # every chapter: straight to its round (consent first)

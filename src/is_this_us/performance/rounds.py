@@ -98,43 +98,48 @@ def candidates(catalog: PerformanceCatalog, era: str) -> list[ShowArtifact]:
     return [a for a in catalog.for_chapter(era) if a.kind == "art" and a.displayable]
 
 
+def _score(catalog: PerformanceCatalog, a: ShowArtifact, group, gestures: set[str],
+           head_tilt: bool) -> tuple[float, list[str]]:
+    why, s = [], 0.0
+    hp = human_pose(a, catalog.art_repo)
+    if group and hp == group:
+        s += 3
+        why.append(f"person {hp} in both")
+    elif group and hp and ((group, hp) in NEAR or (hp, group) in NEAR):
+        s += 1.5
+        why.append(f"person {hp} ≈ {group}")
+    if a.subject == "human_and_dog":
+        s += 0.5
+    else:
+        s -= 1
+    tags = set(a.pose_tags)
+    if "extending_arm" in gestures and tags & {"arms_raised", "hunting", "pointing", "open_hand", "touching_head"}:
+        s += 1
+        why.append("an arm reaching out")
+    if "arms_holding" in gestures and tags & {"holding", "in_arms", "arms_holding", "held"}:
+        s += 1
+        why.append("arms holding")
+    if head_tilt and tags & {"head_tilted"}:
+        s += 0.5
+        why.append("head tilted")
+    return s, why
+
+
+def match_score(catalog: PerformanceCatalog, era: str, posture: str | None) -> float:
+    """How well a person posing like this fits this era's best picture (for choosing sample stand-ins)."""
+    pool = candidates(catalog, era)
+    return max((_score(catalog, a, pose_group(posture), set(), False)[0] for a in pool), default=0.0)
+
+
 def pick_for_round(catalog: PerformanceCatalog, era: str, posture: str | None, *, head_tilt: bool = False,
                    gestures: set[str] | None = None, exclude: set[str] | None = None,
                    rng: random.Random | None = None) -> Pick | None:
     """The closest picture of this era to how the person is posing. None if the era has no pictures."""
-    group = pose_group(posture)
-    gestures = gestures or set()
     pool = candidates(catalog, era)
     if not pool:
         return None
     fresh = [a for a in pool if a.id not in (exclude or set())] or pool
-
-    def score(a: ShowArtifact) -> tuple[float, list[str]]:
-        why, s = [], 0.0
-        hp = human_pose(a, catalog.art_repo)
-        if group and hp == group:
-            s += 3
-            why.append(f"person {hp} in both")
-        elif group and hp and ((group, hp) in NEAR or (hp, group) in NEAR):
-            s += 1.5
-            why.append(f"person {hp} ≈ {group}")
-        if a.subject == "human_and_dog":
-            s += 0.5
-        else:
-            s -= 1
-        tags = set(a.pose_tags)
-        if "extending_arm" in gestures and tags & {"arms_raised", "hunting", "pointing", "open_hand", "touching_head"}:
-            s += 1
-            why.append("an arm reaching out")
-        if "arms_holding" in gestures and tags & {"holding", "in_arms", "arms_holding", "held"}:
-            s += 1
-            why.append("arms holding")
-        if head_tilt and tags & {"head_tilted"}:
-            s += 0.5
-            why.append("head tilted")
-        return s, why
-
-    scored = [(score(a), a) for a in fresh]
+    scored = [(_score(catalog, a, pose_group(posture), gestures or set(), head_tilt), a) for a in fresh]
     best = max(s for (s, _), _ in scored)
     top = [(w, a) for (s, w), a in scored if s == best]
     why, a = (rng or random).choice(top) if len(top) > 1 else top[0]

@@ -11,5 +11,10 @@ All from [Unsplash](https://unsplash.com), [Unsplash License](https://unsplash.c
 | sitting.jpg | https://unsplash.com/photos/EJ08zy1a-UI | @davidprspctive |
 | standing.jpg | https://unsplash.com/photos/ymo_yC_N_2o | @mitchel3uo |
 | leaning_forward.jpg | https://unsplash.com/photos/zzTsoP5OeBs | @theian20 |
+| standing_2.jpg | https://unsplash.com/@minimalism_brand (search "person standing full body") | @minimalism_brand |
+| standing_3.jpg | https://unsplash.com/photos/skUWW81OBeY | @tostilse |
+| squatting.jpg | https://unsplash.com/photos/5_G4i0NRLx4 | @jawnwalrus |
+| sitting_2.jpg | https://unsplash.com/photos/d1gfVswXpLk | @olenkasergienko |
 
-Missing postures (kneeling, crouching, lying) fall back to the drawn `synthetic:` figure.
+The sample start ("Start with a sample photo") steps through all of them, one per round (SAMPLE_ORDER in
+performance/runtime.py). Missing postures (kneeling, crouching, lying) fall back to the drawn `synthetic:` figure.

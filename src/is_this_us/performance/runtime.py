@@ -69,46 +69,72 @@ class SyntheticParticipant:
 STANDIN_DIR = Path(__file__).resolve().parents[3] / "data" / "standins"
 
 
+# the sample stand-ins; each round shows the one whose pose fits that era's pictures best
+SAMPLE_ORDER = ["sitting", "standing", "squatting", "leaning_forward", "standing_2", "sitting_2", "standing_3"]
+
+
 class PhotoParticipant:
-    """A still picture as camera + pose source: an uploaded photo, or a sample stand-in (data/standins, from
-    Unsplash). Unlike the drawn figure, the real pose estimator reads it (also in 3-D, for the avatar)."""
+    """Still pictures as camera + pose source: an uploaded photo, or sample stand-ins (data/standins, from
+    Unsplash) — one per round. Unlike the drawn figure, the real pose estimator reads them (also in 3-D, for
+    the avatar)."""
 
     name = "photo"
     reads_paintings = False
 
-    def __init__(self, image: Image.Image, estimator, label: str = ""):
-        image = image.convert("RGB")
-        image.thumbnail((1280, 1280))
-        self._rgb = np.asarray(image)
-        if label:
-            d = ImageDraw.Draw(image)
-            d.text((12, image.height - 22), label, fill=(240, 236, 228))
-        self._shown = np.asarray(image)
-        self.estimator, self._people = estimator, None
+    def __init__(self, pictures: list[tuple[Image.Image, str]], estimator):
+        self._pics = []
+        for image, label in pictures:
+            image = image.convert("RGB")
+            image.thumbnail((1280, 1280))
+            rgb = np.asarray(image)
+            if label:
+                ImageDraw.Draw(image).text((12, image.height - 22), label, fill=(240, 236, 228))
+            self._pics.append([rgb, np.asarray(image), None])  # what is read, what is shown, the cached pose
+        self.estimator, self._i = estimator, 0
 
     @classmethod
     def from_bytes(cls, data: bytes, estimator, label: str = "uploaded picture") -> "PhotoParticipant":
         import io
 
-        return cls(Image.open(io.BytesIO(data)), estimator, label)
+        return cls([(Image.open(io.BytesIO(data)), label)], estimator)
+
+    @property
+    def pictures(self) -> int:
+        return len(self._pics)
+
+    def select(self, i: int) -> None:
+        """Which sample is "in front of the camera" now (the director picks one per round)."""
+        self._i = i % len(self._pics)
 
     def read(self) -> Frame:
-        return Frame(image=self._shown, source="photo")
+        return Frame(image=self._pics[self._i][1], source="photo")
 
     def estimate(self, rgb):
-        if self._people is None:  # a still picture: read it once
-            self._people = self.estimator.estimate(self._rgb)
-        return self._people
+        pic = self._pics[self._i]
+        if pic[2] is None:  # a still picture: read it once
+            pic[2] = self.estimator.estimate(pic[0])
+        return pic[2]
 
     def close(self) -> None:
         pass
 
 
+def _standin(name: str) -> tuple[Image.Image, str]:
+    return Image.open(STANDIN_DIR / f"{name}.jpg"), f"sample stand-in ({name.split('_')[0]}) · photo: Unsplash"
+
+
 def sample_photo(posture: str, estimator) -> PhotoParticipant | None:
-    path = STANDIN_DIR / f"{posture}.jpg"
-    if estimator is None or not path.exists():
+    if estimator is None or not (STANDIN_DIR / f"{posture}.jpg").exists():
         return None
-    return PhotoParticipant(Image.open(path), estimator, f"sample stand-in ({posture}) · photo: Unsplash")
+    return PhotoParticipant([_standin(posture)], estimator)
+
+
+def sample_set(first: str, estimator) -> PhotoParticipant | None:
+    names = [n for n in SAMPLE_ORDER if (STANDIN_DIR / f"{n}.jpg").exists()]
+    if estimator is None or not names:
+        return None
+    names.sort(key=lambda n: n != first)  # SHOW_POSE_PREFERENCE first
+    return PhotoParticipant([_standin(n) for n in names], estimator)
 
 
 class NoPersonEstimator:
@@ -373,11 +399,11 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
         stand_in = SyntheticParticipant(posture, head_tilt_deg=14 if posture == "sitting" else 0)
         frame_factory = lambda: stand_in  # noqa: E731
         reader = PoseReader(stand_in, mirrored=settings.show_camera_mirrored)
-    elif source and source.startswith("photo:"):  # a still picture: photo:<posture> (sample) or photo:<path>
+    elif source and source.startswith("photo:"):  # stills: photo:<posture> · photo:samples (all, per round) · photo:<path>
         spec = source.partition(":")[2] or "sitting"
         est = estimator if estimator is not None else build_estimator(settings)
-        pic = (PhotoParticipant(Image.open(spec), est, Path(spec).name) if Path(spec).is_file() and est is not None
-               else sample_photo(spec, est))
+        pic = (PhotoParticipant([(Image.open(spec), Path(spec).name)], est) if Path(spec).is_file() and est is not None
+               else sample_set(settings.show_pose_preference, est) if spec == "samples" else sample_photo(spec, est))
         if pic is None:
             sys.exit(f"--source {source}: no such picture (or the pose model is missing: `itu setup`)")
         frame_factory, reader = (lambda: pic), PoseReader(pic)
@@ -429,14 +455,13 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     approacher = sim.approacher if sim is not None else build_approacher(settings, opts, guard, estimator)
 
     def photo_factory(data: bytes | None):
-        """Lobby: an uploaded picture, or (None) the sample stand-in for SHOW_POSE_PREFERENCE."""
+        """Lobby: an uploaded picture, or (None) the sample stand-ins, one per round."""
         est = estimator if estimator is not None else build_estimator(settings)
         if est is None:
             return None
         if data is not None:
             return PhotoParticipant.from_bytes(data, est)
-        posture = settings.show_pose_preference if settings.show_pose_preference in ("sitting", "standing") else "sitting"
-        return sample_photo(posture, est)
+        return sample_set(settings.show_pose_preference, est)
 
     director = StoryDirector(
         approacher=approacher,
