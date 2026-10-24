@@ -47,9 +47,36 @@ class Settings(BaseSettings):
     session_ttl_minutes: int = 30
 
     openai_api_key: str = ""
+    # openai = OpenAI voice; none = text-only everywhere (no audio requests at all)
+    openai_voice_provider: str = "openai"
+    # Free-play lines and `itu talk` (live speech-to-speech)
     openai_realtime_model: str = "gpt-realtime-2.1"
     openai_realtime_voice: str = "marin"
+    # Performance (`itu show`): scripted narration, pre-generated and cached per cue
+    openai_narration_model: str = "gpt-realtime-2.1-mini"
+    # Performance conversation windows (GPT-Live). Off by default; push-to-talk only.
+    openai_live_model: str = "gpt-live-1"
+    openai_enable_live_conversation: bool = False
+    # ONE primary voice for the whole character. Empty = OPENAI_REALTIME_VOICE.
+    # Must exist for both Realtime and GPT-Live (alloy, ash, ballad, coral, echo, sage, shimmer, verse, marin, cedar).
+    openai_voice: str = ""
+    openai_voice_language: str = "en"
+    openai_audio_cache_enabled: bool = True
     local_audio_playback: bool = False
+
+    # Performance mode (`itu show`)
+    show_data_dir: Path = Path("./data/performance")
+    show_mode: str = "guided"  # guided (operator advances) | automatic
+    show_display: str = "terminal"  # terminal | web (projector page on SHOW_WEB_HOST:SHOW_WEB_PORT)
+    show_web_host: str = "127.0.0.1"
+    show_web_port: int = 8765
+    show_camera_source: str = ""  # empty = CAMERA_SOURCE
+    show_camera_mirrored: bool = False  # true if the camera image is mirrored (selfie view)
+    show_pose_preference: str = "sitting"  # sitting | standing | any — is there a chair for the participant?
+    show_telegram_chat_id: int | None = None  # where a confirmed picture is sent (private chat or group)
+    show_photo_retention_minutes: int = 60  # participant photos + compositions are deleted after this
+    show_output_dir: Path = Path("./data/runtime/performance")
+    show_motion_enabled: bool = False  # robot cues in the script; still needs all motion gates + /arm
 
     # Talk mode (`itu talk`): live conversation with the dog via OpenAI Realtime
     talk_model: str = ""  # empty = OPENAI_REALTIME_MODEL
@@ -87,9 +114,18 @@ class Settings(BaseSettings):
             return [int(v) for v in value]
         return [int(part) for part in str(value).replace(" ", "").split(",") if part]
 
+    @field_validator("show_telegram_chat_id", mode="before")
+    @classmethod
+    def _empty_none(cls, value: object):
+        return None if value in ("", None) else value
+
     @property
     def voice_configured(self) -> bool:
-        return bool(self.openai_api_key)
+        return bool(self.openai_api_key) and self.openai_voice_provider.strip().lower() == "openai"
+
+    @property
+    def primary_voice(self) -> str:
+        return (self.openai_voice or self.openai_realtime_voice or "marin").strip()
 
     @property
     def real_robot_possible(self) -> bool:

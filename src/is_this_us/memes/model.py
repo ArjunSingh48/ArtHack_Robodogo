@@ -4,9 +4,6 @@ A meme is described by the same scene vocabulary as a painting (`human`, `dog`),
 flows through the same matcher, planner and safety guard. Its metadata is different:
 origin, attribution, cultural meaning, and — crucially — image rights.
 
-Solo-dog photo opportunities use a separate `photo_pose` review and random selector;
-they do not acquire pair-matching eligibility or a fictional human annotation.
-
 Image policy: most famous meme images are copyrighted photographs or comics. Being
 listed on Imgflip, Know Your Meme or anywhere else does NOT grant permission. By default
 a meme is `reference_only`: we describe it, credit it and link to it, but never store
@@ -16,14 +13,12 @@ or send the image. An image is shown only when the annotation records `licensed`
 
 from __future__ import annotations
 
-from datetime import date
 from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, model_validator
 
-from ..domain import (DogAnnotation, EligibilityReview, HumanAnnotation, Reproducibility,
-                      validate_reviewed_dog)
+from ..domain import DogAnnotation, HumanAnnotation
 
 
 class ImageRights(StrEnum):
@@ -59,22 +54,6 @@ class _Rights(BaseModel):
     status: str
 
 
-class PhotoPoseReview(BaseModel):
-    """Suitability for a random camera-facing imitation, separate from pair review.
-
-    The mapped action is dog.robot_behavior; this review never grants hardware
-    approval or permission to reproduce the source image.
-    """
-
-    status: Literal["accepted", "rejected", "needs_review"] = "needs_review"
-    cue: str = Field(min_length=1, pattern=r"\S")
-    approximation: str = Field(min_length=1, pattern=r"\S")
-    reason: str = Field(min_length=1, pattern=r"\S")
-    reviewer: str = Field(min_length=1, pattern=r"\S")
-    reviewed_on: date
-    review_basis: Literal["existing_annotations", "visual_review"]
-
-
 class Meme(BaseModel):
     kind: Literal["meme"] = "meme"
     id: str = Field(pattern=r"^meme:[a-z0-9_\-]+$")
@@ -86,7 +65,7 @@ class Meme(BaseModel):
     attribution: str  # credit line shown to visitors
     sources: list[MemeSource] = Field(min_length=1)  # verified reference pages
     cultural_meaning: str
-    human: HumanAnnotation  # depicted human; unknown/0 when none, ignored for photo poses
+    human: HumanAnnotation  # the visitor body that summons this meme
     dog: DogAnnotation
     image: MemeImage = MemeImage()
     reflection: dict[str, str] = Field(default_factory=dict)  # robot's sincere line per language
@@ -94,13 +73,6 @@ class Meme(BaseModel):
     discovered_via: str = "manual"
     notes: str = ""
     is_fixture: bool = False
-    review: EligibilityReview | None = None
-    photo_pose: PhotoPoseReview | None = None
-
-    @model_validator(mode="after")
-    def _review_consistency(self):
-        validate_reviewed_dog(self.review, self.dog)
-        return self
 
     # --- the shared "scene" surface used by matcher, dialogue, cards, Telegram ---
     @property
@@ -134,13 +106,6 @@ class Meme(BaseModel):
     @property
     def displayable(self) -> bool:
         return self.image.rights in DISPLAYABLE
-
-    @property
-    def photo_pose_eligible(self) -> bool:
-        return (self.curation_status == "approved" and self.photo_pose is not None
-                and self.photo_pose.status == "accepted"
-                and self.image.rights is not ImageRights.UNKNOWN
-                and self.dog.reproducible is not Reproducibility.NO)
 
     def reflection_for(self, lang: str) -> str:
         return self.reflection.get(lang) or self.reflection.get("en", "")

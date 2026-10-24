@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from is_this_us.bot.flows import CB_ANOTHER, CB_KEEP, CB_YES, VisitorFlows
-from is_this_us.domain import ExecutionStatus, RobotBehavior
+from is_this_us.domain import ExecutionStatus
 from is_this_us.orchestrator import State
 from is_this_us.robot.mock import MockRobotAdapter
 from is_this_us.speech.synthesizer import AudioCache, MockSynthesizer
@@ -80,8 +80,7 @@ async def test_complete_installation_interaction(setup, storage):
     row = storage.get_interaction(iid, chat)
     assert row.origin == "installation" and row.artwork_id
     assert set(row.observation) <= {"posture", "posture_confidence", "gestures", "proximity",
-                                    "people_detected", "landmark_confidence", "intent"}
-    assert row.observation["intent"] == "pose"
+                                    "people_detected", "landmark_confidence"}
 
     # ♡ yes
     yes = await flows.callback(chat, f"{CB_YES}:{iid}")

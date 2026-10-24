@@ -13,7 +13,6 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from ..domain import scene_is_eligible
 from .model import Meme
 
 log = logging.getLogger(__name__)
@@ -50,15 +49,7 @@ class MemeRepository:
             self._items[meme.id] = meme
 
     def all(self) -> list[Meme]:
-        return [m for m in self._items.values() if scene_is_eligible(m)]
-
-    def all_records(self) -> list[Meme]:
-        """Curated reference records remain available for audit and history."""
         return list(self._items.values())
-
-    def photo_poses(self) -> list[Meme]:
-        """Reviewed solo-dog imitations, independent of artwork-pair eligibility."""
-        return [m for m in self._items.values() if m.photo_pose_eligible]
 
     def get(self, meme_id: str) -> Meme | None:
         return self._items.get(meme_id)

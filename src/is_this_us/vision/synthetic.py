@@ -64,7 +64,8 @@ GESTURE_OVERRIDES = {
 
 
 def synthetic_person(posture: str, gesture: str | None = None, *, scale: float = 1.0,
-                     image_size: tuple[int, int] = (640, 480)) -> PersonLandmarks:
+                     image_size: tuple[int, int] = (640, 480), head_tilt_deg: float = 0.0,
+                     shift_x: float = 0.0) -> PersonLandmarks:
     if posture not in LAYOUTS:
         raise ValueError(f"unknown synthetic posture {posture!r}; choose from {sorted(LAYOUTS)}")
     xy = np.zeros((33, 2), dtype=np.float32)
@@ -79,6 +80,13 @@ def synthetic_person(posture: str, gesture: str | None = None, *, scale: float =
         for i, p in GESTURE_OVERRIDES[gesture].items():
             xy[i] = np.array(p) + (sh_off if gesture == "extending" else (np.array(LAYOUTS[posture][L_SHOULDER]) - np.array(LAYOUTS["standing"][L_SHOULDER])))
             vis[i] = 0.95
+    if head_tilt_deg:
+        a = np.radians(head_tilt_deg)
+        rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]], dtype=np.float32)
+        pivot = xy[NOSE].copy()
+        for i in (L_EYE, R_EYE, L_EAR, R_EAR):
+            xy[i] = (xy[i] - pivot) @ rot.T + pivot
     cx, cy = image_size[0] / 2, image_size[1] / 2
     xy = (xy - [cx, cy]) * scale + [cx, cy]
+    xy[:, 0] += shift_x
     return PersonLandmarks(xy=xy, visibility=vis, image_size=image_size)

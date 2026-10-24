@@ -313,6 +313,8 @@ class VisitorFlows:
                 f"observation open: {self.orch.observation_open}",
                 f"hardware verified: {st.hardware_verified}",
             ]
+            if getattr(self, "extra_status", None):
+                lines.append(self.extra_status())
             return [Reply("text", text="<code>" + html.escape("\n".join(lines)) + "</code>")]
         return []
 

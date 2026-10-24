@@ -23,7 +23,7 @@ from pydantic import BaseModel
 
 from ..domain import (
     HumanGesture, HumanObservation, HumanPosture, Interaction, MatchCandidate,
-    MatchResult, Proximity, Reproducibility, ScoreBreakdown, SpatialRelation, scene_is_eligible,
+    MatchResult, Proximity, Reproducibility, ScoreBreakdown, SpatialRelation,
 )
 
 # Rough "body height" level of each posture; similarity decays with distance.
@@ -189,7 +189,7 @@ class WeightedRelationshipMatcher:
              recent: Iterable[str] = ()) -> list[MatchCandidate]:
         excluded, recent_set = set(exclude), set(recent)
         return sorted((MatchCandidate(scene=a, scores=self.score(obs, a, recent_set))
-                       for a in scenes if a.id not in excluded and scene_is_eligible(a)),
+                       for a in scenes if a.id not in excluded),
                       key=lambda c: c.scores.total, reverse=True)
 
     def choose(self, obs: HumanObservation, ranked: list[MatchCandidate], rng: random.Random,
@@ -274,27 +274,6 @@ class SceneMatcher:
         self.library = library
         self.art = art or WeightedRelationshipMatcher()
         self.meme = meme or MemeMatcher()
-
-    def match_photo_opportunity(self, obs: HumanObservation, *, exclude: Iterable[str] = (),
-                                recent: Iterable[str] = (), rng: random.Random | None = None) -> MatchResult:
-        """Uniform random cultural imitation; human pose is not a similarity target."""
-        if obs.people_detected < 1:
-            return MatchResult(chosen=None, ranked=[], reason="photo opportunity: no visitor visible")
-        excluded, recent_set = set(exclude), set(recent)
-        pool = [m for m in self.library.photo_poses() if m.id not in excluded]
-        # Prefer unseen references, but permit reuse once the pool is exhausted.
-        fresh = [m for m in pool if m.id not in recent_set]
-        pool = fresh or pool
-        if not pool:
-            return MatchResult(chosen=None, ranked=[], reason="photo opportunity: no eligible meme pose")
-        rng = rng or random.Random()
-        chosen = rng.choice(pool)
-        candidates = [MatchCandidate(scene=m, scores=ScoreBreakdown(
-            posture=0, relationship=0, gesture=0, feasibility=FEASIBILITY[m.dog.reproducible],
-            confidence=m.dog.confidence, novelty=float(m.id not in recent_set), total=0,
-        )) for m in [chosen, *(m for m in pool if m.id != chosen.id)]]
-        return MatchResult(chosen=candidates[0], ranked=candidates,
-                           reason="photo opportunity: uniform random meme pose (no posture score)")
 
     def match(self, obs: HumanObservation, source, *, exclude: Iterable[str] = (), recent: Iterable[str] = (),
               rng: random.Random | None = None) -> MatchResult:

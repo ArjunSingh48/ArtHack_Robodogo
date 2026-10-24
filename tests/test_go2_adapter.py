@@ -5,7 +5,6 @@ wiring, not the robot: real behaviour is still hardware-unverified."""
 from __future__ import annotations
 
 import sys
-import time
 import types
 
 import pytest

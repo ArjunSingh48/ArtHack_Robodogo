@@ -370,7 +370,7 @@ def cmd_talk(args) -> None:
 
     audio = SoundDeviceAudio(dev(s.talk_input_device), dev(s.talk_output_device))
     talk_settings = TalkSettings(
-        model=s.talk_model or s.openai_realtime_model, voice=s.talk_voice or s.openai_realtime_voice,
+        model=s.talk_model or s.openai_realtime_model, voice=s.talk_voice or s.primary_voice,
         half_duplex=not args.full_duplex and s.talk_half_duplex,
         idle_timeout_s=s.talk_idle_seconds, max_session_s=s.talk_max_session_seconds,
     )

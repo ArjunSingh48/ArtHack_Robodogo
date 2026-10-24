@@ -12,7 +12,7 @@ import json
 import logging
 from typing import Any
 
-from ..domain import ArchiveSource, scene_is_eligible
+from ..domain import ArchiveSource
 from ..orchestrator import BusyError, InteractionOrchestrator
 from ..vision.frame_sources import FrameSource
 
@@ -73,8 +73,6 @@ def scene_facts(scene) -> dict:
         return {"id": scene.id, "kind": "meme", "name": scene.name, "subject": scene.subject, "year": scene.year,
                 "attribution": scene.attribution, "meaning": scene.cultural_meaning,
                 "your_reflection": scene.reflection.get("en", ""),
-                "relationship_eligible": scene_is_eligible(scene),
-                "photo_pose_eligible": scene.photo_pose_eligible,
                 "dog": {"posture": scene.dog.posture.value, "interaction": scene.dog.interaction.value}}
     return {"id": scene.id, "kind": "painting", "title": scene.title, "artist": scene.artist, "date": scene.date,
             "museum": scene.museum, "your_note": scene.poem,
@@ -117,8 +115,7 @@ class TalkTools:
         o = out.observation
         result = {
             "you_saw": {"posture": o.posture.value, "confidence": o.posture_confidence,
-                        "people": o.people_detected, "gestures": [g.value for g in o.gestures],
-                        "intent": o.intent.value},
+                        "people": o.people_detected, "gestures": [g.value for g in o.gestures]},
             "found": out.artwork is not None,
             "body": {"tried": out.plan.behavior.value, "fidelity": out.plan.fidelity.value,
                      "status": out.result.status.value},
@@ -140,15 +137,9 @@ class TalkTools:
             src = ArchiveSource(archive)
         except ValueError:
             src = ArchiveSource.BOTH
-        # Recalling a cultural reference does not make it a pose-match candidate.
-        scenes = self.orch.repo.all("art") if src is not ArchiveSource.MEME else []
-        if src is not ArchiveSource.ART and self.orch.repo.memes:
-            scenes += [m for m in self.orch.repo.memes.all_records() if m.curation_status == "approved"]
         items = [{"id": s.id, "kind": s.kind, "title": s.title,
-                  "by": s.attribution if s.kind == "meme" else s.artist, "date": s.date,
-                  "relationship_eligible": scene_is_eligible(s),
-                  "photo_pose_eligible": getattr(s, "photo_pose_eligible", False)}
-                 for s in scenes]
+                  "by": s.attribution if s.kind == "meme" else s.artist, "date": s.date}
+                 for s in self.orch.repo.all(src)]
         return {"count": len(items), "memories": items[:40]}
 
     async def _describe_memory(self, id: str) -> dict:

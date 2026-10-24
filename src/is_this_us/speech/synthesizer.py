@@ -45,6 +45,11 @@ VOICE_DIRECTION = (
     "Voice: soft, gentle, calm, intimate, slightly shy and curious; a little slow; "
     "take a short breath at every '…'. Not robotic, not cartoonishly cute, not theatrical."
 )
+# Added for scripted performance cues (`itu show`): per-chapter delivery direction.
+PERFORMANCE_DIRECTION = (
+    " This is a theatrical narration. Each line break is a short natural pause; leave a longer, "
+    "thoughtful pause at every '…'. Delivery for this passage: {direction}."
+)
 
 
 @dataclass
@@ -58,7 +63,7 @@ class SpeechAudio:
 class SpeechSynthesizer(Protocol):
     available: bool
 
-    def synthesize(self, text: str, lang: str = "en") -> SpeechAudio | None: ...
+    def synthesize(self, text: str, lang: str = "en", direction: str = "") -> SpeechAudio | None: ...
 
 
 class AudioCache:
@@ -118,7 +123,10 @@ class NullSynthesizer:
 
     available = False
 
-    def synthesize(self, text: str, lang: str = "en") -> SpeechAudio | None:
+    def synthesize(self, text: str, lang: str = "en", direction: str = "") -> SpeechAudio | None:
+        return None
+
+    def cached(self, text: str, lang: str = "en", direction: str = "") -> Path | None:
         return None
 
 
@@ -128,7 +136,8 @@ class VoiceRejected(RuntimeError):
 
 class OpenAIRealtimeSynthesizer:
     def __init__(self, api_key: str, model: str, voice: str, cache: AudioCache, *,
-                 timeout_s: float = 25.0, fidelity: float = 0.8, client=None):
+                 timeout_s: float = 25.0, fidelity: float = 0.8, client=None, voice_notes: bool = True):
+        self.voice_notes = voice_notes  # also make an OGG/Opus copy for Telegram
         self.model = model
         self.voice = voice
         self.cache = cache
@@ -147,9 +156,28 @@ class OpenAIRealtimeSynthesizer:
         # a fresh client per utterance: each phrase runs in its own short event loop
         return AsyncOpenAI(api_key=self._api_key)
 
-    async def _speak(self, text: str, lang: str) -> tuple[bytes, str]:
+    @staticmethod
+    def instructions_for(lang: str, direction: str = "") -> str:
+        text = VOICE_DIRECTION.format(language=LANGUAGE_NAMES.get(lang, "English"))
+        if direction.strip():
+            text += PERFORMANCE_DIRECTION.format(direction=direction.strip())
+        return text
+
+    def key_for(self, text: str, lang: str = "en", direction: str = "") -> str:
+        return AudioCache.key(text, self.voice, self.model,
+                              {"direction": self.instructions_for(lang, direction), "lang": lang})
+
+    def cached(self, text: str, lang: str = "en", direction: str = "") -> Path | None:
+        wav, _ = self.cache.paths(self.key_for(text, lang, direction))
+        return wav if wav.exists() else None
+
+    def _result(self, wav: Path, ogg: Path, cached: bool) -> SpeechAudio:
+        return SpeechAudio(wav, to_telegram_voice(wav, ogg) if self.voice_notes else None, cached=cached,
+                           provider="openai-realtime")
+
+    async def _speak(self, text: str, lang: str, direction: str = "") -> tuple[bytes, str]:
         """One short Realtime session: configure → send text → collect audio + transcript."""
-        instructions = VOICE_DIRECTION.format(language=LANGUAGE_NAMES.get(lang, "English"))
+        instructions = self.instructions_for(lang, direction)
         audio, transcript = bytearray(), []
         async with self._get_client().realtime.connect(model=self.model, max_retries=1) as conn:
             await conn.session.update(session={
@@ -177,17 +205,20 @@ class OpenAIRealtimeSynthesizer:
                     break
         return bytes(audio), " ".join(transcript)
 
-    def synthesize(self, text: str, lang: str = "en") -> SpeechAudio | None:
-        if not self.available or not text.strip():
+    def synthesize(self, text: str, lang: str = "en", direction: str = "") -> SpeechAudio | None:
+        if not text.strip():
             return None
-        key = AudioCache.key(text, self.voice, self.model, {"direction": VOICE_DIRECTION, "lang": lang})
-        wav, ogg = self.cache.paths(key)
-        if wav.exists():
-            return SpeechAudio(wav, to_telegram_voice(wav, ogg), cached=True, provider="openai-realtime")
+        wav, ogg = self.cache.paths(self.key_for(text, lang, direction))
+        if wav.exists():  # cached audio plays even offline / after a credential failure
+            return self._result(wav, ogg, cached=True)
+        if not self.available:
+            return None
         with self._lock:
+            if wav.exists():  # made by another thread meanwhile
+                return self._result(wav, ogg, cached=True)
             for attempt in range(2):
                 try:
-                    audio, said = asyncio.run(asyncio.wait_for(self._speak(text, lang), self.timeout_s))
+                    audio, said = asyncio.run(asyncio.wait_for(self._speak(text, lang, direction), self.timeout_s))
                     if not audio:
                         raise VoiceRejected("no audio returned")
                     if not faithful(text, said, self.fidelity):
@@ -219,7 +250,7 @@ class OpenAIRealtimeSynthesizer:
             else:
                 return None
         write_wav(wav, audio)
-        return SpeechAudio(wav, to_telegram_voice(wav, ogg), cached=False, provider="openai-realtime")
+        return self._result(wav, ogg, cached=False)
 
 
 class RealtimeError(RuntimeError):
@@ -238,11 +269,18 @@ class MockSynthesizer:
         self.fail = fail
         self.requests: list[str] = []
 
-    def synthesize(self, text: str, lang: str = "en") -> SpeechAudio | None:
+    def key_for(self, text: str, lang: str = "en", direction: str = "") -> str:
+        return AudioCache.key(text, "mock", "mock", {"direction": direction} if direction else {})
+
+    def cached(self, text: str, lang: str = "en", direction: str = "") -> Path | None:
+        wav, _ = self.cache.paths(self.key_for(text, lang, direction))
+        return wav if wav.exists() else None
+
+    def synthesize(self, text: str, lang: str = "en", direction: str = "") -> SpeechAudio | None:
         self.requests.append(text)
         if self.fail:
             return None
-        key = AudioCache.key(text, "mock", "mock", {})
+        key = self.key_for(text, lang, direction)
         wav, ogg = self.cache.paths(key)
         cached = wav.exists()
         write_wav(wav, b"\x00\x00" * 240)
@@ -274,8 +312,25 @@ class LocalSpeakerPlayer:
                          daemon=True).start()
 
 
-def make_synthesizer(settings) -> SpeechSynthesizer:
-    cache = AudioCache(settings.audio_cache_dir)
+class _NoCache(AudioCache):
+    """OPENAI_AUDIO_CACHE_ENABLED=false: audio goes to a throw-away folder that is emptied per run."""
+
+    def __init__(self, directory: Path):
+        super().__init__(directory)
+        for f in self.dir.glob("*"):
+            f.unlink(missing_ok=True)
+
+
+def make_synthesizer(settings, *, purpose: str = "dialogue") -> SpeechSynthesizer:
+    """purpose: "dialogue" (free-play lines, Telegram voice notes) or "narration" / "lines" (`itu show`)."""
+    base = Path(settings.audio_cache_dir)
+    directory = base if purpose == "dialogue" else base / purpose
+    if not getattr(settings, "openai_audio_cache_enabled", True):
+        cache: AudioCache = _NoCache(base / "_uncached" / purpose)
+    else:
+        cache = AudioCache(directory)
+    model = settings.openai_realtime_model if purpose == "dialogue" else settings.openai_narration_model
+    voice = getattr(settings, "primary_voice", None) or settings.openai_realtime_voice
     if settings.voice_configured:
         try:
             import openai  # noqa: F401
@@ -283,7 +338,10 @@ def make_synthesizer(settings) -> SpeechSynthesizer:
         except ImportError:
             log.warning("OPENAI_API_KEY set but the SDK is missing: pip install -e '.[voice]'. Text-only for now.")
             return NullSynthesizer()
-        return OpenAIRealtimeSynthesizer(settings.openai_api_key, settings.openai_realtime_model,
-                                         settings.openai_realtime_voice, cache)
+        return OpenAIRealtimeSynthesizer(settings.openai_api_key, model, voice, cache,
+                                         voice_notes=(purpose == "dialogue"))
+    if purpose != "dialogue":
+        # no key (or provider=none): previously generated cues still play offline
+        return OpenAIRealtimeSynthesizer("", model, voice, cache, voice_notes=False)
     log.info("OpenAI voice not configured; text-only voice")
     return NullSynthesizer()

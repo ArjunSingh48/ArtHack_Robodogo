@@ -12,7 +12,7 @@ from typing import Iterable, Protocol
 
 import yaml
 
-from ..domain import Artwork, scene_is_eligible
+from ..domain import Artwork
 
 ANNOTATION_FILE = "annotations.yaml"
 
@@ -42,11 +42,6 @@ class YamlArtworkRepository:
         self._items = {a.id: a for a in items}
 
     def all(self) -> list[Artwork]:
-        """Only reviewed, eligible scenes may enter matching."""
-        return [a for a in self._items.values() if scene_is_eligible(a)]
-
-    def all_records(self) -> list[Artwork]:
-        """Loaded records, including ineligible records, for audit and history."""
         return list(self._items.values())
 
     def get(self, artwork_id: str) -> Artwork | None:

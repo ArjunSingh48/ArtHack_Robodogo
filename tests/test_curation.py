@@ -1,43 +1,17 @@
 import httpx
 import pytest
-import yaml
 
 from is_this_us.artworks.museum_clients import ClevelandClient, MetClient, RightsError
-from is_this_us.domain import EligibilityReview
 
 
 def test_real_archive_has_verified_rights_and_sources(repo):
     arts = repo.all()
-    assert arts, "The approved pilot collection must not be empty"
+    assert 20 <= len(arts) <= 30
     for a in arts:
-        assert a.review.status == "accepted"
-        assert a.review.human_count == a.review.dog_count == 1
-        assert a.review.dog_on_ground is True
         assert not a.is_fixture
         assert a.rights.status in {"Public Domain", "CC0"}
         assert str(a.page_url).startswith(("https://www.metmuseum.org", "https://clevelandart.org"))
         assert a.artist and a.title and a.museum
-
-
-def test_generated_collection_matches_reviewed_sources(repo):
-    """Every candidate stays auditable; only accepted notes reach the built dataset."""
-    notes = yaml.safe_load((repo.data_dir / "curation_notes.yaml").read_text())["notes"]
-    snapshot = yaml.safe_load((repo.data_dir / "museum_metadata.yaml").read_text())["artworks"]
-    metadata = {a["id"]: a for a in snapshot}
-    assert set(notes) == set(metadata)
-    accepted = set()
-    for key, note in notes.items():
-        review = EligibilityReview.model_validate(note["review"])
-        assert (repo.data_dir / review.image_reference).is_file()
-        if review.eligible:
-            accepted.add(key)
-    assert {a.id for a in repo.all_records()} == accepted
-    for art in repo.all():
-        built = art.model_dump(mode="json")
-        assert {field: built[field] for field in metadata[art.id]} == metadata[art.id]
-        assert built["human"] == notes[art.id]["human"]
-        assert built["dog"] == notes[art.id]["dog"]
-        assert built["poem"] == notes[art.id]["poem"]
 
 
 def _met_transport(seen):

@@ -20,7 +20,7 @@ FIXTURES = Path(__file__).parent / "fixtures"
 
 @pytest.fixture
 def repo() -> YamlArtworkRepository:
-    """The visually reviewed, eligible museum pilot collection."""
+    """The real curated archive (24 museum artworks)."""
     return YamlArtworkRepository(DATA)
 
 

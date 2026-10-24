@@ -7,11 +7,11 @@ member of a small pre-approved list — never free text.
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import datetime, timezone
 from enum import StrEnum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl
 
 
 # --------------------------------------------------------------------------- humans
@@ -42,11 +42,6 @@ class Proximity(StrEnum):
     UNKNOWN = "unknown"
 
 
-class InteractionIntent(StrEnum):
-    POSE = "pose"
-    PHOTOGRAPHING_ROBOT = "photographing_robot"
-
-
 class HumanObservation(BaseModel):
     """What the robot believes it saw. Deliberately coarse and uncertain."""
 
@@ -58,9 +53,6 @@ class HumanObservation(BaseModel):
     people_detected: int = 1
     notes: list[str] = Field(default_factory=list)
     source: str = "unknown"
-    # An explicit event from a future intent detector or a simulation. Pose
-    # landmarks alone never assert that somebody is photographing the robot.
-    intent: InteractionIntent = InteractionIntent.POSE
 
     def has(self, gesture: HumanGesture, threshold: float = 0.5) -> bool:
         return self.gestures.get(gesture, 0.0) >= threshold
@@ -148,54 +140,6 @@ class HumanAnnotation(BaseModel):
     confidence: float = Field(ge=0, le=1)
 
 
-class EligibilityReview(BaseModel):
-    """Visual evidence for membership in the one-person, grounded-dog collection."""
-
-    status: Literal["accepted", "rejected", "needs_review"] = "needs_review"
-    human_count: int | None = Field(default=None, ge=0, strict=True)
-    dog_count: int | None = Field(default=None, ge=0, strict=True)
-    dog_on_ground: bool | None = Field(default=None, strict=True)
-    reason: str = Field(min_length=1)
-    reviewer: str = Field(min_length=1)
-    reviewed_on: date
-    image_reference: str = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _evidence(self):
-        for name in ("reason", "reviewer", "image_reference"):
-            if not getattr(self, name).strip():
-                raise ValueError(f"{name} must identify the review evidence")
-        if self.status == "accepted" and not self.eligible:
-            raise ValueError("accepted review requires exactly one human, one dog, and confirmed ground contact")
-        return self
-
-    @property
-    def eligible(self) -> bool:
-        return (self.status == "accepted" and self.human_count == 1
-                and self.dog_count == 1 and self.dog_on_ground is True)
-
-
-def validate_reviewed_dog(review: EligibilityReview | None, dog: DogAnnotation) -> None:
-    if review and review.eligible and (
-        dog.posture is DogPosture.HELD or dog.relation in {SpatialRelation.IN_ARMS, SpatialRelation.ON_LAP}
-    ):
-        raise ValueError("accepted ground-contact review contradicts held/lap dog annotation")
-
-
-def scene_is_eligible(scene: Any) -> bool:
-    """Fail closed, including for legacy records and synthetic fixture flags."""
-    review = getattr(scene, "review", None)
-    if not isinstance(review, EligibilityReview) or not review.eligible:
-        return False
-    if getattr(scene, "kind", None) == "meme" and getattr(scene, "curation_status", None) != "approved":
-        return False
-    try:
-        validate_reviewed_dog(review, scene.dog)
-    except ValueError:
-        return False
-    return True
-
-
 class Artwork(BaseModel):
     kind: Literal["art"] = "art"
     id: str  # "<museum>:<object id>"
@@ -211,12 +155,6 @@ class Artwork(BaseModel):
     dog: DogAnnotation
     poem: str = ""
     is_fixture: bool = False  # True for test/mock data that is NOT a real artwork
-    review: EligibilityReview | None = None
-
-    @model_validator(mode="after")
-    def _review_consistency(self):
-        validate_reviewed_dog(self.review, self.dog)
-        return self
 
     def credit_line(self) -> str:
         date = f", {self.date}" if self.date else ""

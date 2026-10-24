@@ -218,7 +218,7 @@ def build_estimator(settings: Settings):
         return None
 
 
-async def run_bot(settings: Settings) -> None:
+async def run_bot(settings: Settings, show_options=None) -> None:
     if not settings.telegram_bot_token:
         raise SystemExit("TELEGRAM_BOT_TOKEN is empty. See README → BotFather.")
     bot = Bot(settings.telegram_bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -247,9 +247,32 @@ async def run_bot(settings: Settings) -> None:
         default_lang=settings.default_language, font_path=settings.card_font_path,
     )
     notifier.flows = flows
+
+    # Performance mode lives in the same bot process (`/show`, operators only).
+    from ..performance.delivery import TelegramDelivery
+    from ..performance.runtime import ShowOptions, build_director
+    from .show_controls import SHOW_COMMANDS, ShowController, build_show_router
+
+    show_opts = show_options or ShowOptions(lang=settings.default_language)
+    show_delivery = TelegramDelivery(bot, settings.show_telegram_chat_id)
+    ctrl = ShowController(
+        lambda: build_director(settings, show_opts, delivery=show_delivery, guard=guard, planner=orch.planner,
+                               art_repo=repo.art, meme_repo=repo.memes, estimator=orch.estimator),
+        settings.telegram_operator_ids,
+        recipient_label="the exhibition chat" if settings.show_telegram_chat_id else "nobody (SHOW_TELEGRAM_CHAT_ID unset)")
+    flows.extra_status = ctrl.status_line
+
     dp = Dispatcher()
+    dp.include_router(build_show_router(ctrl))  # first: its photo/callback filters are narrow
     dp.include_router(build_router(flows, settings))
     await bot.set_my_commands(VISITOR_COMMANDS)
+    from aiogram.types import BotCommandScopeChat
+
+    for op in settings.telegram_operator_ids:  # show commands are visible to operators only
+        try:
+            await bot.set_my_commands(VISITOR_COMMANDS + SHOW_COMMANDS, scope=BotCommandScopeChat(chat_id=op))
+        except Exception as exc:
+            log.warning("could not set operator commands for %s: %s", op, exc)
 
     async def cleanup_loop():
         while True:
@@ -266,6 +289,9 @@ async def run_bot(settings: Settings) -> None:
         await dp.start_polling(bot)
     finally:
         task.cancel()
+        if ctrl.running and ctrl.director is not None:
+            ctrl.director.command("cancel")
+            await asyncio.sleep(0.5)
         guard.software_stop("bot shutdown")
         guard.shutdown()
         robot.close()
