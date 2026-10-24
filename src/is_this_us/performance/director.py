@@ -1647,14 +1647,17 @@ class StoryDirector:
                   "behavior": behavior, "side": side, "settled": False, "photo": False, "sent": []}
         self.rounds.append(record)
         self._clear_live()
-        work = self._round_robot(behavior, side, posture, facing_for(art)) if reading is not None else None
-        settled = await self._remember_while(era, art, work)
-        record["settled"] = settled
+        await self._remember_while(era, art, None)
+        # the picture first, THEN the dog goes over and takes the painted dog's pose (it stays on screen meanwhile)
         if art is not None:
             self.stage.show(View("artifact", artifact=art))
             await self.say_line("round", "found")
         elif self.photo_consent and reading is not None:
             await self.say_line("round", "meme_found")
+        settled = False
+        if reading is not None:
+            settled = await self._round_robot(behavior, side, posture, facing_for(art))
+        record["settled"] = settled
         consent = (self.photo_consent and reading is not None and camera is not None and self.pose_reader is not None
                    and not self._robot_camera)
         photo, photo_reading = None, None
@@ -1743,7 +1746,7 @@ class StoryDirector:
         as the robot needs. One short spoken line at the start; the found picture is the reveal (after)."""
         from .rounds import montage_order
 
-        self._set_state(ShowState.REMEMBERING, "remembering — the robot walks / takes its pose")
+        self._set_state(ShowState.REMEMBERING, "remembering — then the picture, then the dog walks over")
         flashes = montage_order(self.catalog, era, chosen)[:7]
         done = asyncio.Event()
         minimum = min(2, len(flashes)) if flashes else 1
