@@ -132,6 +132,8 @@ const sayAgain = (g) => (lastSaid ? say(lastSaid[0], lastSaid[1], g) : null);
 let source = null, stream = null, sample = 0, reading = { visible: false }, poseMod = null;
 const used = new Set();
 const video = $('video');
+// the camera is shown as it arrives (?mirror=1 flips it like a mirror); the pose follows the view
+const MIRROR = new URLSearchParams(location.search).get('mirror') === '1';
 async function useCamera(switching) {
   try {
     stream = stream || await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
@@ -157,7 +159,7 @@ function readNow() {
     const s = show.samples[sample];
     reading = { visible: !!s.points, posture: s.posture, framing: 'ok', points: s.points, skeleton: s.skeleton };
   } else if (source === 'camera' && poseMod) {
-    reading = poseMod.read(video, show.swap_lr);
+    reading = poseMod.read(video, show.swap_lr, MIRROR);
   } else reading = { visible: false };
   return reading;
 }
@@ -172,8 +174,9 @@ function drawCam() {
   if (!w) return;
   const k = Math.min(cv.width / w, cv.height / h), dw = w * k, dh = h * k, ox = (cv.width - dw) / 2, oy = (cv.height - dh) / 2;
   cx.save();
-  if (source === 'camera') { cx.translate(cv.width, 0); cx.scale(-1, 1); }  // like a mirror
-  cx.drawImage(img, source === 'camera' ? cv.width - ox - dw : ox, oy, dw, dh);
+  const flip = source === 'camera' && MIRROR;
+  if (flip) { cx.translate(cv.width, 0); cx.scale(-1, 1); }  // like a mirror
+  cx.drawImage(img, flip ? cv.width - ox - dw : ox, oy, dw, dh);
   cx.restore();
   const p = reading.points;
   if (p) {
@@ -191,7 +194,7 @@ function photo() {  // what the photo camera shows now, as an image URL (stays i
   const c = document.createElement('canvas'), img = source === 'photos' ? sampleImgs[sample] : video;
   c.width = img.videoWidth || img.naturalWidth; c.height = img.videoHeight || img.naturalHeight;
   const g = c.getContext('2d');
-  if (source === 'camera') { g.translate(c.width, 0); g.scale(-1, 1); }
+  if (source === 'camera' && MIRROR) { g.translate(c.width, 0); g.scale(-1, 1); }
   g.drawImage(img, 0, 0);
   return c.toDataURL('image/jpeg', 0.9);
 }

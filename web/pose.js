@@ -74,7 +74,7 @@ function scores(f) {
 }
 
 // → { visible, posture, framing, points [[x,y,vis] 0..1], skeleton (avatar frame, mirrored like the view) }
-export function read(video, swapLR, now = performance.now()) {
+export function read(video, swapLR, mirror = true, now = performance.now()) {
   if (!landmarker || !video.videoWidth) return { visible: false };
   const res = landmarker.detectForVideo(video, now);
   const lm = res.landmarks && res.landmarks[0];
@@ -88,10 +88,10 @@ export function read(video, swapLR, now = performance.now()) {
     if (ranked.length && ranked[0][1] >= 0.25 && ranked[0][0] !== 'unknown') posture = ranked[0][0];
   }
   const framing = !f ? 'partial' : f.legs ? 'ok' : 'partial';
-  // the view is mirrored (like a mirror): x flipped, and left/right landmarks swapped
-  const points = lm.map((p, i) => [1 - p.x, p.y, vis[i]]);
-  const mirroredPoints = swapLR.map((j) => points[j]);
+  // a mirrored view: x flipped, and left/right landmarks swapped
+  const order = mirror ? swapLR : lm.map((_, i) => i), sx = mirror ? -1 : 1;
+  const points = order.map((j) => [mirror ? 1 - lm[j].x : lm[j].x, lm[j].y, vis[j]]);
   const wl = res.worldLandmarks && res.worldLandmarks[0];
-  const skeleton = wl ? swapLR.map((j) => [-wl[j].x, -wl[j].y, -wl[j].z, vis[j]]) : null;
-  return { visible: true, posture, framing, points: mirroredPoints, skeleton };
+  const skeleton = wl ? order.map((j) => [sx * wl[j].x, -wl[j].y, -wl[j].z, vis[j]]) : null;
+  return { visible: true, posture, framing, points, skeleton };
 }
