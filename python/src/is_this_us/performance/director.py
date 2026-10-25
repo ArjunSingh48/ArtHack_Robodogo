@@ -202,6 +202,8 @@ class StoryDirector:
         self._walk_cmd: Cmd | None = None  # how the last walk ended (None = by itself)
         self._camera_lock = threading.Lock()  # one camera read at a time (OpenCV is not thread-safe)
         self._jump_to_pose = False
+        self.walk_settle_s = 0.5  # after a walk, before the final pose
+        self._motion_abort = threading.Event()  # set by End / Pause / Skip: a pose waiting for its cooldown is dropped
         self.moment_hold_s = moment_hold_s  # a moment counts once the pose is held this long
         self.live_linger_s = live_linger_s  # keep the camera view up this long after the reaction
         self.live_tick_s = min(tick_s, 0.2)  # faster looking while the live view is on screen
@@ -244,6 +246,8 @@ class StoryDirector:
             return self._switch_to_samples()
         if cmd is Cmd.POSE:
             self._jump_to_pose = True  # sticky: honoured at the next safe point, whatever is playing
+        if cmd in (Cmd.CANCEL, Cmd.PAUSE, Cmd.SKIP):
+            self._motion_abort.set()  # a pose still waiting for its cooldown is not sent
         self._inbox.append(cmd)
         self._has_cmd.set()
         return True, f"ok: {cmd.value}"
@@ -795,13 +799,15 @@ class StoryDirector:
                 feed.cancel()
                 await asyncio.gather(feed, return_exceptions=True)
 
-    async def _read_pose(self, camera) -> tuple[PoseReading | None, object | None]:
+    async def _read_pose(self, camera, *, pose: bool = True) -> tuple[PoseReading | None, object | None]:
         if camera is None or self.pose_reader is None:
             return None, None
         try:
             frame = await asyncio.to_thread(self._locked_read, camera)
             if frame is None:
                 return None, None
+            if not pose:
+                return None, frame
             return await asyncio.to_thread(self.pose_reader.read, frame.image, frame.source), frame
         except Exception as exc:
             log.warning("pose reading failed: %s", exc)
@@ -847,14 +853,19 @@ class StoryDirector:
         try:
             while True:
                 # looked up every time: the operator may switch from a picture to the camera mid-show
-                cams = [c for c in (self._open_camera(), self._open_robot_camera()) if c is not None]
+                if self._camera is None or self._robot_cam is None:  # opening a camera can take seconds (macOS)
+                    await asyncio.to_thread(lambda: (self._open_camera(), self._open_robot_camera()))
+                cams = [c for c in (self._camera, self._robot_cam) if c is not None]
                 if not cams or self.pose_reader is None:
                     await asyncio.sleep(0.5)
                     continue
                 for camera in cams:
                     if self.state is ShowState.PAUSED:
                         break
-                    reading, frame = await self._read_pose(camera)
+                    # while the dog walks, its own camera is read by the approach (which steers on it): the view
+                    # here shows the picture only, so two pose models never compete with the walking loop
+                    walking = self.state is ShowState.APPROACH and camera is self._robot_cam
+                    reading, frame = await self._read_pose(camera, pose=not walking)
                     if frame is not None and self.clock() - self._live_at[self._feed_of(frame)] > 0.6:
                         await self._publish_live(frame, reading, _checks(reading, any_person=True), ambient=True)
                 await asyncio.sleep(max(self._tick(), 0.12))
@@ -1052,6 +1063,21 @@ class StoryDirector:
             return "together" if self.composition else "alone"
 
     # ------------------------------------------------------------------ the good boy encounter (finale)
+    async def _perform(self, behavior: str):
+        """A pose that must happen in order (stand before walking, the final pose after it), off the event loop.
+        A remaining cooldown is waited out once and SHOWN ("waiting 2.5 s for safe pose transition"); End / Pause /
+        Skip while waiting means nothing is sent."""
+        loop = asyncio.get_running_loop()
+        self._motion_abort.clear()
+
+        def on_wait(left: float) -> None:
+            loop.call_soon_threadsafe(self._note, f"waiting {left:.1f} s for safe pose transition ({behavior})")
+        try:
+            return await asyncio.to_thread(self.motion.perform, behavior, should_stop=self._motion_abort.is_set,
+                                           on_wait=on_wait)
+        except TypeError:  # a motion object without the waiting API (tests, older stand-ins)
+            return await asyncio.to_thread(self.motion.perform, behavior)
+
     def _note(self, text: str) -> None:
         """Something the operator should know (terminal / operator page); never spoken, never sent."""
         self.encounter_log.append(text)
@@ -1205,7 +1231,7 @@ class StoryDirector:
         if self.motion is None or not getattr(self.motion, "enabled", False):
             self._note(f"final pose '{behavior}' not performed (show motion off)")
             return False
-        res = await asyncio.to_thread(self.motion.perform, behavior)
+        res = await self._perform(behavior)
         ok = res is not None and res.status in (ExecutionStatus.SUCCESS, ExecutionStatus.SIMULATED)
         self._note(f"final pose '{behavior}': {res.status.value if res else 'none'} {res.detail if res else ''}")
         return ok
@@ -1333,7 +1359,7 @@ class StoryDirector:
         if speak:
             await self.say_line("approach", "ask")
         if self.motion is not None:
-            await asyncio.to_thread(self.motion.perform, "stand")  # walking starts from standing
+            await self._perform("stand")  # walking starts from standing
         res, cmd = await self._walk(self.approacher.approach, side=side, posture=posture, facing=facing)
         self._walk_cmd = cmd
         self.walk_log.append(f"approach: {getattr(res, 'status', 'interrupted')} {getattr(res, 'detail', '')}".strip())
@@ -1342,9 +1368,26 @@ class StoryDirector:
         if cmd is Cmd.PAUSE:
             await self._paused()
         arrived = res is not None and res.arrived
+        self._report_approach(res)
+        if arrived and self.walk_settle_s > 0:  # zero velocity + stop_move are confirmed; let the body settle
+            self._note(f"walk ended (Move 0 → stop → stop_move); settling {self.walk_settle_s:.1f} s before the pose")
+            await asyncio.sleep(self.walk_settle_s)
         if speak:
             await self.say_line("approach", "arrived" if arrived else "not_found")
         return arrived
+
+    def _report_approach(self, res) -> None:
+        """What the walk did, for the operator — and an alert with the fix when the target was unreliable."""
+        if res is None:
+            self._note("approach interrupted")
+            return
+        self._note(f"approach: {res.status} — {res.detail}")
+        hint = {"target_unreliable": "Robot camera cannot see the participant's full body. Move the participant "
+                                     "back or reframe them.",
+                "camera_lost": "The robot's camera stopped delivering frames — check the bridge.",
+                "not_found": "The robot could not find anyone with its camera."}.get(res.status)
+        if hint:
+            self._alert(hint)
 
     async def _robot_takes_its_place(self, art: ShowArtifact) -> None:
         """The robot goes into the painted dog's pose BEFORE the person settles next to it.
@@ -1385,7 +1428,7 @@ class StoryDirector:
         self._set_state(ShowState.APPROACH, f"walking to the person's {spec.robot_side or 'front'}")
         await self.say_line("approach", "ask")
         if self.motion is not None:
-            await asyncio.to_thread(self.motion.perform, "stand")  # walking starts from standing
+            await self._perform("stand")  # walking starts from standing
         res, cmd = await self._walk(self.approacher.approach, side=spec.robot_side or "front", posture=spec.posture)
         self.walk_log.append(f"approach: {getattr(res, 'status', 'interrupted')} {getattr(res, 'detail', '')}".strip())
         if cmd is Cmd.CANCEL:
@@ -1394,7 +1437,7 @@ class StoryDirector:
             await self._paused()  # the robot stays where it stopped; the operator decides
         if res is not None and res.arrived:
             if spec.robot_behavior and self.motion is not None:
-                await asyncio.to_thread(self.motion.perform, spec.robot_behavior)
+                await self._perform(spec.robot_behavior)
             await self.say_line("approach", "arrived")
             return True
         await self.say_line("approach", "not_found")
@@ -1407,7 +1450,7 @@ class StoryDirector:
         if speak:
             await self.say_line("approach", "home")
         if self.motion is not None:
-            await asyncio.to_thread(self.motion.perform, "stand")  # stand up before walking
+            await self._perform("stand")  # stand up before walking
         res, cmd = await self._walk(self.approacher.go_home)
         self.walk_log.append(f"home: {res or 'interrupted'}")
         if cmd is Cmd.CANCEL:
@@ -1726,7 +1769,7 @@ class StoryDirector:
         if self.motion is None or not getattr(self.motion, "enabled", False):
             self._note(f"pose '{behavior}' not performed (show motion off)")
             return False
-        res = await asyncio.to_thread(self.motion.perform, behavior)
+        res = await self._perform(behavior)
         ok = res is not None and res.status in (ExecutionStatus.SUCCESS, ExecutionStatus.SIMULATED)
         self._note(f"pose '{behavior}': {res.status.value if res else 'none'}"
                    f"{' [' + res.diagnostic + ']' if getattr(res, 'diagnostic', '') else ''} "
@@ -1885,7 +1928,7 @@ class StoryDirector:
             await self.say_line("rescue", "arrived" if arrived else "stay")
         motion_on = self.motion is not None and getattr(self.motion, "enabled", False)
         if arrived and motion_on:
-            await asyncio.to_thread(self.motion.perform, "greet")  # a paw: "wake up"
+            await self._perform("greet")  # a paw: "wake up"
         await self.say_line("rescue", "wake")
         self._set_state(ShowState.RESCUE, "waiting for them to sit or stand up — Ready = they are up")
         ups = {"sitting", "standing", "kneeling", "crouching", "leaning_forward"}
@@ -1897,7 +1940,7 @@ class StoryDirector:
         await self.say_line("rescue", "saved")
         settled = False
         if motion_on:
-            res = await asyncio.to_thread(self.motion.perform, "sit")
+            res = await self._perform("sit")
             settled = res is not None and res.status in (ExecutionStatus.SUCCESS, ExecutionStatus.SIMULATED)
         consent = self.photo_consent and camera is not None and self.pose_reader is not None and not self._robot_camera
         photo, _ = await self._hold_pose(settled, camera, consent, self.round_hold_s, None, None,

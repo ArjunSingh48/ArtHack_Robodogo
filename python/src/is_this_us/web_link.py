@@ -2,20 +2,33 @@
 
     Chrome ──WebSocket ws://127.0.0.1:8770──► itu web-link ──ZeroMQ :5555──► go2_bridge ──DDS──► Go2
 
-The page runs the whole show and its simulated dog. Opened with `?robot=ws://127.0.0.1:8770`, it also sends here
-what its dog does; this relay passes it through the same MotionGuard and ZhawBridgeAdapter as `itu show`, so the
-same rules hold: calm actions only, one at a time and confirmed (10 s SDK timeout), an unknown outcome or a failure
-disarms with a stated reason, walking is clamped and kept alive at 10 Hz while the page renews it, and every walk
-ends with Move(0,0,0) → stop → stop_move. One page drives at a time, and only from the allowed origins. A closed or
-reloaded page ends any walk and disarms ("the page disconnected"); the page's Arm button re-arms.
+The page runs the show. Opened with `?robot=ws://127.0.0.1:8770`, it asks this relay for HIGH-LEVEL movement and
+the Python backend is the only authority over the physical robot: poses go through the same MotionGuard and
+ZhawBridgeAdapter as `itu show` (calm actions only, one at a time, confirmed, 10 s SDK timeout; an unknown outcome or
+a failure disarms with a stated reason), and walking is the camera-guided `Approacher` — the Go2's own camera locates
+the real participant, the adapter streams the velocity at 10 Hz, and every walk ends with Move(0,0,0) → stop →
+stop_move. The page's simulated room (its fixed PERSON position) is NEVER used to move the real robot: with a robot
+connected, the 3-D dog only draws the state sent back from here. With `--mock`, the same contract is served by the
+Python simulation (SimRobot: mock adapter + SimWorld + the same Approacher).
+
+One page drives at a time, and only from the allowed origins. A closed or reloaded page stops any walk, ends the
+gait and disarms ("the page disconnected"); the page's Arm button re-arms.
 
 Messages (JSON). Page → relay:
+    {"cmd": "approach", "id": 3, "side": "left", "posture": "sitting", "facing": "person"}
+                                → live {"type": "walk_state", "phase": …, "robot": [x, y, yaw], "person": [x, y]|null}
+                                → {"type": "done", "id": 3, "ok": arrived, "status": "...", "msg": "...", ...}
+    {"cmd": "go_home", "id": 4}  (walk back to the start)  → walk_state … → done
+    {"cmd": "cancel_walk"}       (End / Pause / a jump on the page: the walk stops, cleanup runs)
     {"cmd": "pose", "id": 7, "name": "sit"}            → {"type": "done", "id": 7, "ok": true, "msg": "..."}
-    {"cmd": "walk", "vx": 0.25, "vy": 0, "vyaw": 0}    (no answer; renew at ≥ 2 Hz while walking)
     {"cmd": "walk_end", "id": 8}                       → {"type": "done", "id": 8, "ok": true, "msg": "..."}
     {"cmd": "stop"}  (Esc: software stop, latched)    {"cmd": "arm"}  (the operator checked the dog)
-Relay → page: {"type": "hello", "mode": "bridge" | "mock", ...} and {"type": "state", "armed": bool, "line": "..."}
-after every change of the arming state.
+    {"cmd": "walk", "vx", "vy", "vyaw"}  — open-loop velocity from the page: ONLY with --mock (refused with the
+                                           real robot, where positions come from the robot's camera, not the page)
+Relay → page: {"type": "hello", "mode": "bridge" | "mock", "walking": "on" | reason} and
+{"type": "state", "armed": bool, "line": "..."} after every change of the arming state.
+Phases (performance/approach.py APPROACH_PHASES): searching, target_acquired, walking, turning, arrived,
+target_unreliable, camera_lost, stopped, final_pose, disarmed, error.
 """
 
 from __future__ import annotations
@@ -25,6 +38,7 @@ import concurrent.futures
 import json
 import logging
 import re
+import threading
 
 from .domain import ExecutionStatus, MotionPlan, Reproducibility, RobotBehavior
 
@@ -46,8 +60,14 @@ def plan(b: RobotBehavior) -> MotionPlan:
 class WebLink:
     """One driving page at a time; everything it asks for goes through the guard."""
 
-    def __init__(self, robot, guard, mode: str):
+    def __init__(self, robot, guard, mode: str, approacher=None, walk_off_reason: str = ""):
         self.robot, self.guard, self.mode = robot, guard, mode
+        self.approacher = approacher
+        self.walk_off_reason = walk_off_reason or ("" if approacher else "walking is off")
+        self.move_task: asyncio.Task | None = None
+        self.move_stop = threading.Event()
+        if approacher is not None:
+            approacher.on_state = self._on_walk_state
         self.driver = None
         self.walking = False  # the page is walking (walk_allowed was checked when it started)
         self.walk_refused = False
@@ -74,6 +94,45 @@ class WebLink:
         if self.loop is not None:
             self.loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._send(self.state())))
 
+    def _on_walk_state(self, st: dict) -> None:  # the approach thread
+        if self.loop is not None:
+            msg = {"type": "walk_state", **st}
+            self.loop.call_soon_threadsafe(lambda: asyncio.ensure_future(self._send(msg)))
+
+    # ------------------------------------------------------------------ camera-guided walking (the backend decides)
+    def _moving(self) -> bool:
+        return self.move_task is not None and not self.move_task.done()
+
+    async def approach(self, m: dict) -> dict:
+        if self.approacher is None:
+            return {"ok": False, "status": "refused", "msg": f"walking: {self.walk_off_reason}"}
+        side = str(m.get("side") or "left")
+        side = side if side in ("left", "right", "front") else "left"
+        posture, facing = str(m.get("posture") or "sitting"), str(m.get("facing") or "")
+        if self.walking:
+            await self.walk_end({})
+        self.move_stop.clear()
+        log.info("approach requested by the page: %s of the person (%s, facing %s)", side, posture, facing or "person")
+        res = await self._walk_call(lambda: self.approacher.approach(side=side, posture=posture, facing=facing,
+                                                                       should_stop=self.move_stop.is_set))
+        return {"ok": res.arrived, "status": res.status, "msg": res.detail, **self.approacher.state(
+            res, "arrived" if res.arrived else res.status)}
+
+    async def go_home(self, m: dict) -> dict:
+        if self.approacher is None:
+            return {"ok": False, "status": "refused", "msg": f"walking: {self.walk_off_reason}"}
+        self.move_stop.clear()
+        r = await self._walk_call(lambda: self.approacher.go_home(should_stop=self.move_stop.is_set))
+        return {"ok": r in ("done", "nothing"), "status": r, "msg": f"walk home: {r}"}
+
+    async def cancel_walk(self) -> None:
+        self.move_stop.set()
+        if self._moving():
+            try:
+                await asyncio.wait_for(asyncio.shield(self.move_task), 15)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
     # ------------------------------------------------------------------ from the page
     async def _walk_call(self, fn, *args):
         return await self.loop.run_in_executor(self.walk_pool, fn, *args)
@@ -85,14 +144,26 @@ class WebLink:
             b = None
         if b not in POSES:
             return {"ok": False, "msg": f"{m.get('name')!r} is not a pose of this show"}
+        if self._moving():
+            return {"ok": False, "msg": "busy: the robot is walking"}
         if self.walking:
             await self.walk_end({})
+        if b is not RobotBehavior.STAND:
+            await self._send({"type": "walk_state", "phase": "final_pose", "detail": b.value})
         res = await asyncio.to_thread(self.guard.execute, plan(b))
         log.log(logging.INFO if res.status in OK_STATUSES else logging.WARNING, "pose %s: %s %s", b.value,
                 res.status.value, res.detail)
         return {"ok": res.status in OK_STATUSES, "msg": f"{b.value}: {res.status.value} — {res.detail}"}
 
     async def walk(self, m: dict) -> None:
+        if self.robot.is_real:
+            # the page's simulated room is not the real room: velocities from it never reach the real robot
+            if not self.walk_refused:
+                self.walk_refused = True
+                why = ("the real robot walks only by its own camera — the page asks for 'approach', not velocities")
+                log.warning("page velocity refused: %s", why)
+                await self._send({"type": "walk_refused", "msg": why})
+            return
         if not self.walking:
             if self.walk_refused:
                 return
@@ -130,8 +201,8 @@ class WebLink:
         self.driver, self.loop = ws, asyncio.get_running_loop()
         self.walking = self.walk_refused = False
         log.info("page connected: %s", ws.request.headers.get("Origin") or ws.remote_address)
-        await self._send({"type": "hello", "mode": self.mode,
-                          "detail": getattr(self.robot, "endpoint", "mock robot")})
+        await self._send({"type": "hello", "mode": self.mode, "walking": "on" if self.approacher else
+                          self.walk_off_reason, "detail": getattr(self.robot, "endpoint", "mock robot")})
         await self._send(self.state())
         try:
             async for raw in ws:
@@ -140,6 +211,15 @@ class WebLink:
                     cmd = m.get("cmd")
                     if cmd == "walk":
                         await self.walk(m)
+                    elif cmd in ("approach", "go_home"):
+                        if self._moving() or (self.pose_task is not None and not self.pose_task.done()):
+                            await self._send({"type": "done", "id": m.get("id"), "ok": False, "status": "busy",
+                                              "msg": "busy: one movement at a time"})
+                        else:
+                            fn = self.approach if cmd == "approach" else self.go_home
+                            self.move_task = asyncio.create_task(self._reply(m, fn(m)))
+                    elif cmd == "cancel_walk":
+                        self.move_stop.set()
                     elif cmd == "pose":
                         if self.pose_task is not None and not self.pose_task.done():
                             await self._send({"type": "done", "id": m.get("id"), "ok": False,
@@ -150,6 +230,7 @@ class WebLink:
                         await self._reply(m, self.walk_end(m))
                     elif cmd == "stop":
                         self.walking = False
+                        self.move_stop.set()
                         await asyncio.to_thread(self.guard.software_stop, "Esc / Stop on the page")
                     elif cmd == "arm":
                         ok, why = await asyncio.to_thread(self.guard.arm, 0)
@@ -161,6 +242,7 @@ class WebLink:
         finally:
             self.driver = None
             log.warning("page disconnected")
+            await self.cancel_walk()  # the approach stops and runs its own Move 0 → stop → stop_move
             if self.walking or getattr(self.robot, "gait", False):
                 await self.walk_end({}, reason="the page disconnected")
             if self.robot.is_real and self.guard.armed:
@@ -186,8 +268,33 @@ def add_arguments(p) -> None:
                    help="required for the real robot: someone holds the Unitree remote")
     p.add_argument("--host", default="127.0.0.1", help="WebSocket address (keep it on localhost)")
     p.add_argument("--port", type=int, default=8770)
+    p.add_argument("--walk", action="store_true",
+                   help="let the page ask the robot to walk to the person (camera-guided, needs calibration: "
+                        "SHOW_WALK_CALIBRATED=true and the k values)")
     p.add_argument("--allow-origin", action="append", default=[],
                    help="another page origin allowed to drive, e.g. https://my-preview.vercel.app")
+
+
+def build_real_approacher(settings, robot, guard, *, enabled: bool):
+    """The camera-guided Approacher on the real robot — or (None, why not). Same gates as `itu present --walk`."""
+    if not enabled:
+        return None, "start itu web-link with --walk to let the robot walk to the person"
+    if not settings.show_walk_calibrated:
+        return None, ("distances are not calibrated — `itu show walk-test --calibrate 2 --posture sitting` (and "
+                      "standing), then SHOW_WALK_CALIBRATED=true")
+    if not getattr(robot, "can_walk", False):
+        return None, "this robot connection cannot walk"
+    from .bot.app import build_estimator
+    from .performance.approach import Approacher
+    from .performance.runtime import WALK_CAMERA_TIMEOUT_MS, approach_settings
+    from .vision.frame_sources import make_frame_source
+
+    est = build_estimator(settings)
+    if est is None:
+        return None, "pose estimation unavailable (`itu setup`)"
+    return Approacher(robot, guard, lambda: make_frame_source(settings.show_walk_camera, timeout_ms=WALK_CAMERA_TIMEOUT_MS,
+                                                              network_interface=settings.robot_network_interface),
+                      est, approach_settings(settings)), ""
 
 
 def cmd_web_link(args) -> int:
@@ -197,11 +304,14 @@ def cmd_web_link(args) -> int:
     if not args.mock and not args.i_have_physical_estop:
         raise SystemExit("Refusing: the real robot needs --i-have-physical-estop (keep the Unitree remote in your "
                          "hand), or use --mock.")
-    if args.mock:
-        from .robot.mock import MockRobotAdapter
+    approacher, walk_off = None, ""
+    if args.mock:  # the same high-level contract, served by the Python simulation
+        from .performance.runtime import sim_approach_settings
+        from .performance.sim_robot import SimRobot
 
-        robot = MockRobotAdapter(time_scale=1.0)
-        robot.connect()
+        s = get_settings()
+        sim = SimRobot(sim_approach_settings(s), pose_time_scale=1.0)
+        robot, approacher = sim.robot, sim.approacher
     else:
         from .robot.zhaw_bridge import ZhawBridgeAdapter
 
@@ -212,7 +322,11 @@ def cmd_web_link(args) -> int:
         except Exception as exc:
             raise SystemExit(f"cannot reach go2_bridge at {robot.endpoint}: {exc}\n"
                              f"Start it first: python/scripts/start_bridge.sh <interface>   (or use --mock)")
-    guard = MotionGuard(robot, hardware_gates_open=True, cooldown_s=0)
+    guard = sim.guard if args.mock else MotionGuard(robot, hardware_gates_open=True, cooldown_s=0)
+    if not args.mock:
+        approacher, walk_off = build_real_approacher(s, robot, guard, enabled=args.walk)
+        print("Walking: " + ("ON — camera-guided (the robot's camera finds the person)" if approacher else
+                             f"off — {walk_off}"), flush=True)
 
     def announce(g) -> None:
         _, event, reason = g.history[-1]
@@ -222,7 +336,7 @@ def cmd_web_link(args) -> int:
     if robot.is_real:
         ok, why = guard.arm(operator_id=0)
         print(("ARMED: " if ok else "NOT armed: ") + why, flush=True)
-    link = WebLink(robot, guard, "mock" if args.mock else "bridge")
+    link = WebLink(robot, guard, "mock" if args.mock else "bridge", approacher, walk_off)
     try:
         asyncio.run(serve(link, args.host, args.port, ORIGINS + args.allow_origin))
     except KeyboardInterrupt:

@@ -301,6 +301,7 @@ def robot_camera_factory(settings: Settings, opts: "ShowOptions", source: str | 
     return make
 
 ROBOT_CAMERAS = ("zhaw_bridge", "unitree")
+WALK_CAMERA_TIMEOUT_MS = 300  # the approach's robot-camera read: never block the walking loop for seconds
 
 
 def explain_camera_error(spec: str, exc: Exception) -> str:
@@ -433,7 +434,7 @@ def build_director(settings: Settings, opts: ShowOptions, *, stage: Stage | None
     if opts.sim_robot:
         from .sim_robot import SimRobot
 
-        sim = SimRobot(approach_settings(settings), pose_time_scale=min(1.0, opts.fast))
+        sim = SimRobot(sim_approach_settings(settings), pose_time_scale=min(1.0, opts.fast))
         motion = sim.motion  # the same MotionGuard path as the real robot — with the mock robot
     else:
         motion = MotionCues(guard, planner,
@@ -530,9 +531,18 @@ def simulated_approacher(settings: Settings, fast: float = 1.0, person=(2.3, 0.5
     robot.connect()
     robot.world = world
     guard = MotionGuard(robot, hardware_gates_open=False, cooldown_s=0)
-    a = Approacher(robot, guard, world.camera, world, approach_settings(settings), clock=clock, sleep=sleep)
+    a = Approacher(robot, guard, world.camera, world, sim_approach_settings(settings), clock=clock, sleep=sleep)
     a.world = world
     return a
+
+
+def sim_approach_settings(settings: Settings):
+    """The simulated room is bigger than the conservative real-robot limits (0.10 m/s, 1.5 m): it is walked at the
+    rehearsal values (0.22 m/s, 3.5 m) so the drawn dog reaches the drawn person. Nothing physical moves."""
+    import dataclasses
+
+    s = approach_settings(settings)
+    return dataclasses.replace(s, speed=max(s.speed, 0.22), max_distance_m=max(s.max_distance_m, 3.5))
 
 
 def build_approacher(settings: Settings, opts: "ShowOptions", guard, estimator=None):
@@ -560,7 +570,8 @@ def build_approacher(settings: Settings, opts: "ShowOptions", guard, estimator=N
         log.warning("--walk ignored: pose estimation unavailable")
         return None
     return Approacher(robot, guard,
-                      lambda: make_frame_source(settings.show_walk_camera,
+                      # a short wait per frame: a missing frame stops the walk within camera_lost_seconds
+                      lambda: make_frame_source(settings.show_walk_camera, timeout_ms=WALK_CAMERA_TIMEOUT_MS,
                                                 network_interface=settings.robot_network_interface),
                       est, approach_settings(settings))
 

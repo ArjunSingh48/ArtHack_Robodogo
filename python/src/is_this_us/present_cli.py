@@ -55,7 +55,13 @@ def _camera_ok(spec: str) -> tuple[bool, str]:
         return False, explain_camera_error(spec, exc)
     try:
         frame = src.read()
-        return (frame is not None), (f"{spec} delivers frames" if frame is not None else f"{spec} opened but no frame")
+        if frame is None:
+            return False, f"{spec} opened but no frame"
+        info = src.info() if hasattr(src, "info") else None
+        if info:  # what actually runs: name, index, size, measured frame rate
+            return True, (f"{spec} → \"{info['label']}\" (webcam:{info['index']}), {info['width']}×{info['height']} "
+                          f"at {info['fps']:.0f} fps")
+        return True, f"{spec} delivers frames"
     finally:
         try:
             src.close()
@@ -118,8 +124,99 @@ def run_checks(args, settings) -> bool:
     return good
 
 
-def cmd_present(args) -> int:
+def default_camera() -> str:
+    """macOS: the built-in camera by NAME (never the iPhone via Continuity); elsewhere webcam:0."""
+    return "macbook" if sys.platform == "darwin" else "webcam:0"
+
+
+def cmd_camera_list(args) -> int:
+    from .vision.cameras import describe, list_cameras
+
+    cams = list_cameras()
+    if not cams:
+        print("No cameras found (macOS: allow the terminal in System Settings → Privacy & Security → Camera; "
+              "install names with `pip install -e '.[vision]'`).")
+        return 1
+    print(f"Cameras ({cams[0].method}" + ("" if cams[0].index_verified else
+                                          " — indices UNVERIFIED: pip install -e '.[vision]' for AVFoundation names")
+          + "):")
+    for line in describe(cams):
+        print(line)
+    print("\nUse:  itu present --camera macbook   or   itu present --camera-name \"FaceTime HD Camera\"")
+    if args.snapshots:
+        from pathlib import Path
+
+        from PIL import Image
+
+        from .vision.frame_sources import WebcamSource
+
+        out = Path(args.snapshots)
+        out.mkdir(parents=True, exist_ok=True)
+        for c in cams:
+            try:
+                src = WebcamSource(c.index)
+                f = src.read()
+                src.close()
+            except Exception as exc:
+                print(f"  webcam:{c.index}: {exc}")
+                continue
+            if f is not None:
+                path = out / f"webcam{c.index}.jpg"
+                Image.fromarray(f.image).save(path, quality=80)
+                print(f"  webcam:{c.index} ({c.name}) → {path}")
+    return 0
+
+
+def cmd_bridge(args) -> int:
+    from .bridge_launcher import BridgeLauncher, bridge_status, read_pid
     from .config import get_settings
+
+    s = get_settings()
+    launcher = BridgeLauncher(args.interface, host=s.zhaw_bridge_host, cmd_port=s.zhaw_bridge_cmd_port)
+    pid = read_pid(launcher.pid_path)
+    st = bridge_status(s.zhaw_bridge_host, s.zhaw_bridge_cmd_port)
+    if args.bridge_action == "stop":
+        if pid is None:
+            print("no bridge started by `itu present --with-bridge` is running" +
+                  (" (one answers on the port — stop it in its own terminal with Ctrl+C)" if st else ""))
+            return 0 if st is None else 1
+        print(f"stopping bridge pid {pid} (Ctrl+C → its own Move 0 → StopMove; then SIGTERM / SIGKILL if needed)…")
+        return 0 if launcher.stop_pid(pid) else 1
+    print(f"bridge on {s.zhaw_bridge_host}:{s.zhaw_bridge_cmd_port}: " +
+          (f"answers — SDK timeout {st.get('sport_timeout_s', '3 (stock)')} s" if st else "no answer") +
+          (f"; started by the launcher (pid {pid})" if pid else ""))
+    return 0
+
+
+def cmd_present(args) -> int:
+    """One show and at most one bridge at a time; the robot is stopped before the bridge goes."""
+    import signal
+
+    from .bridge_launcher import LaunchRefused, ShowLock
+
+    def term(signum, frame):  # SIGTERM (e.g. `kill`) ends like Ctrl+C: every finally block runs
+        raise KeyboardInterrupt
+    old = signal.signal(signal.SIGTERM, term)
+    try:
+        with ShowLock():
+            try:
+                return _cmd_present(args)
+            finally:
+                if getattr(args, "_launcher", None) is not None:
+                    print("stopping the bridge (after the robot was stopped)…")
+                    _close_launcher(args)
+    except LaunchRefused as exc:
+        print(f"✗ {exc}")
+        return 2
+    finally:
+        signal.signal(signal.SIGTERM, old)
+
+
+def _cmd_present(args) -> int:
+    from .config import get_settings
+
+    if getattr(args, "camera_name", None):
+        args.camera = f"name:{args.camera_name}"
 
     if args.sim_robot and (args.motion or args.walk):
         sys.exit("--sim-robot replaces the real robot: leave out --motion/--walk (the simulated dog does both).")
@@ -144,12 +241,32 @@ def cmd_present(args) -> int:
     os.environ.update(env)
     get_settings.cache_clear()
     s = get_settings()
-    if not run_checks(args, s) and not args.force:
-        print("\nNot starting (fix the ✗ above, or --force to start anyway without what failed).")
-        return 2
+    if getattr(args, "with_bridge", False) and not args.sim_robot and not args.no_robot:
+        from .bridge_launcher import BridgeLauncher, LaunchRefused
+
+        # the checks need the bridge: start (or reuse) it first; cmd_present stops it after the show
+        try:
+            args._launcher = BridgeLauncher(args.interface, host=s.zhaw_bridge_host, cmd_port=s.zhaw_bridge_cmd_port)
+            h = args._launcher.ensure(restart=getattr(args, "restart_bridge", False))
+        except LaunchRefused as exc:
+            print(f"✗ {exc}")
+            return 2
+        print(("✓ started the bridge (python/scripts/start_bridge.sh " + args.interface + f"), log {h.log_path}"
+               if h.started_by_us else "✓ using the bridge that is already running (left running afterwards)")
+              + f" · SDK timeout {h.status.get('sport_timeout_s')} s")
+    if not run_checks(args, s):
+        if args.motion or args.walk:  # never --force past a failed check when the robot would move
+            print("\nNot starting: a check failed and motion was requested (--force does not apply to motion). "
+                  "Fix the ✗ above.")
+            return 2
+        if not args.force:
+            print("\nNot starting (fix the ✗ above, or --force to start anyway without what failed).")
+            return 2
     print("\nPoses: " + ("SIMULATED dog" if args.sim_robot else
                          "ON (armed, in place)" if args.motion else "off (add --motion --i-have-physical-estop)")
           + " · Walking: " + ("ON" if args.walk else "off") + " · Telegram: " + ("on" if args.telegram else "off"))
+    print(f"Interface: {args.interface} · robot {args.robot_ip} · photo/display camera: {args.camera} · "
+          f"pose camera: {args.pose_camera} (the robot's camera steers the walk)")
     from .performance.cli import cmd_show
 
     show_args = argparse.Namespace(
@@ -160,13 +277,25 @@ def cmd_present(args) -> int:
     return cmd_show(show_args) or 0
 
 
+def _close_launcher(args) -> None:
+    launcher = getattr(args, "_launcher", None)
+    if launcher is not None:
+        launcher.close()
+
+
 def register(sub) -> None:
     p = sub.add_parser("present", help="check robot/bridge/camera, then start the presentation (beamer + robot)")
     p.add_argument("--interface", default=os.environ.get("ROBOT_NETWORK_INTERFACE") or "en6",
                    help="the USB-Ethernet interface to the Go2 (default en6)")
     p.add_argument("--robot-ip", default="192.168.123.161")
-    p.add_argument("--camera", default=os.environ.get("SHOW_CAMERA_SOURCE") or "webcam:0",
-                   help="pose + photo camera (default the laptop's webcam:0)")
+    p.add_argument("--camera", default=os.environ.get("SHOW_CAMERA_SOURCE") or default_camera(),
+                   help="photo + display camera: macbook (default on macOS: the built-in camera by name, never the "
+                        "iPhone), name:<camera name>, or webcam:<index> — see `itu camera-list`")
+    p.add_argument("--camera-name", help='the photo camera by name, e.g. "FaceTime HD Camera" (= --camera name:…)')
+    p.add_argument("--with-bridge", action="store_true",
+                   help="start python/scripts/start_bridge.sh <interface> first (or reuse a running patched bridge); "
+                        "stopped after the show, after the robot")
+    p.add_argument("--restart-bridge", action="store_true", help="with --with-bridge: restart the bridge it started")
     p.add_argument("--fallback", default=os.environ.get("SHOW_CAMERA_FALLBACK", ""),
                    help="if the camera fails, read poses with this one (e.g. zhaw_bridge; then no joint photos)")
     p.add_argument("--pose-camera", choices=["robot", "laptop"], default=os.environ.get("SHOW_POSE_CAMERA") or "robot",
@@ -183,3 +312,12 @@ def register(sub) -> None:
     p.add_argument("--rounds-only", action="store_true", help="skip the narration, straight to each round")
     p.add_argument("--force", action="store_true", help="start even if a check failed (what failed stays off)")
     p.set_defaults(fn=cmd_present)
+
+    c = sub.add_parser("camera-list", help="list cameras with names and OpenCV indices (macOS: built-in vs iPhone)")
+    c.add_argument("--snapshots", metavar="DIR", help="also save one frame per camera into DIR, to see which is which")
+    c.set_defaults(fn=cmd_camera_list)
+
+    b = sub.add_parser("bridge", help="the bridge started by `itu present --with-bridge`: status | stop")
+    b.add_argument("bridge_action", choices=["status", "stop"])
+    b.add_argument("--interface", default=os.environ.get("ROBOT_NETWORK_INTERFACE") or "en6")
+    b.set_defaults(fn=cmd_bridge)

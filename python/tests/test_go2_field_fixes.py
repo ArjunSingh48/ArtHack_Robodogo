@@ -343,9 +343,9 @@ async def test_web_link_pose_walk_and_cleanup(fast_steps):
         assert (await recv_until(lambda m: m.get("id") == 1))["ok"]
         await ws.send(json.dumps({"cmd": "pose", "id": 2, "name": "stand"}))
         assert (await recv_until(lambda m: m.get("id") == 2))["ok"]
-        for _ in range(8):
-            await ws.send(json.dumps({"cmd": "walk", "vx": 0.25, "vy": 0, "vyaw": 0}))
-            await asyncio.sleep(0.1)
+        # the real robot never takes velocities from the page's simulated room (it walks by its own camera)
+        await ws.send(json.dumps({"cmd": "walk", "vx": 0.25, "vy": 0, "vyaw": 0}))
+        assert "own camera" in (await recv_until(lambda m: m.get("type") == "walk_refused"))["msg"]
         await ws.send(json.dumps({"cmd": "walk_end", "id": 3}))
         assert (await recv_until(lambda m: m.get("id") == 3))["ok"]
         await ws.send(json.dumps({"cmd": "pose", "id": 4, "name": "front_flip"}))
@@ -354,8 +354,7 @@ async def test_web_link_pose_walk_and_cleanup(fast_steps):
     try:
         a, guard, got = await _link_session(bridge, script)
         assert actions(bridge)[:3] == ["sit", "stand_up", "balance_stand"]
-        moving = [c for c in bridge.commands() if c[1] == "move" and any(c[2])]
-        assert moving and max_gap(moving) < DEADMAN_S
+        assert not [c for c in bridge.commands() if c[1] == "move" and any(c[2])]
         assert ("action", ("stop_move",)) in [(c, v) for _, c, v in bridge.log]
         assert "front_flip" not in actions(bridge)
         # the page went away: disarmed, with the reason
@@ -366,21 +365,30 @@ async def test_web_link_pose_walk_and_cleanup(fast_steps):
 
 
 async def test_web_link_disconnect_mid_walk_ends_the_walk():
-    bridge = FakeBridge()
+    """Mock mode still relays page velocities (the simulated robot); a closed tab ends that walk too.
+    (The real robot's camera-guided walk: tests/test_real_walk_contract.py.)"""
+    from is_this_us.robot.mock import MockRobotAdapter
+    from is_this_us.web_link import WebLink
 
-    async def script(ws, recv_until):
-        await recv_until(lambda m: m.get("type") == "state")
-        for _ in range(5):
-            await ws.send(json.dumps({"cmd": "walk", "vx": 0.25, "vy": 0, "vyaw": 0}))
-            await asyncio.sleep(0.1)
-        # the tab closes while walking
+    r = MockRobotAdapter(time_scale=0.0)
+    r.connect()
+    r.body = BodyState.STANDING
+    link = WebLink(r, MotionGuard(r, hardware_gates_open=False, cooldown_s=0), "mock")
+    pytest.importorskip("websockets")
+    from websockets.asyncio.client import connect as ws_connect
+    from websockets.asyncio.server import serve as ws_serve
 
-    try:
-        a, guard, got = await _link_session(bridge, script)
-        assert walk_was_ended(bridge) and not a.gait
-        a.close()
-    finally:
-        bridge.close()
+    from is_this_us.web_link import ORIGINS
+
+    async with ws_serve(link.handle, "127.0.0.1", 0, origins=ORIGINS) as server:
+        port = server.sockets[0].getsockname()[1]
+        async with ws_connect(f"ws://127.0.0.1:{port}") as ws:
+            await ws.recv()
+            for _ in range(5):
+                await ws.send(json.dumps({"cmd": "walk", "vx": 0.25, "vy": 0, "vyaw": 0}))
+                await asyncio.sleep(0.1)
+        await asyncio.sleep(0.5)
+    assert any(v[0] > 0 for v in r.velocities) and r.velocities[-1] == (0.0, 0.0, 0.0) and not r.gait
 
 
 async def test_web_link_esc_stops_and_latches(fast_steps):
@@ -388,8 +396,6 @@ async def test_web_link_esc_stops_and_latches(fast_steps):
 
     async def script(ws, recv_until):
         await recv_until(lambda m: m.get("type") == "state" and m["armed"])
-        await ws.send(json.dumps({"cmd": "walk", "vx": 0.25, "vy": 0, "vyaw": 0}))
-        await asyncio.sleep(0.15)
         await ws.send(json.dumps({"cmd": "stop"}))
         st = await recv_until(lambda m: m.get("type") == "state" and not m["armed"])
         assert "STOP LATCHED" in st["line"] and "Esc" in st["line"]

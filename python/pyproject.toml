@@ -21,7 +21,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-vision = ["mediapipe>=0.10.30", "opencv-python>=4.10"]
+vision = ["mediapipe>=0.10.30", "opencv-python>=4.10",
+          "pyobjc-framework-AVFoundation>=10; sys_platform == 'darwin'"]  # camera names on macOS (itu camera-list)
 voice = ["openai[realtime]>=3.37,<4"]
 talk = ["openai[realtime]>=3.37,<4", "sounddevice>=0.5"]
 bridge = ["pyzmq>=25", "websockets>=14"]  # ZHAW go2_main bridge connection; `itu web-link` for the browser show

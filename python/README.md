@@ -206,6 +206,30 @@ code. Run sheet, consent rules and every control: [`docs/PERFORMANCE.md`](docs/P
 start it with `scripts/start_bridge.sh <interface>` (go2_main unchanged, 10 s SDK timeout), then set `ROBOT_MODEL=zhaw_bridge` and `CAMERA_SOURCE=zhaw_bridge` here
 (`pip install -e ".[bridge]"`). No Unitree SDK needed in this project. Details: `docs/HARDWARE_SETUP.md`.
 
+**The presentation with the real Go2 — one command** (it starts or reuses the bridge, never a second one, and
+stops it after the show — after the robot was stopped):
+
+```bash
+itu camera-list                                   # names + indices; the iPhone (Continuity) is marked, never used
+itu present --with-bridge --interface en6 --camera macbook --motion --walk --rounds-only \
+            --i-have-physical-estop --no-voice
+itu bridge status        # / itu bridge stop — only a bridge this launcher started
+```
+
+* `--camera macbook` (the default on macOS) opens the built-in camera **by name**, never an iPhone / Continuity /
+  Desk View camera; it fails with a clear message instead of falling back. `--camera-name "FaceTime HD Camera"`
+  picks any camera by name. The camera is read by one thread that keeps only the newest frame (no lag build-up).
+* The robot's own camera steers the walk; the MacBook camera shows the participant and takes the photo — the robot
+  camera never stands in for the joint photo.
+* Walking defaults are deliberately slow for the first supervised runs: `SHOW_WALK_SPEED=0.10` m/s,
+  `SHOW_WALK_MAX_DISTANCE_M=1.5`.
+* A first view with head or feet cut off is **not** "already close": the dog stands still, looks again for 2.5 s,
+  and otherwise reports *target unreliable — move the participant back or reframe*; it never takes the pose there.
+* Log lines to watch: `walk_start`, `approach: walk: …` (box, clipped, distance, bearing, command, rate),
+  `walk stream: N moves … Hz, longest gap … ms`, `walk_stop: … cleanup … acknowledged`.
+* Ctrl+C (or End on the operator page) stops the show; the robot gets Move 0 → stop → stop_move, then the bridge
+  gets its own Ctrl+C.
+
 Direct SDK alternative:
 
 ```bash

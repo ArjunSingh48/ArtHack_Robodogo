@@ -139,7 +139,8 @@ def test_cooldown_battery_error_and_timeout():
     robot.connect()
     g = MotionGuard(robot, hardware_gates_open=True, cooldown_s=60)
     g.arm(1)
-    assert g.execute(plan(RobotBehavior.STAND)).status is ExecutionStatus.SIMULATED
+    # (a stand while already standing sends nothing and starts no cooldown — so a real motion first)
+    assert g.execute(plan(RobotBehavior.GREET)).status is ExecutionStatus.SIMULATED
     r = g.execute(plan(RobotBehavior.SIT))
     assert r.status is ExecutionStatus.REJECTED and "cooldown" in r.detail
 

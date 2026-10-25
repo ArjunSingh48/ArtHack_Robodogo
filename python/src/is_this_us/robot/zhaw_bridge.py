@@ -63,6 +63,7 @@ REQUIRED_SDK_TIMEOUT_S = 10.0  # hello / stretch take ~4 s; go2_main's own 3 s i
 # STREAM_PERIOD_S (10 Hz) — but only while it is fresher than STREAM_STALE_S; after that it sends zero.
 STREAM_PERIOD_S = 0.1
 STREAM_STALE_S = 1.0
+STREAM_GAP_WARN_S = 0.2  # a longer pause between two moves is logged (the bridge's deadman is 250 ms)
 
 # end_walk(): each cleanup command is retried this often before it is reported as unverified
 CLEANUP_ATTEMPTS = 3
@@ -114,6 +115,9 @@ class ZhawBridgeAdapter:
         self._stream_thread: threading.Thread | None = None
         self._stream_lock = threading.Lock()
         self.stream_log: list[tuple[float, float, float, float]] = []  # (time, vx, vy, vyaw) actually sent
+        self.move_latency_max = 0.0  # slowest move answer since the walk started (seconds)
+        self._gap_warned = 0.0
+        self._walk_t0 = 0.0
         self.body = BodyState.UNKNOWN
         self._ctx = None
         self._sock = None
@@ -278,8 +282,19 @@ class ZhawBridgeAdapter:
 
     # ------------------------------------------------------------------ walking
     def _send_move(self, vx: float, vy: float, vyaw: float) -> None:
+        t0 = time.monotonic()
         resp = self.request("move", {"vx": round(vx, 3), "vy": round(vy, 3), "vyaw": round(vyaw, 3)}, _move_ok=True)
-        self.stream_log.append((time.monotonic(), vx, vy, vyaw))
+        now = time.monotonic()
+        self.move_latency_max = max(self.move_latency_max, now - t0)
+        if self.stream_log and now - self.stream_log[-1][0] > STREAM_GAP_WARN_S and (vx or vy or vyaw) \
+                and now - self._gap_warned > 1.0:
+            # the bridge zeroes velocity after 250 ms without a move: a gap this long makes the dog stutter
+            log.warning("walking: %.0f ms since the previous move (bridge deadman 250 ms) — the process is too busy",
+                        (now - self.stream_log[-1][0]) * 1e3)
+            self._gap_warned = now
+        self.stream_log.append((now, vx, vy, vyaw))
+        if len(self.stream_log) > 5000:
+            del self.stream_log[:1000]
         if not resp.get("ok"):
             raise BridgeError(f"move refused: {resp.get('msg')}")
 
@@ -292,6 +307,8 @@ class ZhawBridgeAdapter:
             raise BridgeError("an action is running: no walking until it is confirmed")
         vx, vy, vyaw = clamp_velocity(vx, vy, vyaw)
         with self._stream_lock:
+            if not self.gait:
+                self._walk_t0, self.move_latency_max = time.monotonic(), 0.0
             self.gait = True
             self._stream_v, self._stream_t = (vx, vy, vyaw), time.monotonic()
             if self._stream_thread is None or not self._stream_thread.is_alive():
@@ -360,6 +377,10 @@ class ZhawBridgeAdapter:
             self._stream_t = 0.0
             self._stream_v = (0.0, 0.0, 0.0)
         log.info("end walk (%s): Move(0,0,0) → stop → stop_move", reason)
+        st = self.stream_stats()
+        if st["moves"]:
+            log.info("walk stream: %d moves in %.1f s (%.1f Hz), longest gap %.0f ms, slowest answer %.0f ms",
+                     st["moves"], st["seconds"], st["rate_hz"], st["max_gap_ms"], st["max_latency_ms"])
         deadline = time.monotonic() + CLEANUP_DEADLINE_S
         ok = all([  # a list, not a generator: every step is tried even if one fails
             self._cleanup_step("Move(0,0,0)", lambda: self.request("move", {"vx": 0.0, "vy": 0.0, "vyaw": 0.0},
@@ -373,6 +394,18 @@ class ZhawBridgeAdapter:
             log.error("end walk (%s): cleanup NOT verified — the dog may still be in its walking gait; "
                       "use the Unitree remote", reason)
         return ok
+
+    def stream_stats(self) -> dict:
+        """Moves actually sent since the current/last walk started: count, rate, longest gap — the evidence that
+        velocity was streamed continuously (and not one command followed by silence)."""
+        t0 = self._walk_t0
+        times = [t for t, *_ in self.stream_log if t >= t0] if t0 else []
+        span = (times[-1] - times[0]) if len(times) > 1 else 0.0
+        gaps = [b - a for a, b in zip(times, times[1:])]
+        return {"moves": len(times), "seconds": round(span, 2),
+                "rate_hz": round((len(times) - 1) / span, 1) if span > 0 else 0.0,
+                "max_gap_ms": round(max(gaps) * 1e3, 1) if gaps else 0.0,
+                "max_latency_ms": round(self.move_latency_max * 1e3, 1)}
 
     def stop(self) -> None:
         """Software stop: cancel our sequence, zero velocity, StopMove. NOT an emergency stop."""

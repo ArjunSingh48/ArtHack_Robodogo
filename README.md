@@ -1,8 +1,8 @@
 # Is This Us?
 
 A tiny robot dog looks for us in 5,000 years of pictures of humans and dogs. Take any pose — it finds the
-closest picture of that era, walks over and takes the painted dog's pose next to you, and reveals the match
-in a Telegram-style chat from **Good Boy**.
+closest picture of that era, walks over and takes the painted dog's pose next to you, and makes a THEN / NOW
+picture of the two of you.
 
 **Live: https://isthisus.vercel.app**
 
@@ -11,31 +11,12 @@ Everything runs in the browser (a static site in `web/`):
 - the pose is read on the visitor's device (MediaPipe Pose Landmarker); the camera picture never leaves it
 - the dog is a simulated Unitree Go2 (official URDF, three.js) next to an avatar posed from the camera — or the
   real one, with `?robot=` ([below](#the-real-robot))
-- the voice is pre-generated with the configured ElevenLabs voice (`web/audio/elevenlabs/`);
-  provider/voice-specific filenames and a checksum manifest prevent reuse of older voices; no API keys online
+- the voice is pre-generated (`web/audio/`); no API keys online
 - start with your camera or with sample photos (Unsplash); every step has a hash (`#paintings.04`) to come back to it
-- after a painting match, a local **Telegram preview** shows the photo, the painting with a short caption and
-  italic museum attribution. The chat ends with the painting; visitor photos have no caption. It appears in a
-  narrow phone frame with time, signal, Wi-Fi and battery icons, and consistent chat-sized text. The spoken pose
-  questions still vary without consecutive repeats; Repeat replays the same spoken line. The completed chat waits for
-  **Continue (photo seen)**. Missing captures omit the photo; sample photos are labeled as rehearsal images.
-
-The chat is a browser mockup: it does not send messages or photos to Telegram. Actual delivery remains in
-the Python application, with photo consent and separate operator confirmation. Meme and rescue cards retain
-their existing presentation. The chat adds no visitor reply or choice; Pause, Resume and End remain operator controls.
-Captured photos stay in browser memory and the preview is cleared when leaving it. Reduced-motion settings remove
-the sliding animation. The site needs internet for externally loaded libraries and models.
 
 ```bash
 cd web && python3 -m http.server 8790      # local: http://127.0.0.1:8790/
 cd web && vercel deploy --prod             # deploy
-```
-
-The chat regression checks use a local headless Chrome/Chromium (set `CHROME_BIN`
-if it is not found automatically), with no Telegram or robot connection:
-
-```bash
-node --test web/tests/telegram.browser.test.mjs
 ```
 
 ## The real robot
@@ -50,9 +31,15 @@ isthisus.vercel.app in Chrome ──WebSocket ws://127.0.0.1:8770──► itu w
 ```
 
 `itu web-link` passes everything through the same safety code as the Python show: calm poses only (sit, lie
-down, paw, stretch, stand), one at a time and confirmed, walking slow and streamed at 10 Hz, and every walk ended
-with Move(0,0,0) → stop → stop_move so the dog leaves its walking gait. Without `?robot=` the site stays
-simulation-only.
+down, paw, stretch, stand), one at a time and confirmed, and every walk ended with Move(0,0,0) → stop → stop_move
+so the dog leaves its walking gait. Without `?robot=` the site stays simulation-only.
+
+**Python decides every physical movement.** With a robot connected, the page only asks for
+`approach {side, posture, facing}` (and `go_home`); `itu web-link` runs the camera-guided approach of the Python
+show: the Go2's own camera finds the real participant, the velocity is streamed at 10 Hz through the adapter, and
+the page's 3-D dog draws the state that comes back (searching · target acquired · walking · turning · arrived ·
+target unreliable · camera lost · stopped · final pose · disarmed / error). The page's simulated room (its fixed
+person position) never moves the real robot; open-loop velocities from the page are refused.
 
 ### Running it on show day
 
@@ -68,9 +55,11 @@ simulation-only.
    (default `~/Projects/go2-dog/go2_main`; otherwise set `GO2_MAIN=/path/to/go2_main`).
 2. **Start the relay** in a second terminal:
    ```bash
-   cd python && .venv/bin/itu web-link --i-have-physical-estop
+   cd python && .venv/bin/itu web-link --i-have-physical-estop --walk
    ```
-   It prints `ARMED` when the bridge answers with the 10 s timeout. Otherwise it prints why the robot is not armed.
+   It prints `ARMED` when the bridge answers with the 10 s timeout (otherwise why not), and `Walking: ON` only when
+   `--walk` is given and the distances are calibrated (`SHOW_WALK_CALIBRATED=true` with the k values). Without
+   `--walk` the dog takes its poses where it stands.
 3. **Open https://isthisus.vercel.app/?robot=ws://127.0.0.1:8770 in Chrome** and allow the "local network
    access" prompt. The badge at the bottom left must say **REAL GO2 · armed**.
 4. **Keep the Unitree remote in your hand.** The bridge does not report the battery (watch it in the Unitree app),
@@ -83,6 +72,8 @@ During the show:
 - If a pose fails or its outcome is unknown, the robot disarms and the badge says which pose and why. Nothing more
   is sent until you press Arm.
 - Closing or reloading the page ends any walk and disarms ("the page disconnected"). Press Arm again after reloading.
+- If the badge says **target unreliable**, the robot's camera could not see the participant's whole body: move them
+  back (about 2 m) or reframe. The dog does not take the pose where it did not arrive.
 - Ctrl+C in the `itu web-link` terminal stops the dog (Move 0 → stop → stop_move). Ctrl+C in the bridge terminal
   does the same on the robot itself.
 
@@ -94,9 +85,8 @@ cd web && python3 -m http.server 8790                     # or the live site
 # open http://127.0.0.1:8790/?robot=ws://127.0.0.1:8770
 ```
 
-Walking is open loop: the real dog walks by time at the drawn dog's speed (0.25 m/s, 0.5 rad/s). Over the 1–2 m
-of a round it ends up roughly where the drawn dog does. The Python show (`itu present --motion --walk`, below)
-instead finds the person with the dog's own camera.
+With `--mock`, the same `approach` contract is served by the Python simulation (the same Approacher in a simulated
+room), so the page shows exactly the states it will get from the real robot.
 
 ## The Python application
 
@@ -114,17 +104,6 @@ cd python && python3 -m venv .venv && .venv/bin/pip install -e ".[vision,voice,b
 ```bash
 cd python && .venv/bin/python scripts/export_web.py
 ```
-
-To refresh only the spoken clips using the configured `ELEVENLABS_VOICE_ID`:
-
-```bash
-cd python && .venv/bin/python scripts/export_web.py --audio-only
-```
-
-The exporter reads `python/.env` (or the root `.env` for existing installations).
-It always uses ElevenLabs for browser speech, with no OpenAI fallback. Captions
-and archive credits stay written only. Images in the phone chat use their full
-message width and natural proportions; italic credits are softened to 62% opacity.
 
 Picture credits: museum pictures are public domain / open access (labels on screen); sample photos and the
 meme stand-ins are from Unsplash (Unsplash License) — see `python/data/standins/README.md`.

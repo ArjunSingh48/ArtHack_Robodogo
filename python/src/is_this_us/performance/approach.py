@@ -62,20 +62,52 @@ class ApproachSettings:
     lost_seconds: float = 6.0  # without seeing the person again, give up
     camera_lost_seconds: float = 0.6  # no camera FRAME at all for this long: stop at once (blind)
     rate_hz: float = 8.0
+    # a first sighting with head/feet cut off says nothing about the distance: look this long (standing still)
+    # for a full-body view before giving up with "target_unreliable" — never walk on it, never call it "arrived"
+    unreliable_seconds: float = 2.5
+    frame_max_age_s: float = 0.6  # an older robot-camera frame is not steered on (as if no frame came)
 
 
 @dataclass
 class ApproachResult:
-    status: str  # arrived | not_found | lost | camera_lost | timeout | too_far | stopped | refused | error
+    # arrived (a validated geometric decision, person_at always set) | target_unreliable (only clipped views, no
+    # position) | not_found | lost | camera_lost | timeout | too_far | stopped | refused | error
+    status: str
     detail: str = ""
     travelled_m: float = 0.0
     path: list[tuple[float, float, float, float]] = field(default_factory=list)  # (vx, vy, vyaw, seconds)
     robot_pose: tuple[float, float, float] = (0.0, 0.0, 0.0)  # x, y, yaw from the start (dead reckoning)
     person_at: tuple[float, float] | None = None  # estimated, same frame
+    diagnostics: dict = field(default_factory=dict)  # last look + why it stayed / searched / walked / stopped
+    moves: int = 0  # velocity commands sent by this walk (the adapter's keep-alive adds its own in between)
+    move_rate_hz: float = 0.0  # effective rate of those commands while walking
 
     @property
     def arrived(self) -> bool:
         return self.status == "arrived"
+
+
+# The one high-level movement contract (Python simulation, the real Go2 via the bridge, and the browser show through
+# `itu web-link`): what the approach is doing now. The browser only DISPLAYS these; it never decides where the
+# physical robot is.
+APPROACH_PHASES = ("searching", "target_acquired", "walking", "turning", "arrived", "target_unreliable",
+                   "camera_lost", "stopped", "final_pose", "disarmed", "error")
+FINAL_PHASE = {"arrived": "arrived", "target_unreliable": "target_unreliable", "camera_lost": "camera_lost",
+               "not_found": "stopped", "lost": "stopped", "timeout": "stopped", "too_far": "stopped",
+               "stopped": "stopped", "refused": "error", "error": "error"}
+
+
+def validate_arrival(res: "ApproachResult") -> "ApproachResult":
+    """Invariant of every approach: no valid person position → no arrival (never "already close — stayed")."""
+    if res.status == "arrived" and res.person_at is None:
+        res.status, res.detail = "target_unreliable", f"no valid position for the person ({res.detail})"
+    return res
+
+
+def phase_of(decision: str) -> str:
+    head = decision.split(":", 1)[0]
+    return {"search": "searching", "walk": "walking", "turn": "turning"}.get(head, "searching" if head == "stay"
+                                                                              else "stopped")
 
 
 def _clamp(v: float, m: float) -> float:
@@ -84,7 +116,7 @@ def _clamp(v: float, m: float) -> float:
 
 class Approacher:
     def __init__(self, robot, guard, camera_factory, estimator, settings: ApproachSettings | None = None,
-                 *, clock=time.monotonic, sleep=time.sleep):
+                 *, clock=time.monotonic, sleep=time.sleep, on_state=None):
         self.robot = robot
         self.guard = guard
         self.camera_factory = camera_factory
@@ -93,6 +125,9 @@ class Approacher:
         self.clock = clock
         self.sleep = sleep
         self.memory: ApproachResult | None = None  # the last approach: where we went, how to go back
+        self._decision, self._diag_logged = "", 0.0
+        self.on_state = on_state  # fn(dict) — live state for the browser / operator (APPROACH_PHASES)
+        self._emitted = 0.0
 
     # ------------------------------------------------------------------ helpers
     def _allowed_now(self) -> tuple[bool, str]:
@@ -131,10 +166,56 @@ class Approacher:
         vy = _clamp(vy, self.s.speed)
         vyaw = _clamp(vyaw, max(self.s.turn_speed, self.s.search_speed))
         self._catch_up(res)
+        t0 = time.monotonic()
         self.robot.walk(vx, vy, vyaw)
+        latency = time.monotonic() - t0
+        if res.moves == 0:
+            self._walk_t0 = self.clock()
+            log.info("walk_start: vx=%.2f vy=%.2f vyaw=%.2f (bridge answered in %.0f ms)", vx, vy, vyaw, latency * 1e3)
+        res.moves += 1
+        span = self.clock() - getattr(self, "_walk_t0", self.clock())
+        res.move_rate_hz = res.moves / span if span > 0 else 0.0
+        res.diagnostics.update(cmd=(round(vx, 3), round(vy, 3), round(vyaw, 3)), bridge_ms=round(latency * 1e3, 1))
         self._last_cmd = (self.clock(), (vx, vy, vyaw), dt)
         res.path.append((vx, vy, vyaw, dt))
         self._integrate(res, vx, vy, vyaw, dt)
+
+    def state(self, res: ApproachResult, phase: str, detail: str = "") -> dict:
+        x, y, yaw = res.robot_pose
+        return {"phase": phase, "detail": detail or res.diagnostics.get("decision", ""),
+                "robot": [round(x, 3), round(y, 3), round(yaw, 3)],
+                "person": [round(res.person_at[0], 3), round(res.person_at[1], 3)] if res.person_at else None,
+                "travelled_m": round(res.travelled_m, 2), "moves": res.moves, "rate_hz": round(res.move_rate_hz, 1)}
+
+    def _emit(self, res: ApproachResult, phase: str, detail: str = "", force: bool = False) -> None:
+        if self.on_state is None:
+            return
+        now = self.clock()
+        if not force and now - self._emitted < 0.2:
+            return
+        self._emitted = now
+        try:
+            self.on_state(self.state(res, phase, detail))
+        except Exception as exc:  # a display must never stop (or keep going) a walk
+            log.debug("approach state listener failed: %s", exc)
+
+    def _decide(self, res: ApproachResult, decision: str) -> None:
+        """Remember why this step stays / searches / walks / stops; log it on a change, else at most once a second."""
+        changed = decision != res.diagnostics.get("decision")
+        res.diagnostics["decision"] = decision
+        self._emit(res, phase_of(decision), decision, force=changed)
+        now = self.clock()
+        if decision != self._decision or now - self._diag_logged >= 1.0:
+            d = res.diagnostics
+            log.info("approach: %s | bbox=%s clipped=%s clipped_x=%s h=%s w=%s estimates=%s dist=%s bearing=%s "
+                     "cmd=%s moves=%d (%.1f Hz)", decision, d.get("bbox"), d.get("clipped"), d.get("clipped_x"),
+                     d.get("height"), d.get("width"), d.get("estimates"), d.get("distance_m"), d.get("bearing_deg"),
+                     d.get("cmd"), res.moves, res.move_rate_hz)
+            self._decision, self._diag_logged = decision, now
+
+    def _halt_if_moving(self, res: ApproachResult) -> None:
+        if getattr(self, "_last_cmd", None) is not None:
+            self._halt(res)
 
     def _halt(self, res: ApproachResult | None = None) -> None:
         if res is not None:
@@ -142,7 +223,7 @@ class Approacher:
         self._last_cmd = None
         self.robot.halt()
 
-    def _end_walk(self, reason: str, res: ApproachResult | None = None) -> None:
+    def _end_walk(self, reason: str, res: ApproachResult | None = None) -> bool:
         """Every exit — arrived, timeout, lost camera, cancel, disarm, exception: leave walking for good."""
         if res is not None:
             self._catch_up(res)
@@ -150,8 +231,11 @@ class Approacher:
         end = getattr(self.robot, "end_walk", None)
         if end is None:
             self.robot.halt()
-        elif not end(reason):
+            return True
+        if not end(reason):
             log.error("walk cleanup after %s was NOT verified — check the dog / use the remote", reason)
+            return False
+        return True
 
     def _standing(self) -> bool:
         body = getattr(self.robot, "body", None)
@@ -159,8 +243,9 @@ class Approacher:
 
     def _look(self, camera):
         frame = camera.read()
-        if frame is None:
-            self._no_frame = True
+        stamp = getattr(frame, "timestamp", None)
+        if frame is None or (isinstance(stamp, (int, float)) and time.time() - stamp > self.s.frame_max_age_s):
+            self._no_frame = True  # no frame — or one too old to steer on
             return None
         self._no_frame = False
         people = self.estimator.estimate(frame.image)
@@ -170,6 +255,7 @@ class Approacher:
         w, h = person.image_size
         x0, y0, x1, y1 = person.bbox()
         return {"cx": (x0 + x1) / 2 / w, "height": (y1 - y0) / h, "width": (x1 - x0) / w, "bottom": y1 / h,
+                "bbox": (round(x0 / w, 3), round(y0 / h, 3), round(x1 / w, 3), round(y1 / h, 3)),
                 "clipped": y0 / h <= 0.02 or y1 / h >= 0.98,
                 "clipped_x": x0 / w <= 0.02 or x1 / w >= 0.98}
 
@@ -222,6 +308,9 @@ class Approacher:
         estimates: list[tuple[float, float]] = []
         last_seen = None
         blind_since = None
+        unreliable_since = None
+        got_frame = False
+        self._decision = ""
         try:
             camera = self.camera_factory()
             while True:
@@ -242,38 +331,71 @@ class Approacher:
                 now = self.clock()
                 if getattr(self, "_no_frame", False):
                     blind_since = blind_since if blind_since is not None else now
-                    self._halt(res)  # never keep walking blind, not even for one step
-                    if now - blind_since >= self.s.camera_lost_seconds:
+                    self._halt_if_moving(res)  # never keep walking blind, not even for one step
+                    # before the first frame the stream may still be connecting (nothing has moved yet)
+                    limit = self.s.camera_lost_seconds if got_frame else max(self.s.camera_lost_seconds, 2.0)
+                    self._decide(res, "stop: no (fresh) camera frame")
+                    if now - blind_since >= limit:
                         res.status, res.detail = "camera_lost", "no camera frame from the robot — stopped"
                         return res
                     self.sleep(dt)
                     continue
                 blind_since = None
+                got_frame = True
                 if seen is not None:
                     last_seen = now
-                    if seen["clipped_x" if lying else "clipped"]:
-                        # head or feet cut off: their size no longer tells the distance. Rely on memory —
-                        # and if memory says we are already close (or we have none), stop right here.
-                        x, y, _ = res.robot_pose
+                    clipped = seen["clipped_x" if lying else "clipped"]
+                    res.diagnostics.update(bbox=seen["bbox"], clipped=seen["clipped"], clipped_x=seen["clipped_x"],
+                                           height=round(seen["height"], 3), width=round(seen["width"], 3))
+                    if clipped:
+                        # head or feet cut off: their size no longer tells the distance.
                         if person is None:
-                            self._halt(res)
-                            res.status, res.detail = "arrived", "already close to the person — stayed"
-                            return res
+                            # no position yet: NOT "already close" — maybe badly framed, half in view, unstable
+                            # box or a late frame. Stand still and look again; never walk on it.
+                            unreliable_since = unreliable_since if unreliable_since is not None else now
+                            if seen["clipped_x"] and abs(searched) < self.s.search_max_angle:
+                                # cut off at the SIDE of the image: turn slowly on the spot towards that side until
+                                # the whole person is in view (turning only, never forward)
+                                turn = self.s.search_speed if seen["cx"] < 0.5 else -self.s.search_speed
+                                self._decide(res, "search: person cut off at the image edge — turning towards them")
+                                self._send(res, 0.0, 0.0, turn, dt)
+                                searched += turn * dt
+                                unreliable_since = now  # turning towards them: the 2.5 s start once it stops
+                                self.sleep(dt)
+                                continue
+                            self._halt_if_moving(res)
+                            self._decide(res, "stay: clipped first detection, no position memory — looking again")
+                            if now - unreliable_since >= self.s.unreliable_seconds:
+                                res.status = "target_unreliable"
+                                res.detail = ("the robot camera never saw the participant's full body (head or feet "
+                                              "cut off) — move the participant back or reframe them")
+                                return res
+                            self.sleep(dt)
+                            continue
+                        # a valid remembered position: steer on it
+                        x, y, _ = res.robot_pose
                         if math.hypot(person[0] - x, person[1] - y) < min_gap:
                             self._halt(res)
                             res.person_at = person
-                            res.status, res.detail = "arrived", "close to the person — stopped"
+                            self._decide(res, "stop: clipped, and the remembered position is within the minimum gap")
+                            res.status, res.detail = "arrived", "close to the person (remembered position) — stopped"
                             return res
                     else:
+                        unreliable_since = None
+                        if not estimates:
+                            res.person_at = self._person_in_start_frame(res, seen, k, lying)
+                            self._emit(res, "target_acquired", "person located with the robot camera", force=True)
                         estimates = (estimates + [self._person_in_start_frame(res, seen, k, lying)])[-6:]
                         person = (sum(e[0] for e in estimates) / len(estimates),
                                   sum(e[1] for e in estimates) / len(estimates))
+                        res.diagnostics.update(estimates=len(estimates))
                 elif person is None:  # still searching: turn slowly, left first, then right
                     if search_dir > 0 and searched >= self.s.search_max_angle:
                         search_dir = -1.0
                     if search_dir < 0 and searched <= -self.s.search_max_angle:
                         res.status, res.detail = "not_found", "nobody in view after looking around"
                         return res
+                    self._decide(res, "search: nobody in view, turning slowly")
                     self._send(res, 0.0, 0.0, search_dir * self.s.search_speed, dt)
                     searched += search_dir * self.s.search_speed * dt
                     self.sleep(dt)
@@ -285,7 +407,13 @@ class Approacher:
                 gx, gy = self.goal_for(person, side, lying)
                 x, y, yaw = res.robot_pose
                 dist = math.hypot(gx - x, gy - y)
+                res.diagnostics.update(distance_m=round(math.hypot(person[0] - x, person[1] - y), 2),
+                                       bearing_deg=round(math.degrees(math.atan2(math.sin(
+                                           math.atan2(person[1] - y, person[0] - x) - yaw), math.cos(
+                                           math.atan2(person[1] - y, person[0] - x) - yaw))), 1),
+                                       goal_m=round(dist, 2))
                 if dist <= self.s.arrive_tolerance_m:
+                    self._decide(res, "stop: at the goal beside the person")
                     self._halt(res)
                     self._face(res, person, should_stop, facing)
                     res.status, res.detail = "arrived", "in front of the person (lying)" if lying else f"{side} of the person"
@@ -295,6 +423,7 @@ class Approacher:
                 vyaw = _clamp(1.8 * err, self.s.turn_speed)
                 aligned = max(0.0, 1.0 - abs(err) / math.radians(35))  # walk only when roughly facing it
                 vx = self.s.speed * aligned * min(1.0, max(0.3, dist / 0.6))
+                self._decide(res, "walk: towards the goal" if vx > 0.01 else "turn: towards the goal")
                 self._send(res, vx, 0.0, vyaw, dt)
                 self.sleep(dt)
         except Exception as exc:
@@ -302,9 +431,11 @@ class Approacher:
             res.status, res.detail = "error", str(exc)
             return res
         finally:
+            validate_arrival(res)
             try:
-                self._end_walk(f"approach {res.status}", res)
+                acked = self._end_walk(f"approach {res.status}", res)
             except Exception:
+                acked = False
                 log.exception("ending the walk failed")
             if camera is not None:
                 try:
@@ -312,6 +443,11 @@ class Approacher:
                 except Exception:
                     pass
             self.memory = res
+            final = "disarmed" if res.status == "stopped" and res.detail in ("disarmed", "software stop") else \
+                FINAL_PHASE.get(res.status, "stopped")
+            self._emit(res, final, res.detail, force=True)
+            log.info("walk_stop: %s (%s) — %d velocity commands, %.1f Hz; cleanup Move 0 → stop → stop_move %s",
+                     res.status, res.detail, res.moves, res.move_rate_hz, "acknowledged" if acked else "NOT verified")
             log.info("approach: %s (%s), %.1f m, pose %s, person %s", res.status, res.detail, res.travelled_m,
                      tuple(round(v, 2) for v in res.robot_pose), res.person_at)
 
@@ -332,6 +468,7 @@ class Approacher:
         for _ in range(steps):
             if should_stop() or not self._allowed_now()[0]:
                 break
+            self._emit(res, "turning", "turning on the spot")
             self._send(res, 0.0, 0.0, math.copysign(self.s.turn_speed, angle), dt)
             self.sleep(dt)
         self._halt(res)
@@ -361,6 +498,7 @@ class Approacher:
                         return "stopped"
                     err = wrap(math.atan2(-y, -x) - yaw)
                     step = min(dt, dist / self.s.speed)  # the last step is shorter
+                    self._emit(back, "walking", "walking back to the start")
                     self._send(back, self.s.speed, 0.0, _clamp(2 * err, self.s.turn_speed), step)
                     self.sleep(step)
                 self._halt(back)
@@ -368,9 +506,12 @@ class Approacher:
             if should_stop() or not self._allowed_now()[0]:
                 return "stopped"
             self.memory = None
+            back.status = "done"
             return "done"
         finally:
             try:
                 self._end_walk("walk home ended")
             except Exception:
                 log.exception("ending the walk failed")
+            self._emit(back, "arrived" if back.status == "done" else "stopped",
+                       "back at the start" if back.status == "done" else "walk home stopped", force=True)

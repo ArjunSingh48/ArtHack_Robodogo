@@ -22,7 +22,7 @@ import threading
 import time
 
 from ..domain import ExecutionResult, ExecutionStatus, MotionPlan, RobotBehavior
-from ..robot.base import RobotAdapter
+from ..robot.base import BodyState, RobotAdapter, steps_for
 
 log = logging.getLogger(__name__)
 
@@ -122,6 +122,26 @@ class MotionGuard:
         self._record("stopped", reason)
 
     # ------------------------------------------------------------------ execution
+    def cooldown_remaining(self) -> float:
+        """Seconds until the next motion may start (0 = now). Side-effect free: asking never extends it."""
+        if not self._last_motion_end:
+            return 0.0
+        return max(0.0, self.cooldown_s - (time.monotonic() - self._last_motion_end))
+
+    def _nothing_to_send(self, behavior: RobotBehavior) -> bool:
+        """The adapter reliably knows the body is already where `behavior` leads (e.g. stand while standing)."""
+        body = getattr(self.robot, "body", None)
+        if not isinstance(body, BodyState) or body is BodyState.UNKNOWN:
+            return False
+        if behavior is RobotBehavior.STAND and body is BodyState.STANDING:
+            # STANDING is only recorded after a confirmed BalanceStand (or a gesture that ends in it); a walk ends in
+            # it too. Re-sending BalanceStand would only restart the cooldown before the walk.
+            return True
+        try:
+            return not steps_for(behavior, body)
+        except Exception:
+            return False
+
     def check(self, behavior: RobotBehavior) -> tuple[bool, str]:
         if behavior is RobotBehavior.STILLNESS:
             return True, "stillness"
@@ -135,9 +155,9 @@ class MotionGuard:
                 return False, "hardware gates closed"
             if not self._armed:
                 return False, f"not armed — {self.disarm_reason}"
-        since = time.monotonic() - self._last_motion_end
-        if self._last_motion_end and since < self.cooldown_s:
-            return False, f"cooldown ({self.cooldown_s - since:.1f}s left)"
+        left = self.cooldown_remaining()
+        if left > 0:
+            return False, f"cooldown ({left:.1f}s left)"
         st = self.robot.status()
         if not st.connected:
             return False, f"robot not connected ({st.detail})"
@@ -180,12 +200,18 @@ class MotionGuard:
             return ExecutionResult(behavior=behavior, status=ExecutionStatus.SKIPPED, detail="stillness chosen")
         if not self._lock.acquire(blocking=False):
             return ExecutionResult(behavior=behavior, status=ExecutionStatus.REJECTED, detail="another motion running")
+        motion_started = False  # only a motion that was really submitted starts the next cooldown
         try:
             ok, why = self.check(behavior)
             if not ok:
                 status = ExecutionStatus.SKIPPED if why.startswith(("not armed", "hardware")) else ExecutionStatus.REJECTED
                 return ExecutionResult(behavior=behavior, status=status, detail=why)
+            if self._nothing_to_send(behavior) and not getattr(self.robot, "gait", False):
+                body = getattr(self.robot, "body", None)
+                return ExecutionResult(behavior=behavior, status=ExecutionStatus.SUCCESS, diagnostic="noop",
+                                       detail=f"already {getattr(body, 'value', body)} — nothing sent")
             limit = self.limit_for(behavior)
+            motion_started = True
             future = self._pool.submit(self.robot.execute, behavior, lambda: self._stop_latched)
             try:
                 result = future.result(timeout=limit)
@@ -193,13 +219,16 @@ class MotionGuard:
                 self.software_stop(f"{behavior} exceeded {limit:.0f}s timeout")
                 return ExecutionResult(behavior=behavior, status=ExecutionStatus.STOPPED, diagnostic="guard_timeout",
                                        detail=f"timeout after {limit:.0f}s — outcome unknown; stop latched")
+            if result.status is ExecutionStatus.REJECTED and result.diagnostic in ("previous_outcome_unknown",):
+                motion_started = False  # the adapter refused before sending anything
             if result.status is ExecutionStatus.FAILED and self.robot.is_real:
                 # a genuine failure OR an unknown outcome (SDK/transport timeout): disarm, the operator decides
                 self.disarm(f"{behavior.value} failed ({result.diagnostic or 'failed'}): {result.detail} — "
                             f"check the dog, then re-arm")
             return result
         finally:
-            self._last_motion_end = time.monotonic()
+            if motion_started:
+                self._last_motion_end = time.monotonic()
             self._lock.release()
 
     def shutdown(self) -> None:

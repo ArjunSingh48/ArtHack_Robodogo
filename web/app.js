@@ -1,10 +1,9 @@
 // Is This Us? — the presentation, running entirely in the browser (static site; data from scripts/export_web.py).
 // A port of src/is_this_us/performance/director.py (presentation programme) with the simulated dog:
 // intro → one round per era (pose → closest picture → the dog walks over and takes the painted dog's pose →
-// a Good Boy chat preview) → the rescue finale. Every step has a hash (#prehistory.04) to come back to it.
+// THEN/NOW) → the rescue finale. Every step has a hash (#prehistory.04) to come back to it.
 
 import { robot } from './robot.js';  // the real Go2 when opened with ?robot=ws://127.0.0.1:8770 (python/README.md)
-import { createTelegramPreview } from './telegram.js';
 
 const $ = (id) => document.getElementById(id);
 const show = await (await fetch('data/show.json')).json();
@@ -18,35 +17,25 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 // ---------------------------------------------------------------- run control
 // `gen` changes on End / a jump: every wait checks it, so the old run unwinds at once.
 let gen = 0, paused = false, lastSaid = null;
-let telegramPreview = null;
-let lastMatchQuestion = null;
-function clearTelegramPreview() { telegramPreview?.dispose(); telegramPreview = null; }
 class Stop extends Error {}
 const alive = (g) => { if (g !== gen) throw new Stop(); };
 const bus = new EventTarget();
 function send(cmd) {
-  if (cmd === 'pause') { paused = true; telegramPreview?.setPaused(true); audio.pause(); if (dog.walking) robot.walk(0, 0, 0); }
-  if (cmd === 'resume') { paused = false; telegramPreview?.setPaused(false); if (audio.src && !audio.ended) audio.play().catch(() => {}); }
+  if (cmd === 'pause') { paused = true; audio.pause(); if (dog.walking) { robot.walk(0, 0, 0); robot.cancelWalk(); } }
+  if (cmd === 'resume') { paused = false; if (audio.src && !audio.ended) audio.play().catch(() => {}); }
   if (cmd === 'cancel') return toLobby();
   if (cmd === 'camera') return useCamera(true);
   if (cmd === 'samples') return useSamples(true);
   bus.dispatchEvent(new CustomEvent('cmd', { detail: cmd }));
   controls(state);
 }
-function nextCmd(accept, ms, g) {  // → the command, or null on timeout; stale runs release listeners
-  let cancel;
-  const pending = new Promise((res, reject) => {
+function nextCmd(accept, ms) {  // → the command, or null on timeout
+  return new Promise((res) => {
     const h = (e) => { if (accept.includes(e.detail)) { done(); res(e.detail); } };
     const t = ms ? setTimeout(() => { done(); res(null); }, ms) : null;
-    const cancelled = g === undefined ? null : setInterval(() => {
-      if (g !== gen) { done(); reject(new Stop()); }
-    }, 100);
-    const done = () => { bus.removeEventListener('cmd', h); clearTimeout(t); clearInterval(cancelled); };
-    cancel = done;
+    const done = () => { bus.removeEventListener('cmd', h); clearTimeout(t); };
     bus.addEventListener('cmd', h);
   });
-  pending.cancel = cancel;
-  return pending;
 }
 async function sleep(ms, g) {  // pause-aware
   let left = ms;
@@ -79,7 +68,6 @@ const msg = (t) => { $('msg').textContent = t || ''; };
 const art = (id) => show.art[id];
 const label = (a) => `<div class="label"><i>${a.title}</i>${a.artist}${a.date ? ', ' + a.date : ''}<br><span>${a.museum} · ${a.rights}</span></div>`;
 function screen(kind, x, heading) {
-  clearTelegramPreview();
   const v = $('view');
   if (kind === 'title') v.innerHTML = `<div class="title">Is this us?</div>`;
   else if (kind === 'blank') v.innerHTML = '';
@@ -98,26 +86,20 @@ const subtitle = (t) => { $('subtitle').textContent = t || ''; };
 // ---------------------------------------------------------------- voice (pre-generated clips)
 const audio = new Audio();
 async function say(text, url, g) {
-  alive(g);
   lastSaid = [text, url];
   for (;;) {
     subtitle(text);
     const estimate = Math.max(1500, text.split(/\s+/).length * 380);
-    let ended;
-    // Only the provider-specific ElevenLabs export is eligible. Legacy MP3s
-    // have no provider provenance; never fall back to them or browser TTS.
-    if (show.voice?.provider === 'elevenlabs' && /^audio\/elevenlabs\/[a-f0-9]{24}\.mp3$/.test(url || '')) {
+    let ended = sleep(estimate, g);
+    if (url) {  // the clip; if it cannot play (blocked, missing), the subtitle stays for an estimated time
       audio.src = url;
       const played = audio.play();
       ended = Promise.race([
-        new Promise((r) => { audio.onended = r; audio.onerror = () => sleep(estimate, g).then(r, r); played.catch(() => sleep(estimate, g).then(r, r)); }),
+        new Promise((r) => { audio.onended = r; audio.onerror = () => sleep(estimate, g).then(r); played.catch(() => sleep(estimate, g).then(r)); }),
         sleep(estimate * 3 + 4000, g),  // never stuck on a clip
       ]);
-    } else ended = sleep(estimate, g);
-    const command = nextCmd(['next', 'repeat', 'skip'], undefined, g);
-    let cmd;
-    try { cmd = await Promise.race([ended.then(() => 'done'), command]); }
-    finally { command.cancel(); }
+    }
+    const cmd = await Promise.race([ended.then(() => 'done'), nextCmd(['next', 'repeat', 'skip'])]);
     alive(g);
     await whilePaused(g);
     if (cmd === 'repeat') continue;
@@ -132,8 +114,6 @@ const sayAgain = (g) => (lastSaid ? say(lastSaid[0], lastSaid[1], g) : null);
 let source = null, stream = null, sample = 0, reading = { visible: false }, poseMod = null;
 const used = new Set();
 const video = $('video');
-// the camera is shown as it arrives (?mirror=1 flips it like a mirror); the pose follows the view
-const MIRROR = new URLSearchParams(location.search).get('mirror') === '1';
 async function useCamera(switching) {
   try {
     stream = stream || await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 }, audio: false });
@@ -159,7 +139,7 @@ function readNow() {
     const s = show.samples[sample];
     reading = { visible: !!s.points, posture: s.posture, framing: 'ok', points: s.points, skeleton: s.skeleton };
   } else if (source === 'camera' && poseMod) {
-    reading = poseMod.read(video, show.swap_lr, MIRROR);
+    reading = poseMod.read(video, show.swap_lr);
   } else reading = { visible: false };
   return reading;
 }
@@ -174,9 +154,8 @@ function drawCam() {
   if (!w) return;
   const k = Math.min(cv.width / w, cv.height / h), dw = w * k, dh = h * k, ox = (cv.width - dw) / 2, oy = (cv.height - dh) / 2;
   cx.save();
-  const flip = source === 'camera' && MIRROR;
-  if (flip) { cx.translate(cv.width, 0); cx.scale(-1, 1); }  // like a mirror
-  cx.drawImage(img, flip ? cv.width - ox - dw : ox, oy, dw, dh);
+  if (source === 'camera') { cx.translate(cv.width, 0); cx.scale(-1, 1); }  // like a mirror
+  cx.drawImage(img, source === 'camera' ? cv.width - ox - dw : ox, oy, dw, dh);
   cx.restore();
   const p = reading.points;
   if (p) {
@@ -194,7 +173,7 @@ function photo() {  // what the photo camera shows now, as an image URL (stays i
   const c = document.createElement('canvas'), img = source === 'photos' ? sampleImgs[sample] : video;
   c.width = img.videoWidth || img.naturalWidth; c.height = img.videoHeight || img.naturalHeight;
   const g = c.getContext('2d');
-  if (source === 'camera' && MIRROR) { g.translate(c.width, 0); g.scale(-1, 1); }
+  if (source === 'camera') { g.translate(c.width, 0); g.scale(-1, 1); }
   g.drawImage(img, 0, 0);
   return c.toDataURL('image/jpeg', 0.9);
 }
@@ -204,9 +183,15 @@ setInterval(() => { if (source) { readNow(); drawCam(); } }, 200);  // the pose 
 const dog = { x: 0, y: 0, yaw: 0, walking: false, action: '', body: 'standing' };
 let sim3d = null;
 import('./sim3d.js').then((m) => { sim3d = m.start($('sim3d')); }).catch((e) => console.warn('3-D view unavailable', e));
+// With a real robot connected, the drawn dog follows the BACKEND (the robot's dead reckoning from its own camera
+// approach) — never the fixed PERSON of this simulated room. Without one, the simulation below moves it.
+const realWalk = () => robot.on && robot.connected;
+let seenPerson = null;
 setInterval(() => {
+  const st = realWalk() ? robot.live : null;
+  if (st && st.robot) { [dog.x, dog.y, dog.yaw] = st.robot; if (st.person) seenPerson = st.person; }
   if (!sim3d) return;
-  sim3d.update({ robot: [dog.x, dog.y, dog.yaw], person: PERSON, posture: reading.posture || 'standing', body: dog.body,
+  sim3d.update({ robot: [dog.x, dog.y, dog.yaw], person: (realWalk() && seenPerson) || PERSON, posture: reading.posture || 'standing', body: dog.body,
     action: dog.action, walking: dog.walking, skeleton: reading.skeleton || null, trail: [] });
   const doing = { Sit: 'sitting down', StandDown: 'lying down', Hello: 'giving a paw', Stretch: 'stretching', StandUp: 'standing up' };
   $('simdoing').textContent = (dog.walking ? 'walking' : doing[dog.action] || dog.body).toUpperCase();
@@ -253,14 +238,23 @@ async function standUp(g) {
 async function walking(fn) {  // every walk, however it ends (End, a jump, an error), ends the real dog's gait
   try { await fn(); } finally { dog.walking = false; await robot.walkEnd(); }
 }
-async function goBeside(side, facing, g) {  // like Approacher.approach: next to the person as the audience sees it
+async function goBeside(side, facing, g, posture) {  // → arrived? Next to the person as the audience sees it
   await standUp(g);
+  if (realWalk()) {  // the Python backend walks the real robot by its own camera; we only show what it reports
+    dog.walking = true;
+    try {
+      const r = await robot.approach(side, posture || reading.posture || 'sitting', facing, () => sleep(100, g));
+      if (!r.ok) console.warn('robot approach:', r.status, r.msg);
+      return !!r.ok;
+    } finally { dog.walking = false; }
+  }
   const [px, py] = PERSON, gap = 0.75;
   const goal = side === 'right' ? [px, py - gap] : side === 'front' ? [px - 0.85, py] : [px, py + gap];
   await walking(async () => {
     await walkTo(goal[0], goal[1], g);
     await turnTo(facing in FACING ? FACING[facing] : Math.atan2(py - dog.y, px - dog.x), g);
   });
+  return true;
 }
 async function takePose(b, g) {
   const steps = { sit: ['Sit', 'sitting', 3000], lie_down: ['StandDown', 'lying', 2500], greet: ['Hello', 'standing', 4000],
@@ -269,7 +263,15 @@ async function takePose(b, g) {
   await Promise.all([robot.pose(b), sleep(steps[2], g)]);  // the real dog's pose is confirmed before the show goes on
   if (b === 'sit' || b === 'lie_down') { dog.body = steps[1]; dog.action = steps[0]; } else { dog.action = ''; dog.body = 'standing'; }
 }
-async function goHome(g) { await standUp(g); await walking(async () => { await walkTo(0, 0, g); await turnTo(0, g); }); }
+async function goHome(g) {
+  await standUp(g);
+  if (realWalk()) {
+    dog.walking = true;
+    try { await robot.goHome(() => sleep(100, g)); } finally { dog.walking = false; }
+    return;
+  }
+  await walking(async () => { await walkTo(0, 0, g); await turnTo(0, g); });
+}
 // Esc: the real dog stops at once (software stop, latched until Arm on the badge) and the show pauses
 window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && robot.on) { robot.stop(); if (!paused) send('pause'); } });
 
@@ -336,42 +338,6 @@ function meme(img, group) {
     im.src = img;
   });
 }
-function matchQuestion() {
-  const variants = show.lines.round.hold;
-  const fresh = variants.filter((v) => v.text !== lastMatchQuestion);
-  const chosen = pick(fresh.length ? fresh : variants);
-  lastMatchQuestion = chosen.text;
-  return chosen;
-}
-async function revealMatch(a, shot, g, photoSource) {
-  alive(g);
-  clearTelegramPreview();
-  const preview = createTelegramPreview($('view'), {
-    photo: shot,
-    photoLabel: photoSource === 'photos' ? 'Sample photo · rehearsal' : '',
-    artifact: a,
-    caption: pick(show.telegram_caption.painting),
-  });
-  telegramPreview = preview;
-  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  state = 'revealing'; controls(state);
-  // The hold line has already been spoken. The chat ends quietly with the
-  // painting and its credit; Repeat can replay the spoken line on request.
-  audio.removeAttribute('src'); audio.load();
-  try {
-    await sleep(reducedMotion ? 100 : 350, g);
-    if (shot) { preview.showPhoto(); await sleep(reducedMotion ? 400 : 1200, g); }
-    preview.showPainting();
-    await sleep(reducedMotion ? 700 : 1800, g);
-    alive(g);
-    state = 'photo'; controls(state);
-  } catch (e) {
-    // Never dispose a newer run's preview when an old sleep notices cancellation.
-    preview.dispose();
-    if (telegramPreview === preview) telegramPreview = null;
-    throw e;
-  }
-}
 async function round(cue, g, title) {
   const era = cue.target;
   state = 'readiness'; controls(state);
@@ -386,7 +352,6 @@ async function round(cue, g, title) {
   const group = POSE_GROUP[r.posture] || '';
   const id = era === 'internet' ? null : choosePicture(era, group);
   const a = id ? art(id) : null;
-  const question = a ? matchQuestion() : null;
   if (id) recent.add(id);
   // remembering: the era's pictures, attention moving across them, while the dog walks over
   state = 'remembering'; controls(state);
@@ -400,30 +365,16 @@ async function round(cue, g, title) {
   if (a) { screen('art', id); await line('round', 'found', g); } else await line('round', 'meme_found', g);
   // then it walks over and takes the painted dog's pose
   state = 'remembering'; controls(state);
-  await goBeside(a ? a.side : 'left', a ? a.facing : 'person', g);
-  await takePose(a ? a.dog : MEME_BEHAVIOR[group] || 'sit', g);
-  if (question) await say(question.text, question.audio, g);
-  else await line('round', 'hold', g);
+  const there = await goBeside(a ? a.side : 'left', a ? a.facing : 'person', g, group);
+  if (there) await takePose(a ? a.dog : MEME_BEHAVIOR[group] || 'sit', g);  // never a pose where it did not arrive
+  await line('round', 'hold', g);
   await sleep(2500, g);
-  if (a) {
-    let shot = null;
-    try { shot = photo(); if (shot === 'data:,') shot = null; }
-    catch (e) { msg('The photo could not be captured; showing the painting.'); }
-    await revealMatch(a, shot, g, source);
-  } else {
-    const img = await meme(photo(), group);
-    alive(g);
-    screen('html', card(null, img, 'MUCH US. WOW.'));
-    state = 'photo'; controls(state);
-    await line('round', 'admire', g);
-  }
-  for (;;) {
-    const c = await nextCmd(['next', 'repeat'], undefined, g);
-    alive(g); await whilePaused(g); alive(g);
-    if (c === 'next') break;
-    if ((await sayAgain(g)) === 'next') break;
-  }
-  clearTelegramPreview();
+  const shot = photo();
+  const img = a ? shot : await meme(shot, group);
+  screen('html', card(a, img, a ? 'IS THIS US?' : 'MUCH US. WOW.'));
+  state = 'photo'; controls(state);
+  await line('round', 'admire', g);
+  for (;;) { const c = await nextCmd(['next', 'repeat']); alive(g); if (c === 'next') break; await sayAgain(g); }
   state = 'narration'; controls(state);
   await goHome(g);
 }
@@ -434,9 +385,9 @@ async function rescue(cue, g) {
   if (!down) { await line('rescue', 'nobody', g); return; }
   state = 'narration'; controls(state);
   await line('rescue', 'alarm', g);
-  await Promise.all([line('rescue', 'coming', g), goBeside('front', 'person', g)]);
+  const [, there] = await Promise.all([line('rescue', 'coming', g), goBeside('front', 'person', g, 'lying')]);
   await line('rescue', 'arrived', g);
-  await takePose('greet', g);
+  if (there) await takePose('greet', g);
   await line('rescue', 'wake', g);
   state = 'rescue_up'; controls(state);
   await waitForPose(g, ['sitting', 'standing', 'kneeling', 'crouching', 'leaning_forward'], 'up again');
@@ -451,7 +402,6 @@ async function rescue(cue, g) {
 // ---------------------------------------------------------------- the show
 async function run(from) {
   const g = ++gen;
-  clearTelegramPreview();
   paused = false; recent.clear();
   let [ci, qi] = [0, 0];
   if (from) {

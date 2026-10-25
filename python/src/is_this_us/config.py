@@ -129,8 +129,8 @@ class Settings(BaseSettings):
     # set to true only after `itu show walk-test --calibrate <m>` (sitting AND standing) wrote SHOW_WALK_K_* here
     show_walk_calibrated: bool = False
     show_walk_camera: str = "zhaw_bridge"  # the ROBOT's camera (it must see the person from the robot)
-    show_walk_speed: float = 0.22  # m/s, max (the adapter caps at 0.3)
-    show_walk_max_distance_m: float = 3.5
+    show_walk_speed: float = 0.10  # m/s, max — conservative for the first real walks (the adapter caps at 0.3)
+    show_walk_max_distance_m: float = 1.5  # metres per approach; raise only after supervised tests
     show_walk_hfov_deg: float = 90.0  # robot camera field of view
     show_walk_k_sitting: float = 0.8  # distance calibration: `itu show walk-test --calibrate 2`
     show_walk_k_standing: float = 1.1
