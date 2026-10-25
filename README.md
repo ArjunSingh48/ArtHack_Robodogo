@@ -1,8 +1,8 @@
 # Is This Us?
 
 A tiny robot dog looks for us in 5,000 years of pictures of humans and dogs. Take any pose — it finds the
-closest picture of that era, walks over and takes the painted dog's pose next to you, and makes a THEN / NOW
-picture of the two of you.
+closest picture of that era, walks over and takes the painted dog's pose next to you, and reveals the match
+in a Telegram-style chat from **Good Boy**.
 
 **Live: https://isthisus.vercel.app**
 
@@ -11,12 +11,31 @@ Everything runs in the browser (a static site in `web/`):
 - the pose is read on the visitor's device (MediaPipe Pose Landmarker); the camera picture never leaves it
 - the dog is a simulated Unitree Go2 (official URDF, three.js) next to an avatar posed from the camera — or the
   real one, with `?robot=` ([below](#the-real-robot))
-- the voice is pre-generated (`web/audio/`); no API keys online
+- the voice is pre-generated with the configured ElevenLabs voice (`web/audio/elevenlabs/`);
+  provider/voice-specific filenames and a checksum manifest prevent reuse of older voices; no API keys online
 - start with your camera or with sample photos (Unsplash); every step has a hash (`#paintings.04`) to come back to it
+- after a painting match, a local **Telegram preview** shows the photo, the painting with a short caption and
+  italic museum attribution. The chat ends with the painting; visitor photos have no caption. It appears in a
+  narrow phone frame with time, signal, Wi-Fi and battery icons, and consistent chat-sized text. The spoken pose
+  questions still vary without consecutive repeats; Repeat replays the same spoken line. The completed chat waits for
+  **Continue (photo seen)**. Missing captures omit the photo; sample photos are labeled as rehearsal images.
+
+The chat is a browser mockup: it does not send messages or photos to Telegram. Actual delivery remains in
+the Python application, with photo consent and separate operator confirmation. Meme and rescue cards retain
+their existing presentation. The chat adds no visitor reply or choice; Pause, Resume and End remain operator controls.
+Captured photos stay in browser memory and the preview is cleared when leaving it. Reduced-motion settings remove
+the sliding animation. The site needs internet for externally loaded libraries and models.
 
 ```bash
 cd web && python3 -m http.server 8790      # local: http://127.0.0.1:8790/
 cd web && vercel deploy --prod             # deploy
+```
+
+The chat regression checks use a local headless Chrome/Chromium (set `CHROME_BIN`
+if it is not found automatically), with no Telegram or robot connection:
+
+```bash
+node --test web/tests/telegram.browser.test.mjs
 ```
 
 ## The real robot
@@ -95,6 +114,17 @@ cd python && python3 -m venv .venv && .venv/bin/pip install -e ".[vision,voice,b
 ```bash
 cd python && .venv/bin/python scripts/export_web.py
 ```
+
+To refresh only the spoken clips using the configured `ELEVENLABS_VOICE_ID`:
+
+```bash
+cd python && .venv/bin/python scripts/export_web.py --audio-only
+```
+
+The exporter reads `python/.env` (or the root `.env` for existing installations).
+It always uses ElevenLabs for browser speech, with no OpenAI fallback. Captions
+and archive credits stay written only. Images in the phone chat use their full
+message width and natural proportions; italic credits are softened to 62% opacity.
 
 Picture credits: museum pictures are public domain / open access (labels on screen); sample photos and the
 meme stand-ins are from Unsplash (Unsplash License) — see `python/data/standins/README.md`.

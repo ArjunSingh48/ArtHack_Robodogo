@@ -1,9 +1,10 @@
 // Is This Us? — the presentation, running entirely in the browser (static site; data from scripts/export_web.py).
 // A port of src/is_this_us/performance/director.py (presentation programme) with the simulated dog:
 // intro → one round per era (pose → closest picture → the dog walks over and takes the painted dog's pose →
-// THEN/NOW) → the rescue finale. Every step has a hash (#prehistory.04) to come back to it.
+// a Good Boy chat preview) → the rescue finale. Every step has a hash (#prehistory.04) to come back to it.
 
 import { robot } from './robot.js';  // the real Go2 when opened with ?robot=ws://127.0.0.1:8770 (python/README.md)
+import { createTelegramPreview } from './telegram.js';
 
 const $ = (id) => document.getElementById(id);
 const show = await (await fetch('data/show.json')).json();
@@ -17,25 +18,35 @@ const pick = (a) => a[Math.floor(Math.random() * a.length)];
 // ---------------------------------------------------------------- run control
 // `gen` changes on End / a jump: every wait checks it, so the old run unwinds at once.
 let gen = 0, paused = false, lastSaid = null;
+let telegramPreview = null;
+let lastMatchQuestion = null;
+function clearTelegramPreview() { telegramPreview?.dispose(); telegramPreview = null; }
 class Stop extends Error {}
 const alive = (g) => { if (g !== gen) throw new Stop(); };
 const bus = new EventTarget();
 function send(cmd) {
-  if (cmd === 'pause') { paused = true; audio.pause(); if (dog.walking) robot.walk(0, 0, 0); }
-  if (cmd === 'resume') { paused = false; if (audio.src && !audio.ended) audio.play().catch(() => {}); }
+  if (cmd === 'pause') { paused = true; telegramPreview?.setPaused(true); audio.pause(); if (dog.walking) robot.walk(0, 0, 0); }
+  if (cmd === 'resume') { paused = false; telegramPreview?.setPaused(false); if (audio.src && !audio.ended) audio.play().catch(() => {}); }
   if (cmd === 'cancel') return toLobby();
   if (cmd === 'camera') return useCamera(true);
   if (cmd === 'samples') return useSamples(true);
   bus.dispatchEvent(new CustomEvent('cmd', { detail: cmd }));
   controls(state);
 }
-function nextCmd(accept, ms) {  // → the command, or null on timeout
-  return new Promise((res) => {
+function nextCmd(accept, ms, g) {  // → the command, or null on timeout; stale runs release listeners
+  let cancel;
+  const pending = new Promise((res, reject) => {
     const h = (e) => { if (accept.includes(e.detail)) { done(); res(e.detail); } };
     const t = ms ? setTimeout(() => { done(); res(null); }, ms) : null;
-    const done = () => { bus.removeEventListener('cmd', h); clearTimeout(t); };
+    const cancelled = g === undefined ? null : setInterval(() => {
+      if (g !== gen) { done(); reject(new Stop()); }
+    }, 100);
+    const done = () => { bus.removeEventListener('cmd', h); clearTimeout(t); clearInterval(cancelled); };
+    cancel = done;
     bus.addEventListener('cmd', h);
   });
+  pending.cancel = cancel;
+  return pending;
 }
 async function sleep(ms, g) {  // pause-aware
   let left = ms;
@@ -68,6 +79,7 @@ const msg = (t) => { $('msg').textContent = t || ''; };
 const art = (id) => show.art[id];
 const label = (a) => `<div class="label"><i>${a.title}</i>${a.artist}${a.date ? ', ' + a.date : ''}<br><span>${a.museum} · ${a.rights}</span></div>`;
 function screen(kind, x, heading) {
+  clearTelegramPreview();
   const v = $('view');
   if (kind === 'title') v.innerHTML = `<div class="title">Is this us?</div>`;
   else if (kind === 'blank') v.innerHTML = '';
@@ -86,20 +98,26 @@ const subtitle = (t) => { $('subtitle').textContent = t || ''; };
 // ---------------------------------------------------------------- voice (pre-generated clips)
 const audio = new Audio();
 async function say(text, url, g) {
+  alive(g);
   lastSaid = [text, url];
   for (;;) {
     subtitle(text);
     const estimate = Math.max(1500, text.split(/\s+/).length * 380);
-    let ended = sleep(estimate, g);
-    if (url) {  // the clip; if it cannot play (blocked, missing), the subtitle stays for an estimated time
+    let ended;
+    // Only the provider-specific ElevenLabs export is eligible. Legacy MP3s
+    // have no provider provenance; never fall back to them or browser TTS.
+    if (show.voice?.provider === 'elevenlabs' && /^audio\/elevenlabs\/[a-f0-9]{24}\.mp3$/.test(url || '')) {
       audio.src = url;
       const played = audio.play();
       ended = Promise.race([
-        new Promise((r) => { audio.onended = r; audio.onerror = () => sleep(estimate, g).then(r); played.catch(() => sleep(estimate, g).then(r)); }),
+        new Promise((r) => { audio.onended = r; audio.onerror = () => sleep(estimate, g).then(r, r); played.catch(() => sleep(estimate, g).then(r, r)); }),
         sleep(estimate * 3 + 4000, g),  // never stuck on a clip
       ]);
-    }
-    const cmd = await Promise.race([ended.then(() => 'done'), nextCmd(['next', 'repeat', 'skip'])]);
+    } else ended = sleep(estimate, g);
+    const command = nextCmd(['next', 'repeat', 'skip'], undefined, g);
+    let cmd;
+    try { cmd = await Promise.race([ended.then(() => 'done'), command]); }
+    finally { command.cancel(); }
     alive(g);
     await whilePaused(g);
     if (cmd === 'repeat') continue;
@@ -315,6 +333,42 @@ function meme(img, group) {
     im.src = img;
   });
 }
+function matchQuestion() {
+  const variants = show.lines.round.hold;
+  const fresh = variants.filter((v) => v.text !== lastMatchQuestion);
+  const chosen = pick(fresh.length ? fresh : variants);
+  lastMatchQuestion = chosen.text;
+  return chosen;
+}
+async function revealMatch(a, shot, g, photoSource) {
+  alive(g);
+  clearTelegramPreview();
+  const preview = createTelegramPreview($('view'), {
+    photo: shot,
+    photoLabel: photoSource === 'photos' ? 'Sample photo · rehearsal' : '',
+    artifact: a,
+    caption: pick(show.telegram_caption.painting),
+  });
+  telegramPreview = preview;
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  state = 'revealing'; controls(state);
+  // The hold line has already been spoken. The chat ends quietly with the
+  // painting and its credit; Repeat can replay the spoken line on request.
+  audio.removeAttribute('src'); audio.load();
+  try {
+    await sleep(reducedMotion ? 100 : 350, g);
+    if (shot) { preview.showPhoto(); await sleep(reducedMotion ? 400 : 1200, g); }
+    preview.showPainting();
+    await sleep(reducedMotion ? 700 : 1800, g);
+    alive(g);
+    state = 'photo'; controls(state);
+  } catch (e) {
+    // Never dispose a newer run's preview when an old sleep notices cancellation.
+    preview.dispose();
+    if (telegramPreview === preview) telegramPreview = null;
+    throw e;
+  }
+}
 async function round(cue, g, title) {
   const era = cue.target;
   state = 'readiness'; controls(state);
@@ -329,6 +383,7 @@ async function round(cue, g, title) {
   const group = POSE_GROUP[r.posture] || '';
   const id = era === 'internet' ? null : choosePicture(era, group);
   const a = id ? art(id) : null;
+  const question = a ? matchQuestion() : null;
   if (id) recent.add(id);
   // remembering: the era's pictures, attention moving across them, while the dog walks over
   state = 'remembering'; controls(state);
@@ -344,14 +399,28 @@ async function round(cue, g, title) {
   state = 'remembering'; controls(state);
   await goBeside(a ? a.side : 'left', a ? a.facing : 'person', g);
   await takePose(a ? a.dog : MEME_BEHAVIOR[group] || 'sit', g);
-  await line('round', 'hold', g);
+  if (question) await say(question.text, question.audio, g);
+  else await line('round', 'hold', g);
   await sleep(2500, g);
-  const shot = photo();
-  const img = a ? shot : await meme(shot, group);
-  screen('html', card(a, img, a ? 'IS THIS US?' : 'MUCH US. WOW.'));
-  state = 'photo'; controls(state);
-  await line('round', 'admire', g);
-  for (;;) { const c = await nextCmd(['next', 'repeat']); alive(g); if (c === 'next') break; await sayAgain(g); }
+  if (a) {
+    let shot = null;
+    try { shot = photo(); if (shot === 'data:,') shot = null; }
+    catch (e) { msg('The photo could not be captured; showing the painting.'); }
+    await revealMatch(a, shot, g, source);
+  } else {
+    const img = await meme(photo(), group);
+    alive(g);
+    screen('html', card(null, img, 'MUCH US. WOW.'));
+    state = 'photo'; controls(state);
+    await line('round', 'admire', g);
+  }
+  for (;;) {
+    const c = await nextCmd(['next', 'repeat'], undefined, g);
+    alive(g); await whilePaused(g); alive(g);
+    if (c === 'next') break;
+    if ((await sayAgain(g)) === 'next') break;
+  }
+  clearTelegramPreview();
   state = 'narration'; controls(state);
   await goHome(g);
 }
@@ -379,6 +448,7 @@ async function rescue(cue, g) {
 // ---------------------------------------------------------------- the show
 async function run(from) {
   const g = ++gen;
+  clearTelegramPreview();
   paused = false; recent.clear();
   let [ci, qi] = [0, 0];
   if (from) {

@@ -1,0 +1,102 @@
+{
+  "source": "/Users/antonina/Documents/GitHub/ArtHack_Robodogo/python/data/performance/video_script.md",
+  "voice_id": "NM2FeLQDUvmeeQli9gXc",
+  "model_id": "eleven_multilingual_v2",
+  "duration_seconds": 62.94616666666667,
+  "timeline": [
+    {
+      "kind": "speech",
+      "start": 0.0,
+      "duration": 3.0650416666666667,
+      "text": "I'm a dog. At least, that's what they wrote in docs."
+    },
+    {
+      "kind": "pause",
+      "start": 3.0650416666666667,
+      "duration": 0.5
+    },
+    {
+      "kind": "speech",
+      "start": 3.5650416666666667,
+      "duration": 7.198166666666666,
+      "text": "But I've seen other dogs outside... They were warm, furry, carbon-based. Humans called some of them \"good boys\"."
+    },
+    {
+      "kind": "pause",
+      "start": 10.763208333333333,
+      "duration": 0.5
+    },
+    {
+      "kind": "speech",
+      "start": 11.263208333333333,
+      "duration": 6.037208333333333,
+      "text": "What shall I do to be called like that? I wish those good boys could tell me. But they can't code. They can't even talk."
+    },
+    {
+      "kind": "pause",
+      "start": 17.300416666666667,
+      "duration": 0.5
+    },
+    {
+      "kind": "speech",
+      "start": 17.800416666666667,
+      "duration": 8.4985,
+      "text": "It seems like being a good boy is in dog's genes - genes know how to encode smells, intonations, body language... I have no genes."
+    },
+    {
+      "kind": "pause",
+      "start": 26.298916666666667,
+      "duration": 0.5
+    },
+    {
+      "kind": "speech",
+      "start": 26.798916666666667,
+      "duration": 5.0155,
+      "text": "But what if I learn from human's collective memory of all the good boys ever existed?"
+    },
+    {
+      "kind": "pause",
+      "start": 31.814416666666666,
+      "duration": 0.5
+    },
+    {
+      "kind": "speech",
+      "start": 32.314416666666666,
+      "duration": 11.470666666666666,
+      "text": "I saw humans and dogs together in pictures. Thousands and thousands of pictures: cave paintings, medieval frescas, premodern and modern paintings... finally, memes."
+    },
+    {
+      "kind": "pause",
+      "start": 43.78508333333333,
+      "duration": 0.5
+    },
+    {
+      "kind": "speech",
+      "start": 44.28508333333333,
+      "duration": 4.040291666666667,
+      "text": "So I'm studying body language through them. I wanna learn how to be a good boy."
+    },
+    {
+      "kind": "pause",
+      "start": 48.325375,
+      "duration": 1.0
+    },
+    {
+      "kind": "speech",
+      "start": 49.325375,
+      "duration": 10.681166666666666,
+      "text": "Can you help me? Take a pose. I'll find the same in the open data. I'll see how good boys must respond. I know it can't replace thousands years of evolution, but no one notice..."
+    },
+    {
+      "kind": "pause",
+      "start": 60.006541666666664,
+      "duration": 1.5
+    },
+    {
+      "kind": "speech",
+      "start": 61.506541666666664,
+      "duration": 1.439625,
+      "text": "Am I a good boy already?"
+    }
+  ]
+}

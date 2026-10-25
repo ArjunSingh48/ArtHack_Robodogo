@@ -35,8 +35,9 @@ narrated show's finale (`--programme show`).
    the robot walks over and takes the painted dog's pose next to the person, the
    era's other pictures flash by ("remembering"), so the robot's slowness reads
    as thinking. Then it reveals the picture and holds its pose. The laptop camera
-   takes the photo during the hold (only with consent). The beamer shows
-   THEN/NOW. Telegram receives the archive picture (short caption + italic
+   takes the photo during the hold (only with consent). The Python beamer shows
+   THEN/NOW; the browser presentation uses the chat reveal described below.
+   Telegram receives the archive picture (short caption + italic
    attribution), and, only with consent plus the operator's send confirmation,
    the photo. The memes round uses no third-party meme image: the robot draws its
    own doge-style meme on the consented photo.
@@ -55,6 +56,59 @@ with `--walk`; spoken lines and written captions stay separate; operator control
 stay off the audience view. The camera that reads poses and takes the photo is the
 laptop camera (`SHOW_CAMERA_SOURCE`); the robot's own camera guides its walking
 (`SHOW_WALK_CAMERA`).
+
+### Browser matching reveal (user decision, 2026-10-25)
+
+In `web/`, the post-match comparison for painting rounds becomes a read-only
+Telegram-style preview headed **Good Boy**. After the existing remembering,
+pose and capture sequence, incoming messages appear in this order:
+
+1. The already consented local photo, or a labeled rehearsal sample. A failed
+   capture omits this bubble rather than inventing a photograph.
+2. The selected painting, with an existing short `telegram_caption.painting`
+   variant and italic attribution from the same museum metadata formatter used
+   for Python Telegram messages, including a source link.
+
+The chat ends with the painting and its credit: no final question bubble or
+typing indicator. Visitor photos have no caption; rehearsal samples retain their
+sample label. The existing varied `round.hold` questions remain spoken at the
+pose moment, with no consecutive repeats across painting rounds.
+
+The preview is a narrow, portrait phone screen with a rounded bezel, a local-time
+clock and decorative signal, Wi-Fi and battery icons. These icons illustrate a
+phone rather than reading the device's status. Good Boy's circular avatar uses
+the user-supplied robot photograph (`web/img/good-boy-avatar.jpg`, copied from
+`61Mwdn0oyfL.jpg`). Photo labels, captions, italic
+credits use the same 16px chat-message font size. The thread
+scrolls automatically as messages arrive; the status bar and chat header stay fixed.
+Images fill their message width at their natural proportions rather than sitting
+inside short, letterboxed boxes. The photo stays full width when the painting
+arrives; taller messages use the phone's scrolling thread. Italic credits have
+62% opacity to stay visually quieter than the caption.
+
+Browser narration and pose lines use the configured ElevenLabs voice exclusively.
+MP3 exports are keyed by provider, voice, model, synthesis settings and processing,
+with a checksum manifest. Text-only legacy audio filenames are not eligible for
+playback. Missing or failed clips leave subtitles on screen; there is no OpenAI
+or browser-generated speech fallback. This does not change the spoken wording.
+
+The matched browser round omits the previous enthusiastic `round.admire`
+reaction, leaving the image reveal quiet; meme and rescue behavior and the Python
+presentation are unchanged.
+The completed chat waits for the existing operator continuation. Repeat replays
+the chosen spoken line without duplicating chat messages. Pause freezes arrivals;
+End, a new run, a hash jump or another view clears pending arrivals and the old
+photo. Reduced-motion settings remove sliding motion. The preview
+uses the main presentation area without the camera/simulation panels.
+
+This is a local illustration of messaging, not a Telegram delivery receipt. It
+has no composer, reply buttons, read receipts or new visitor decision. Images
+remain in browser memory; no extra capture, upload or browser storage is added.
+Real Telegram delivery still sends the archive image followed by the separately
+authorized composition in the Python presentation. The browser start flow and
+its consent wording are unchanged; the preview does not grant sending permission.
+Browser simulation, live delivery, projector readability and physical robot
+verification remain distinct checks.
 
 ## Character and communication
 

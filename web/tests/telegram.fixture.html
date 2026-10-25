@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><base href="/"><link rel="stylesheet" href="telegram.css"></head>
+<body>
+<div id="chapter"></div><div id="controls"></div><div id="msg"></div><div id="robot" hidden></div>
+<div id="stage"><div id="view"></div><div id="live"><div id="sim3d"></div><div id="simdoing"></div><div id="camview"><canvas id="camcanvas"></canvas></div><div id="checks"></div></div></div>
+<div id="subtitle"></div><div id="notice"></div><div id="lobby"><button id="startCam"></button><button id="startSamples"></button></div>
+<video id="video"></video>
+<script type="module">
+import { createTelegramPreview } from '/telegram.js';
+const failures = [];
+let passed = 0;
+const check = (ok, message) => { if (!ok) throw new Error(message); };
+const delay = (ms = 400) => new Promise((resolve) => setTimeout(resolve, ms));
+const test = async (name, fn) => {
+  try { await fn(); passed++; } catch (error) { failures.push(`${name}: ${error.message}`); }
+};
+const source = new DOMParser().parseFromString(await (await fetch('/index.html')).text(), 'text/html');
+document.head.append(source.querySelector('style').cloneNode(true));
+const stylesheet = document.createElement('link'); stylesheet.rel = 'stylesheet'; stylesheet.href = '/telegram.css'; document.head.append(stylesheet);
+const view = document.getElementById('view');
+const artifact = { image: 'img/met_327508.jpg', title: 'Dog pendant', artist: 'Unknown artist',
+  date: 'ca. 3300–2900 BCE', museum: 'The Metropolitan Museum of Art', rights: 'Public Domain',
+  attribution: 'Unknown artist — Dog pendant, ca. 3300–2900 BCE. The Metropolitan Museum of Art. Public Domain.',
+  source_url: 'https://www.metmuseum.org/art/collection/search/327508' };
+const photo = 'samples/sitting.jpg';
+let preview;
+await test('read-only identifiable preview', () => {
+  preview = createTelegramPreview(view, { photo, photoLabel: 'Sample photo — rehearsal', artifact, caption: 'us?👉👈' });
+  check(view.querySelector('h2').textContent === 'Good Boy', 'wrong sender');
+  check(view.textContent.includes('Telegram preview'), 'mockup must not imply delivery');
+  check(/^\d{2}:\d{2}$/.test(view.querySelector('.telegram-clock').textContent), 'missing phone clock');
+  check(view.querySelectorAll('.telegram-status-icons svg').length === 3, 'missing signal, Wi-Fi or battery icon');
+  check(view.querySelector('.telegram-avatar').getAttribute('src') === 'img/good-boy-avatar.jpg', 'missing supplied dog avatar');
+  check(!view.querySelector('button,input,textarea'), 'must not require visitor interaction');
+  check(!view.querySelector('.telegram-message'), 'messages must wait for their arrival');
+});
+await test('photo before painting, with accurate rehearsal label', () => {
+  preview.showPhoto(); preview.showPhoto();
+  check(view.querySelectorAll('.telegram-photo').length === 1, 'duplicate photo');
+  check(view.textContent.includes('Sample photo — rehearsal'), 'sample is misrepresented');
+  check(!view.querySelector('.telegram-painting'), 'painting arrived early');
+  preview.showPainting();
+  check(view.querySelector('.telegram-messages').firstElementChild.matches('.telegram-photo'), 'photo not first');
+  check(view.querySelector('.telegram-photo').nextElementSibling.matches('.telegram-painting'), 'painting not second');
+  check(view.querySelector('.telegram-caption').textContent === 'us?👉👈', 'wrong caption');
+  check(view.querySelector('i.telegram-credit').textContent.includes(artifact.attribution), 'incomplete/nonitalic attribution');
+});
+await test('typing and caller-selected shy question', () => {
+  preview.showTyping();
+  check(view.querySelector('.telegram-typing'), 'missing typing beat');
+  preview.showQuestion('Is this how they did it?'); preview.showQuestion('Should not appear twice');
+  check(!view.querySelector('.telegram-typing'), 'typing remains after question');
+  check(view.querySelectorAll('.telegram-question').length === 1, 'duplicate question');
+  check(view.querySelector('.telegram-question').textContent === 'Is this how they did it?', 'caller variation lost');
+});
+await test('automatic reading position and uncropped layout', async () => {
+  await delay();
+  const chat = view.querySelector('.telegram-chat'), log = view.querySelector('.telegram-messages');
+  const q = view.querySelector('.telegram-question').getBoundingClientRect(), bounds = log.getBoundingClientRect();
+  check(q.bottom <= bounds.bottom + 2 && q.top >= bounds.top - 2, 'latest message requires visitor scrolling');
+  check(chat.getBoundingClientRect().right <= innerWidth + 1, 'chat overflows viewport');
+  check(chat.getBoundingClientRect().width <= 390, 'phone screen is too wide');
+  const sizes = ['.telegram-photo-label', '.telegram-caption', '.telegram-credit', '.telegram-question']
+    .map((selector) => getComputedStyle(view.querySelector(selector)).fontSize);
+  check(sizes.every((size) => size === '16px'), 'chat text sizes must match');
+  check(getComputedStyle(view.querySelector('.telegram-image')).objectFit === 'contain', 'image is cropped');
+  check(getComputedStyle(view.querySelector('.telegram-credit')).opacity === '0.62', 'credit should be translucent');
+  for (const bubble of view.querySelectorAll('.telegram-photo,.telegram-painting')) {
+    const img = bubble.querySelector('img');
+    check(Math.abs(img.getBoundingClientRect().width - bubble.getBoundingClientRect().width) < 1, 'large image side margins remain');
+  }
+  check(getComputedStyle(document.getElementById('live')).display === 'none', 'debug/live panels compete with chat');
+});
+await test('pause and reduced motion', () => {
+  preview.setPaused(true);
+  check(getComputedStyle(view.querySelector('.telegram-chat')).animationPlayState === 'paused', 'pause does not stop motion');
+  preview.setPaused(false);
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches)
+    check(getComputedStyle(view.querySelector('.telegram-question')).animationName === 'none', 'reduced motion still animates');
+});
+await test('dispose removes private media and late callbacks', () => {
+  const img = view.querySelector('.telegram-photo img');
+  preview.dispose(); preview.showPhoto(); preview.showQuestion('stale');
+  check(!view.children.length && !document.body.classList.contains('telegram-preview'), 'stale view remains');
+  check(!img.hasAttribute('src') && img.onload === null && img.onerror === null, 'image retained after disposal');
+});
+await test('no photo still shows painting and question', () => {
+  preview = createTelegramPreview(view, { artifact, caption: 'me and who?🥺' });
+  preview.showPhoto(); preview.showPainting(); preview.showQuestion('Like this?');
+  check(!view.querySelector('.telegram-photo'), 'invented a photo');
+  check(view.querySelector('.telegram-painting') && view.querySelector('.telegram-question'), 'no-photo fallback incomplete');
+});
+await test('fresh match cannot be erased by stale disposal', () => {
+  const old = preview;
+  preview = createTelegramPreview(view, { photo, artifact });
+  preview.showPhoto(); old.dispose(); old.showQuestion('old');
+  check(document.body.classList.contains('telegram-preview'), 'old cleanup changed new view');
+  check(view.querySelectorAll('.telegram-chat').length === 1 && !view.textContent.includes('old'), 'old match remains');
+});
+await test('metadata stays literal and media stays local', () => {
+  preview = createTelegramPreview(view, { photo: 'https://example.invalid/private-photo.jpg',
+    artifact: { ...artifact, attribution: '<img src=x onerror=alert(1)>', source_url: 'javascript:alert(1)' },
+    caption: '<script>window.bad=true<' + '/script>' });
+  preview.showPhoto(); preview.showPainting(); preview.showQuestion('<b>Like this?</b>');
+  check(view.querySelector('.telegram-photo .telegram-image-unavailable'), 'external photo allowed');
+  check(!view.querySelector('script') && !view.querySelector('.telegram-credit img'), 'metadata interpreted as HTML');
+  check(view.querySelector('.telegram-question').textContent === '<b>Like this?</b>', 'question not literal');
+  check(!view.querySelector('.telegram-credit a'), 'unsafe source link');
+});
+await test('failed image preserves credit and continuation', async () => {
+  preview = createTelegramPreview(view, { artifact: { ...artifact, image: 'img/no-such-image.jpg' }, caption: 'us?👉👈' });
+  preview.showPainting(); preview.showQuestion('Am I doing it right?');
+  await delay();
+  check(view.querySelector('.telegram-image-unavailable'), 'broken image not handled');
+  check(view.querySelector('.telegram-credit').textContent.includes(artifact.attribution), 'image failure lost attribution');
+  check(view.querySelector('.telegram-question'), 'image failure blocked question');
+  preview.dispose();
+});
+const result = document.createElement('pre'); result.id = 'test-results';
+window.robotCalls = [];
+const { harness } = await import('/app-under-test.js');
+await test('speech plays only verified ElevenLabs export URLs', async () => {
+  const original = HTMLMediaElement.prototype.play, voice = harness.show.voice;
+  const played = [];
+  HTMLMediaElement.prototype.play = function () {
+    played.push(this.getAttribute('src'));
+    return Promise.resolve();
+  };
+  try {
+    const g = harness.begin();
+    const clip = harness.show.lines.round.hold[0].audio;
+    for (const [provider, url, expected] of [
+      ['openai', clip, 0], ['elevenlabs', 'audio/legacy.mp3', 0], ['elevenlabs', clip, 1],
+    ]) {
+      harness.show.voice = { ...voice, provider };
+      const speaking = harness.say('Voice check', url, g);
+      harness.send('next'); await speaking;
+      check(played.length === expected, 'wrong-provider audio was played or ElevenLabs was rejected');
+    }
+  } finally {
+    HTMLMediaElement.prototype.play = original;
+    harness.show.voice = voice;
+    harness.toLobby();
+  }
+});
+await test('existing question variants do not immediately repeat', () => {
+  let previous;
+  const observed = new Set();
+  for (let i = 0; i < 30; i++) {
+    const q = harness.matchQuestion();
+    check(harness.show.lines.round.hold.some((v) => v.text === q.text && v.audio === q.audio), 'new wording or audio introduced');
+    check(q.text !== previous, 'consecutive shy question repeated');
+    previous = q.text; observed.add(q.text);
+  }
+  check(observed.size > 1, 'question became constant');
+});
+await test('app reveal pauses before arrival and resumes in order', async () => {
+  const g = harness.begin(), q = harness.matchQuestion();
+  const pending = harness.reveal(artifact, photo, q, g);
+  harness.send('pause'); await delay(800);
+  check(!view.querySelector('.telegram-message'), 'messages arrived while paused');
+  harness.send('resume'); await pending;
+  check(view.querySelector('.telegram-messages').firstElementChild.matches('.telegram-photo'), 'app did not start with photo');
+  check(!view.querySelector('.telegram-question,.telegram-typing'), 'chat must end without a question or typing indicator');
+  check(view.querySelector('.telegram-messages').lastElementChild.matches('.telegram-painting'), 'painting must be the final message');
+  check(view.querySelector('.telegram-caption').textContent.length > 0, 'missing exported short caption');
+  check(window.robotCalls.length === 0, 'preview issued robot commands');
+});
+await test('End cancels pending reveals and clears photo', async () => {
+  const g = harness.begin();
+  const pending = harness.reveal(artifact, photo, harness.matchQuestion(), g).catch((e) => e);
+  await delay(200); harness.send('cancel'); await pending; await delay(500);
+  check(!view.querySelector('.telegram-chat') && !document.body.classList.contains('telegram-preview'), 'End left chat visible');
+});
+await test('app photo failure fallback ends with the painting', async () => {
+  const g = harness.begin(), q = harness.matchQuestion();
+  await harness.reveal(artifact, null, q, g);
+  check(!view.querySelector('.telegram-photo'), 'missing capture invented a photo');
+  check(view.querySelector('.telegram-painting') && !view.querySelector('.telegram-question'), 'fallback must end with painting');
+});
+await test('hash navigation invalidates the previous sequence', async () => {
+  const g = harness.begin();
+  const pending = harness.reveal(artifact, photo, harness.matchQuestion(), g).catch((e) => e);
+  harness.show.chapters = [{ id: 'test', title: 'Test', cues: [{ id: 'test.01', kind: 'pause', seconds: 20, show: 'title' }] }];
+  location.hash = 'test.01'; await delay(250); await pending;
+  check(harness.currentGeneration() !== g && !view.querySelector('.telegram-chat'), 'hash jump left old sequence alive');
+  harness.toLobby();
+});
+// Leave a realistic final view for optional screenshots, including operator controls.
+const roundIds = new Set(Object.values(harness.show.eras).flat());
+const longest = Object.entries(harness.show.art).filter(([id]) => roundIds.has(id)).map(([, a]) => a)
+  .sort((a, b) => (b.attribution || '').length - (a.attribution || '').length)[0];
+const finalGeneration = harness.begin();
+await harness.reveal(longest, photo, null, finalGeneration, 'camera');
+await delay();
+await test('final chat stays clear of operator controls', () => {
+  const chat = view.querySelector('.telegram-chat').getBoundingClientRect();
+  const controls = document.getElementById('controls').getBoundingClientRect();
+  check(chat.top >= controls.bottom - 1, 'operator controls overlap chat');
+  const log = view.querySelector('.telegram-messages').getBoundingClientRect();
+  const credit = view.querySelector('.telegram-credit').getBoundingClientRect();
+  check(credit.top >= log.top && credit.bottom <= log.bottom, 'long attribution is outside the reading area');
+  check(!view.querySelector('.telegram-question,.telegram-typing'), 'unexpected final question');
+  check(!view.querySelector('.telegram-photo-label'), 'visitor photo must not have a caption');
+  const thread = view.querySelector('.telegram-messages');
+  check(thread.scrollHeight >= thread.clientHeight, 'messages must use the available screen height');
+});
+result.hidden = true; result.textContent = JSON.stringify({ passed, failures }); document.body.append(result);
+</script></body></html>

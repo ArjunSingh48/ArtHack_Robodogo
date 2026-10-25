@@ -12,7 +12,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/01f282a7962ee807.mp3"
+     "audio": "audio/elevenlabs/649833ec79d0343d0e3346e9.mp3"
     },
     {
      "id": "last_dog.02",
@@ -22,7 +22,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/ab74562b9a5ce3d5.mp3"
+     "audio": "audio/elevenlabs/b3282a4cc1bfcb3c7b0a3248.mp3"
     },
     {
      "id": "last_dog.03",
@@ -32,7 +32,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/7cb160812db41647.mp3"
+     "audio": "audio/elevenlabs/b472a1f370ba0e7574c057eb.mp3"
     },
     {
      "id": "last_dog.04",
@@ -42,7 +42,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/48175ad215493ae7.mp3"
+     "audio": "audio/elevenlabs/2f70cb1eb6d0b0e0ad8c4490.mp3"
     },
     {
      "id": "last_dog.05",
@@ -62,7 +62,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/4e6a89b81ab53534.mp3"
+     "audio": "audio/elevenlabs/e6bd008be123b385a030895c.mp3"
     },
     {
      "id": "last_dog.07",
@@ -72,7 +72,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/67f0c30c5da6b1b2.mp3"
+     "audio": "audio/elevenlabs/1ed99aebc308006dd649aecc.mp3"
     },
     {
      "id": "last_dog.08",
@@ -82,7 +82,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/5f1a2508e0dc5a8f.mp3"
+     "audio": "audio/elevenlabs/a65e0e34eeac808bddf59f66.mp3"
     },
     {
      "id": "last_dog.09",
@@ -92,7 +92,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/d55ef17a331d458f.mp3"
+     "audio": "audio/elevenlabs/d87f2b3a4a13a1e637cc219f.mp3"
     },
     {
      "id": "last_dog.10",
@@ -112,7 +112,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/ae2b6babcb487792.mp3"
+     "audio": "audio/elevenlabs/8c207bbb0ac4c38d040308ab.mp3"
     }
    ]
   },
@@ -128,7 +128,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/0eaac6435c968aaf.mp3"
+     "audio": "audio/elevenlabs/14f6afca9f402a309323695b.mp3"
     },
     {
      "id": "prehistory.02",
@@ -138,7 +138,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/a7d15359e2681e88.mp3"
+     "audio": "audio/elevenlabs/2a88636c20c482db3f696188.mp3"
     },
     {
      "id": "prehistory.03",
@@ -148,7 +148,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/14aaaca3047b689a.mp3"
+     "audio": "audio/elevenlabs/4b1b390abe5ecd1a563222ba.mp3"
     },
     {
      "id": "prehistory.04",
@@ -158,7 +158,7 @@
      "seconds": 0.0,
      "target": "prehistory",
      "branch": "always",
-     "audio": "audio/3c8c3bd0d76e3bfa.mp3"
+     "audio": "audio/elevenlabs/d093994be36225b839b08a03.mp3"
     }
    ]
   },
@@ -174,7 +174,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/3758fbca592e1bec.mp3"
+     "audio": "audio/elevenlabs/a00c5683b4db90f15a4e4a3e.mp3"
     },
     {
      "id": "middle_ages.02",
@@ -184,7 +184,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/dfd0ff65bb1a76aa.mp3"
+     "audio": "audio/elevenlabs/6f0c362e7f2176314bf99cd9.mp3"
     },
     {
      "id": "middle_ages.03",
@@ -194,7 +194,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/60e572e7622e26f8.mp3"
+     "audio": "audio/elevenlabs/cdb519d4f6f7ac598a03a3ed.mp3"
     },
     {
      "id": "middle_ages.04",
@@ -204,7 +204,7 @@
      "seconds": 0.0,
      "target": "middle_ages",
      "branch": "always",
-     "audio": "audio/f48cff848d03dc33.mp3"
+     "audio": "audio/elevenlabs/8e3db5f7baf83c54f453df24.mp3"
     }
    ]
   },
@@ -220,7 +220,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/6e60e77fdffa2580.mp3"
+     "audio": "audio/elevenlabs/1c6b1c0f37ea768f6b4dda33.mp3"
     },
     {
      "id": "paintings.02",
@@ -230,7 +230,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/edacb4d569168b2c.mp3"
+     "audio": "audio/elevenlabs/dbb7723cdf151ddf75f612e7.mp3"
     },
     {
      "id": "paintings.03",
@@ -240,7 +240,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/d10565692fde685d.mp3"
+     "audio": "audio/elevenlabs/0ce50e5ce64904b5fc58d47f.mp3"
     },
     {
      "id": "paintings.04",
@@ -250,7 +250,7 @@
      "seconds": 0.0,
      "target": "paintings",
      "branch": "always",
-     "audio": "audio/699a646d0fda51c7.mp3"
+     "audio": "audio/elevenlabs/de1773403b18c5f28ec5baf1.mp3"
     }
    ]
   },
@@ -266,7 +266,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/2b2985f8603fe92b.mp3"
+     "audio": "audio/elevenlabs/2fe9e45004f17ead62062f80.mp3"
     },
     {
      "id": "internet.02",
@@ -276,7 +276,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/67f3a24ca7abe5c2.mp3"
+     "audio": "audio/elevenlabs/e4b7746109f540bd718df1ca.mp3"
     },
     {
      "id": "internet.03",
@@ -286,7 +286,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/276a0d193df89a27.mp3"
+     "audio": "audio/elevenlabs/a5ac016e676905588a22b5a5.mp3"
     },
     {
      "id": "internet.04",
@@ -296,7 +296,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/68ae73187bfda474.mp3"
+     "audio": "audio/elevenlabs/904aefbf703e9f063cf257c6.mp3"
     },
     {
      "id": "internet.05",
@@ -306,7 +306,7 @@
      "seconds": 0.0,
      "target": "internet",
      "branch": "always",
-     "audio": "audio/0d592b8d9f352902.mp3"
+     "audio": "audio/elevenlabs/e964cace0e19a888f67d0eaa.mp3"
     }
    ]
   },
@@ -322,7 +322,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/78bafa0dd0845e6d.mp3"
+     "audio": "audio/elevenlabs/6295dfef2c4f885047680bc3.mp3"
     },
     {
      "id": "rescue.02",
@@ -332,7 +332,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/bd9c5aaa2ae6e3b9.mp3"
+     "audio": "audio/elevenlabs/3d2e6c53547f3bbd6d237524.mp3"
     },
     {
      "id": "rescue.03",
@@ -342,7 +342,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/a137c9d59df3e79f.mp3"
+     "audio": "audio/elevenlabs/02cccbba08a0ef5e10a58718.mp3"
     },
     {
      "id": "rescue.04",
@@ -352,7 +352,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/e26e8539bb1c4ebf.mp3"
+     "audio": "audio/elevenlabs/b77a20f55bfdbfa436ad8132.mp3"
     },
     {
      "id": "rescue.05",
@@ -362,7 +362,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/e4a4adf416b4ec2c.mp3"
+     "audio": "audio/elevenlabs/d7ca7fe92a39c4e91835fbce.mp3"
     },
     {
      "id": "rescue.06",
@@ -382,7 +382,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/d622b30f9f17614d.mp3"
+     "audio": "audio/elevenlabs/90526d66667b4428ab54f2a1.mp3"
     },
     {
      "id": "rescue.08",
@@ -402,7 +402,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/af19932ed8713a70.mp3"
+     "audio": "audio/elevenlabs/839be27127299da3ce13976c.mp3"
     },
     {
      "id": "rescue.10",
@@ -422,7 +422,7 @@
      "seconds": 0.0,
      "target": "",
      "branch": "always",
-     "audio": "audio/0c1e80b363b12499.mp3"
+     "audio": "audio/elevenlabs/fccfb355d49d405c780157d3.mp3"
     }
    ]
   }
@@ -441,7 +441,10 @@
    "human": "",
    "dog": "stand",
    "side": "front",
-   "facing": "left"
+   "facing": "left",
+   "attribution": "Unknown artist — Dog pendant, ca. 3300–2900 BCE. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/327508",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:545395": {
    "kind": "art",
@@ -456,7 +459,10 @@
    "human": "standing",
    "dog": "stand",
    "side": "right",
-   "facing": "left"
+   "facing": "left",
+   "attribution": "Unknown artist — Inscribed block with bowman and dog, ca. 2051–2000 B.C. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/545395",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:329081": {
    "kind": "art",
@@ -471,7 +477,10 @@
    "human": "standing",
    "dog": "stretch",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Unknown artist — Proto-Cuneiform tablet with seal impressions: administrative account of barley distribution with cylinder seal impression of a male figure, hunting dogs, and boars, ca. 3100–2900 BCE. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/329081",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:323707": {
    "kind": "art",
@@ -486,7 +495,10 @@
    "human": "standing",
    "dog": "sit",
    "side": "right",
-   "facing": "viewer"
+   "facing": "viewer",
+   "attribution": "Unknown artist — Man and dog, ca. 8th–7th century BCE. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/323707",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "cma:169746": {
    "kind": "art",
@@ -501,7 +513,10 @@
    "human": "standing",
    "dog": "lie_down",
    "side": "left",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "France, Troyes?, 15th century — Leaf from a Book of Hours: Annunciation to the Shepherds, c. 1460. Cleveland Museum of Art. CC0 (Cleveland Museum of Art Open Access).",
+   "page_url": "https://clevelandart.org/art/2011.61",
+   "rights_statement": "Cleveland Museum of Art Open Access: share_license_status=CC0"
   },
   "met:467641": {
    "kind": "art",
@@ -516,7 +531,10 @@
    "human": "standing",
    "dog": "stand",
    "side": "front",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "Unknown artist — The Hunters Return to the Castle (from the Unicorn Tapestries), 1495–1505. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/467641",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:464212": {
    "kind": "art",
@@ -531,7 +549,10 @@
    "human": "standing",
    "dog": "stretch",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Unknown artist — Medallion with Varlet with Horn and Hound, ca. 1240–60. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/464212",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:471826": {
    "kind": "art",
@@ -546,7 +567,10 @@
    "human": "riding",
    "dog": "stretch",
    "side": "right",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "Unknown artist — Hunting Scene, first half 12th century (possibly 1129–34). The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/471826",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:436252": {
    "kind": "art",
@@ -561,7 +585,10 @@
    "human": "standing",
    "dog": "greet",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Anthony van Dyck — James Stuart (1612–1655), Duke of Richmond and Lennox, ca. 1633–35. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/436252",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:438815": {
    "kind": "art",
@@ -576,7 +603,10 @@
    "human": "sitting",
    "dog": "lie_down",
    "side": "left",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "Auguste Renoir — Madame Georges Charpentier (Marguerite-Louise Lemonnier, 1848–1904) and Her Children, Georgette-Berthe (1872–1945) and Paul-Emile-Charles (1875–1895), 1878. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/438815",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:437177": {
    "kind": "art",
@@ -591,7 +621,10 @@
    "human": "sitting",
    "dog": "stand",
    "side": "right",
-   "facing": "left"
+   "facing": "left",
+   "attribution": "Martin van Meytens the Younger — Count Giacomo Durazzo (1717–1794) and Ernestine Aloisia Ungnad von Weissenwolff (1732–1794), probably early 1760s. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/437177",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:437890": {
    "kind": "art",
@@ -606,7 +639,10 @@
    "human": "standing",
    "dog": "stand",
    "side": "right",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Paolo Veronese (Paolo Caliari) — Boy with a Greyhound, possibly 1570s. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/437890",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:436323": {
    "kind": "art",
@@ -621,7 +657,10 @@
    "human": "standing",
    "dog": "sit",
    "side": "left",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "Jean Honoré Fragonard — Marie Emilie Coignet de Courson (1716–1806) with a Dog, ca. 1769. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/436323",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:437449": {
    "kind": "art",
@@ -636,7 +675,10 @@
    "human": "sitting",
    "dog": "greet",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Sir Joshua Reynolds — The Honorable Henry Fane (1739–1802) with Inigo Jones and Charles Blair, 1761–66. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/437449",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:437966": {
    "kind": "art",
@@ -651,7 +693,10 @@
    "human": "sitting",
    "dog": "sit",
    "side": "left",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "Anders Zorn — Mrs. Walter Rathbone Bacon (Virginia Purdy Barker, 1862–1919), 1897. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/437966",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:437841": {
    "kind": "art",
@@ -666,7 +711,10 @@
    "human": "sitting",
    "dog": "lie_down",
    "side": "front",
-   "facing": "right"
+   "facing": "right",
+   "attribution": "Gaspare Traversi — Saint Margaret of Cortona, ca. 1758. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/437841",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:437173": {
    "kind": "art",
@@ -681,7 +729,10 @@
    "human": "standing",
    "dog": "sit",
    "side": "left",
-   "facing": "viewer"
+   "facing": "viewer",
+   "attribution": "Bartolomé Estebán Murillo — Don Andrés de Andrade y la Cal, ca. 1665–72. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/437173",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:435864": {
    "kind": "art",
@@ -696,7 +747,10 @@
    "human": "standing",
    "dog": "sit",
    "side": "front",
-   "facing": "viewer"
+   "facing": "viewer",
+   "attribution": "Giacomo Ceruti — A Woman with a Dog, 1740s. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/435864",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:283102": {
    "kind": "art",
@@ -711,7 +765,10 @@
    "human": "",
    "dog": "lie_down",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Louis-Auguste Bisson — [Dog], 1841–49. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/283102",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:265794": {
    "kind": "art",
@@ -726,7 +783,10 @@
    "human": "",
    "dog": "lie_down",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Alfred Capel Cure — \"Peter\", 1860. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/265794",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:285425": {
    "kind": "art",
@@ -741,7 +801,10 @@
    "human": "",
    "dog": "sit",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Rufus Anson — [Dog Posing for Portrait in Photographer's Studio Chair], ca. 1855. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/285425",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "met:266886": {
    "kind": "art",
@@ -756,7 +819,10 @@
    "human": "standing",
    "dog": "stand",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Unknown — [Snapshot: Dog and Man], ca. 1890. The Metropolitan Museum of Art. Public Domain (The Met Open Access).",
+   "page_url": "https://www.metmuseum.org/art/collection/search/266886",
+   "rights_statement": "The Met Open Access: isPublicDomain=true (CC0 image)"
   },
   "cma:290412": {
    "kind": "art",
@@ -771,7 +837,10 @@
    "human": "sitting",
    "dog": "stand",
    "side": "left",
-   "facing": "person"
+   "facing": "person",
+   "attribution": "Raja Deen Dayal — Robert Hotz Esquire and Bulldog, 1887. Cleveland Museum of Art. CC0 (Cleveland Museum of Art Open Access).",
+   "page_url": "https://clevelandart.org/art/2016.266.12",
+   "rights_statement": "Cleveland Museum of Art Open Access: share_license_status=CC0"
   },
   "meme:doge": {
    "kind": "meme",
@@ -885,113 +954,113 @@
    "waiting": [
     {
      "text": "I'm looking…",
-     "audio": "audio/78cc5a7f5973e417.mp3"
+     "audio": "audio/elevenlabs/5eb691941f3e1a184842c0c7.mp3"
     },
     {
      "text": "Stay like that, if you can.",
-     "audio": "audio/0a247da2c179b4c4.mp3"
+     "audio": "audio/elevenlabs/08a1e633c293d98ed27e5de4.mp3"
     }
    ],
    "nobody": [
     {
      "text": "Hmm. Nobody is posing. That's all right — I'll imagine it.",
-     "audio": "audio/1bb6880f86d51e25.mp3"
+     "audio": "audio/elevenlabs/cc4525cba85cfd290ad04369.mp3"
     }
    ],
    "thinking": [
     {
      "text": "Hmm… wait. I think I remember something.",
-     "audio": "audio/53b621714c92cc9c.mp3"
+     "audio": "audio/elevenlabs/cb5fddd68834c4659214c9fe.mp3"
     },
     {
      "text": "Oh. This reminds me of… wait.",
-     "audio": "audio/51a02222f9297fa3.mp3"
+     "audio": "audio/elevenlabs/3541978544d1d87a5e911e66.mp3"
     },
     {
      "text": "Let me think. I have seen this before.",
-     "audio": "audio/75b5e89c131cac6c.mp3"
+     "audio": "audio/elevenlabs/8750071576112268df9598dc.mp3"
     }
    ],
    "found": [
     {
      "text": "Oh… this one. This is us.",
-     "audio": "audio/bb148444b1a2a8e3.mp3"
+     "audio": "audio/elevenlabs/d1ac9d78196a7a816da1954f.mp3"
     },
     {
      "text": "There. I found us.",
-     "audio": "audio/1938bdf2e4f4c990.mp3"
+     "audio": "audio/elevenlabs/030948da06432cdf2e7f7065.mp3"
     },
     {
      "text": "This one! I think this is us.",
-     "audio": "audio/98736b11a1a9d352.mp3"
+     "audio": "audio/elevenlabs/df0fefc2d437f726bb9444b4.mp3"
     }
    ],
    "hold": [
     {
      "text": "Like this?",
-     "audio": "audio/639696b07a342f27.mp3"
+     "audio": "audio/elevenlabs/be314fdef9b7feec18c99a17.mp3"
     },
     {
      "text": "Is this how they did it?",
-     "audio": "audio/0a1f6eaf6c09ad66.mp3"
+     "audio": "audio/elevenlabs/1398084f9675ce42e7565f26.mp3"
     },
     {
      "text": "Am I doing it right?",
-     "audio": "audio/f7a52dae2e9f2cf0.mp3"
+     "audio": "audio/elevenlabs/ece5f4c9eb2f065e681bbaf1.mp3"
     }
    ],
    "photo": [
     {
      "text": "Click.",
-     "audio": "audio/d35b92b0ca9741a9.mp3"
+     "audio": "audio/elevenlabs/e88b35d2afd0076779ec0f69.mp3"
     }
    ],
    "sent": [
     {
      "text": "I sent it to you. And to the big screen.",
-     "audio": "audio/4aa4e8d67155ef0f.mp3"
+     "audio": "audio/elevenlabs/be114feffbd7cb47a02a70b4.mp3"
     }
    ],
    "shown": [
     {
      "text": "Look. There we are.",
-     "audio": "audio/666cd4d47dc051c1.mp3"
+     "audio": "audio/elevenlabs/52ad0c7add39d07e5f8eaa93.mp3"
     }
    ],
    "admire": [
     {
      "text": "Look! That's us. I'm keeping this one forever.",
-     "audio": "audio/07c730afd6af3eff.mp3"
+     "audio": "audio/elevenlabs/e69705eb29d7131991848037.mp3"
     },
     {
      "text": "Oh… look at us. We look like a painting.",
-     "audio": "audio/147d2af778ad24f8.mp3"
+     "audio": "audio/elevenlabs/fbd15437ab3f1d2e150abb4b.mp3"
     },
     {
      "text": "This is my favourite picture now. Again.",
-     "audio": "audio/afe57dff764f3d45.mp3"
+     "audio": "audio/elevenlabs/a869fb882e16ce33cc6be947.mp3"
     },
     {
      "text": "Wow. Very us. Much archive.",
-     "audio": "audio/e6745e502be9e024.mp3"
+     "audio": "audio/elevenlabs/e6f6ab76fecd0fdc3bad61e5.mp3"
     }
    ],
    "no_photo": [
     {
      "text": "No picture this time. I will remember it anyway.",
-     "audio": "audio/f87cc260fd963acc.mp3"
+     "audio": "audio/elevenlabs/c1de69b29980af3987519171.mp3"
     }
    ],
    "meme_found": [
     {
      "text": "Wait. We don't need an old picture. We can be the meme.",
-     "audio": "audio/2f206c6f13128a83.mp3"
+     "audio": "audio/elevenlabs/b4f854c1a678377ab7e03f99.mp3"
     }
    ],
    "meme_no_photo": [
     {
      "text": "No photo? Then this one stays in my memory. Much private. Wow.",
-     "audio": "audio/9e88440a9665bd9d.mp3"
+     "audio": "audio/elevenlabs/e8323ec89e3a74a2e766a060.mp3"
     }
    ]
   },
@@ -999,43 +1068,43 @@
    "nobody": [
     {
      "text": "Nobody needs rescuing today. That is good news, actually.",
-     "audio": "audio/00258ec3c26eb3cf.mp3"
+     "audio": "audio/elevenlabs/741c572aeb7667aa39bec203.mp3"
     }
    ],
    "alarm": [
     {
      "text": "Oh no. Someone fell down!",
-     "audio": "audio/bbd039d5ac8c5ae9.mp3"
+     "audio": "audio/elevenlabs/b6818f7f1211b054be1de8e8.mp3"
     }
    ],
    "coming": [
     {
      "text": "I'm coming! Hold on!",
-     "audio": "audio/8224c0c1cf487e1d.mp3"
+     "audio": "audio/elevenlabs/77c556aea6fd03100b6bcb6c.mp3"
     }
    ],
    "arrived": [
     {
      "text": "I'm here. I'm here.",
-     "audio": "audio/ff5e5ad3a5b783fe.mp3"
+     "audio": "audio/elevenlabs/713833329377b3a4f7990334.mp3"
     }
    ],
    "wake": [
     {
      "text": "Hello? Are you okay? Please wake up.",
-     "audio": "audio/bdd9cc928817a2f8.mp3"
+     "audio": "audio/elevenlabs/2973a93038254cb9b0d152f2.mp3"
     }
    ],
    "stay": [
     {
      "text": "I will stay with you. Help is coming.",
-     "audio": "audio/a6638e64fb8150f1.mp3"
+     "audio": "audio/elevenlabs/61d19abd9cc32168b8a79b5e.mp3"
     }
    ],
    "saved": [
     {
      "text": "You're okay! You're okay.",
-     "audio": "audio/34116279cdb3dd2d.mp3"
+     "audio": "audio/elevenlabs/627708030fda14a21bc95156.mp3"
     }
    ]
   }
@@ -3712,5 +3781,20 @@
   32,
   31
  ],
- "credits": "# Photo stand-ins\n\nRehearsal / no-camera stand-ins for the participant (`--source photo:<posture>`, and the\n\"Start with a sample photo\" button). The real pose estimator reads them, so the whole pipeline\n(pose → painting match → 3-D avatar) runs as with a person in front of the camera.\n\nAll from [Unsplash](https://unsplash.com), [Unsplash License](https://unsplash.com/license) (free to use, no permission needed).\n\n| File | Photo | Photographer |\n| --- | --- | --- |\n| sitting.jpg | https://unsplash.com/photos/EJ08zy1a-UI | @davidprspctive |\n| standing.jpg | https://unsplash.com/photos/ymo_yC_N_2o | @mitchel3uo |\n| standing_4.jpg | https://unsplash.com/photos/_pG1u1_iItM | @bennieray |\n| standing_2.jpg | https://unsplash.com/@minimalism_brand (search \"person standing full body\") | @minimalism_brand |\n| standing_3.jpg | https://unsplash.com/photos/skUWW81OBeY | @tostilse |\n| squatting.jpg | https://unsplash.com/photos/5_G4i0NRLx4 | @jawnwalrus |\n| sitting_2.jpg | https://unsplash.com/photos/d1gfVswXpLk | @olenkasergienko |\n\nThe sample start (\"Start with a sample photo\") steps through all of them, one per round (SAMPLE_ORDER in\nperformance/runtime.py). Missing postures (kneeling, crouching, lying, leaning forward) fall back to the drawn `synthetic:` figure.\n"
+ "credits": "# Photo stand-ins\n\nRehearsal / no-camera stand-ins for the participant (`--source photo:<posture>`, and the\n\"Start with a sample photo\" button). The real pose estimator reads them, so the whole pipeline\n(pose → painting match → 3-D avatar) runs as with a person in front of the camera.\n\nAll from [Unsplash](https://unsplash.com), [Unsplash License](https://unsplash.com/license) (free to use, no permission needed).\n\n| File | Photo | Photographer |\n| --- | --- | --- |\n| sitting.jpg | https://unsplash.com/photos/EJ08zy1a-UI | @davidprspctive |\n| standing.jpg | https://unsplash.com/photos/ymo_yC_N_2o | @mitchel3uo |\n| standing_4.jpg | https://unsplash.com/photos/_pG1u1_iItM | @bennieray |\n| standing_2.jpg | https://unsplash.com/@minimalism_brand (search \"person standing full body\") | @minimalism_brand |\n| standing_3.jpg | https://unsplash.com/photos/skUWW81OBeY | @tostilse |\n| squatting.jpg | https://unsplash.com/photos/5_G4i0NRLx4 | @jawnwalrus |\n| sitting_2.jpg | https://unsplash.com/photos/d1gfVswXpLk | @olenkasergienko |\n\nThe sample start (\"Start with a sample photo\") steps through all of them, one per round (SAMPLE_ORDER in\nperformance/runtime.py). Missing postures (kneeling, crouching, lying, leaning forward) fall back to the drawn `synthetic:` figure.\n",
+ "telegram_caption": {
+  "painting": [
+   "me and who?🥺",
+   "us?👉👈"
+  ],
+  "meme": [
+   "hehe or not hehe?"
+  ]
+ },
+ "voice": {
+  "provider": "elevenlabs",
+  "voice_id": "NM2FeLQDUvmeeQli9gXc",
+  "model_id": "eleven_multilingual_v2",
+  "manifest": "audio/elevenlabs/manifest.json"
+ }
 }

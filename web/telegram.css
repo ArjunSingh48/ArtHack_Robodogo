@@ -1,0 +1,78 @@
+/* The chat is the audience's focus during the reveal. Controls remain outside it. */
+body.telegram-preview #live { display: none; }
+body.telegram-preview #subtitle { display: none; }
+body.telegram-preview #stage { inset: 10vh 4vw 8vh; }
+body.telegram-preview #view { width: 100%; max-width: none; }
+.telegram-chat {
+  --telegram-message-size: 16px;
+  width: min(390px, 100%); height: 100%; max-height: 820px; min-height: 0;
+  display: flex; flex-direction: column; overflow: hidden;
+  color: #edf3f8; background: #14212b;
+  border: 7px solid #0c1116; border-radius: 42px;
+  box-shadow: 0 0 0 1px #53606a, 0 22px 70px #0008;
+  font: var(--telegram-message-size)/1.35 system-ui, sans-serif;
+  animation: telegram-enter 350ms ease-out both;
+}
+.telegram-status-bar {
+  flex: 0 0 34px; display: flex; align-items: center; justify-content: space-between;
+  padding: 4px 22px 0; background: #243442; font: 600 13px/1 system-ui, sans-serif;
+}
+.telegram-clock { font-variant-numeric: tabular-nums; }
+.telegram-status-icons { display: flex; align-items: center; gap: 5px; }
+.telegram-status-icons svg { display: block; width: 18px; height: 15px; }
+.telegram-status-icons .telegram-battery { width: 26px; }
+.telegram-home-indicator { flex: 0 0 22px; display: grid; place-items: center; background: #14212b; }
+.telegram-home-indicator::after { content: ''; width: 110px; height: 4px; border-radius: 4px; background: #e4ecf2; }
+.telegram-header {
+  flex: 0 0 auto; display: flex; gap: 10px; align-items: center;
+  padding: 9px 16px 11px; background: #243442; border-bottom: 1px solid #40515b;
+}
+.telegram-avatar {
+  display: block; flex: 0 0 36px; width: 36px; height: 36px;
+  border-radius: 50%; background: #fff; object-fit: cover; object-position: 37% 40%;
+}
+.telegram-identity h2 { margin: 0; font: 600 16px/1.2 system-ui, sans-serif; }
+.telegram-preview-label { color: #afc2d0; font-size: 12px; letter-spacing: .025em; }
+.telegram-messages {
+  flex: 1 1 auto; min-height: 0; padding: 12px 10px;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin;
+  scrollbar-color: #52626d transparent;
+  background-image: radial-gradient(#89a8bc12 1px, transparent 1px);
+  background-size: 22px 22px;
+}
+.telegram-message {
+  flex: 0 0 auto; margin: 0; max-width: 100%; font-size: var(--telegram-message-size);
+  border-radius: 13px 13px 13px 4px; overflow: hidden;
+  background: #2a3d4a; box-shadow: 0 2px 5px #0002;
+  animation: telegram-arrive 300ms ease-out both;
+  overflow-wrap: anywhere;
+}
+.telegram-photo, .telegram-painting { width: 100%; }
+.telegram-image {
+  display: block; width: 100%; height: auto;
+  object-fit: contain; background: #101a22;
+}
+.telegram-photo-label { margin: 0; padding: 7px 10px; color: #c6d4de; font-size: inherit; }
+.telegram-message-body { padding: 9px 10px 11px; }
+.telegram-caption { margin: 0 0 6px; font-size: inherit; }
+.telegram-credit { display: block; color: inherit; opacity: .62; font-size: inherit; line-height: inherit; }
+.telegram-credit a { color: inherit; text-underline-offset: 3px; }
+.telegram-question { padding: 10px 12px; white-space: pre-line; font-size: inherit; }
+.telegram-image-unavailable { margin: 0; padding: 24px; color: #c6d4de; }
+.telegram-typing { display: flex; align-items: center; gap: 5px; padding: 16px 18px; min-height: 41px; }
+.telegram-typing span { width: 6px; height: 6px; border-radius: 50%; background: #bfd3e0; animation: telegram-dot 1s ease-in-out infinite; }
+.telegram-typing span:nth-child(2) { animation-delay: 140ms; }
+.telegram-typing span:nth-child(3) { animation-delay: 280ms; }
+.telegram-chat--paused, .telegram-chat--paused * { animation-play-state: paused !important; }
+@keyframes telegram-enter { from { opacity: 0; transform: translateY(16px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes telegram-arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes telegram-dot { 0%, 60%, 100% { opacity: .45; transform: none; } 30% { opacity: 1; transform: translateY(-3px); } }
+@media (max-width: 800px) {
+  body.telegram-preview #stage { inset: max(18vh, 116px) 12px 9vh; }
+  body.telegram-preview #controls { top: 5.5vh; left: 12px; right: 12px; max-width: none; }
+  body.telegram-preview #controls button { padding: 5px 9px; font-size: 11px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .telegram-chat, .telegram-message, .telegram-typing span { animation: none; }
+}

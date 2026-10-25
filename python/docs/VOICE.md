@@ -166,7 +166,23 @@ Still required for the presentation: listen to and approve the selected voice,
 pregenerate/review the complete programme, and rehearse sound on the actual
 laptop/beamer setup. No physical robot verification is implied by speech tests.
 
-## Experimental live conversation
+## Static browser presentation
+
+`scripts/export_web.py --audio-only` refreshes the browser's existing scripted
+clips with the configured ElevenLabs voice, without regenerating images or poses.
+The export always selects ElevenLabs, even if a legacy Azure setting remains in
+the local environment. It reads `python/.env`, falling back to the repository-root
+`.env` after the directory migration. Only scripted text and synthesis settings
+are sent to ElevenLabs.
+
+Browser MP3s live under `web/audio/elevenlabs/`. Their filenames include the
+provider/voice/model/settings cache identity and processing configuration. A
+manifest records provider, voice ID, text checksums and MP3 checksums. This fixes
+the old text-only export cache, which could silently reuse an older provider's
+MP3 after a voice change. The browser plays only ElevenLabs exports identified
+by the show data; missing audio continues with subtitles, never another voice.
+
+## Experimental live conversation (legacy)
 
 `itu talk` and show conversation windows currently use Azure Realtime/GPT-Live
 for microphone input, turn handling, and audio output. A TTS adapter does not
