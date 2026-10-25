@@ -373,6 +373,46 @@ def fast_steps(monkeypatch):
     monkeypatch.setattr(zb, "steps_for", lambda b, body: [st._replace(settle=0.05) for st in orig(b, body)])
 
 
+def test_a_broken_jpeg_from_the_robot_camera_is_skipped_not_fatal():
+    """Seen on the Go2: 'image file is truncated' ended the approach with an error. Now the next frame is taken."""
+    import io
+
+    import numpy as np
+    from PIL import Image
+
+    from is_this_us.robot.zhaw_bridge import ZhawBridgeCameraSource
+
+    buf = io.BytesIO()
+    Image.fromarray(np.zeros((8, 8, 3), dtype=np.uint8)).save(buf, format="JPEG")
+    good = buf.getvalue()
+    pub = zmq.Context.instance().socket(zmq.PUB)
+    port = pub.bind_to_random_port("tcp://127.0.0.1")
+    cam = ZhawBridgeCameraSource("127.0.0.1", port, timeout_ms=1500)
+    try:
+        time.sleep(0.3)  # SUB connects
+
+        def send():
+            time.sleep(0.1)
+            pub.send_multipart([b"camera", good[:-40]])  # truncated
+            time.sleep(0.05)
+            pub.send_multipart([b"camera", good])
+        threading.Thread(target=send).start()
+        f = cam.read()
+        assert f is not None and f.image.shape == (8, 8, 3) and cam.bad_frames == 1
+    finally:
+        cam.close()
+        pub.close(linger=0)
+
+
+def test_person_cut_off_at_the_side_is_turned_towards_not_walked_to():
+    room = ScriptedRoom([("standing", 0.6, -330.0, 0.0)] * 6 + [("standing", 0.6, 0.0, 0.0)] * 400)
+    a, r = approacher_for(room)
+    res = a.approach(side="left", posture="standing")
+    first = r.velocities[:3]
+    assert first and all(v[0] == 0 and v[2] > 0 for v in first)  # turns left, on the spot
+    assert res.person_at is not None
+
+
 # ================================================================ 4. one contract for the browser: sim and hardware
 async def _session(link, script):
     pytest.importorskip("websockets")

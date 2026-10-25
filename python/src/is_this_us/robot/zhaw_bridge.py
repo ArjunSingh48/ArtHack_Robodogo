@@ -437,23 +437,32 @@ class ZhawBridgeCameraSource:
         self._sock.connect(f"tcp://{host}:{pub_port}")
 
     def read(self):
+        """The newest decodable frame, or None. A broken JPEG (truncated in transit — seen on the Go2) is skipped
+        and the next frame is taken, within the same wait; it never raises into the walking loop."""
         import zmq
 
         from ..vision.frame_sources import Frame, decode_image_bytes
 
-        try:
-            parts = self._sock.recv_multipart()
-        except zmq.Again:
-            log.warning("no camera frame from the bridge")
-            return None
-        while True:  # skip stale frames queued while we were busy
+        for attempt in range(3):
             try:
-                parts = self._sock.recv_multipart(flags=zmq.NOBLOCK)
+                parts = self._sock.recv_multipart()
             except zmq.Again:
-                break
-        if len(parts) != 2 or parts[0] != b"camera" or not parts[1]:
-            return None
-        return Frame(decode_image_bytes(parts[1]), self.name)
+                log.warning("no camera frame from the bridge")
+                return None
+            while True:  # skip stale frames queued while we were busy
+                try:
+                    parts = self._sock.recv_multipart(flags=zmq.NOBLOCK)
+                except zmq.Again:
+                    break
+            if len(parts) != 2 or parts[0] != b"camera" or not parts[1]:
+                continue
+            try:
+                return Frame(decode_image_bytes(parts[1]), self.name)
+            except Exception as exc:  # truncated / corrupt JPEG
+                self.bad_frames = getattr(self, "bad_frames", 0) + 1
+                if self.bad_frames == 1 or self.bad_frames % 20 == 0:
+                    log.warning("robot camera: skipped a broken frame (%s; %d so far)", exc, self.bad_frames)
+        return None
 
     def close(self) -> None:
         self._sock.close(linger=0)
